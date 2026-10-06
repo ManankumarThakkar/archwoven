@@ -1,0 +1,15 @@
+node_modules/
+.next/
+out/
+dist/
+coverage/
+*.sqlite
+*.sqlite-*
+.env
+.env.*
+.DS_Store
+*.tsbuildinfo
+next-env.d.ts
+
+# Reference material (third-party screenshots — not committed)
+*.png
