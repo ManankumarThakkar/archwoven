@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "1",
+  "revision": 1,
+  "title": "Duplicate Node Id",
+  "requirements": [],
+  "openQuestions": [],
+  "nodes": [
+    { "id": "svc.dup", "kind": "service", "label": "First", "provenance": "inferred" },
+    { "id": "svc.dup", "kind": "service", "label": "Second", "provenance": "inferred" }
+  ],
+  "edges": [],
+  "views": [],
+  "privacy": { "classification": "public", "boundary": "external-allowed" }
+}

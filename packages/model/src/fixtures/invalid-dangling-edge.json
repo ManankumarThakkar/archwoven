@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "1",
+  "revision": 1,
+  "title": "Dangling Edge",
+  "requirements": [],
+  "openQuestions": [],
+  "nodes": [
+    { "id": "svc.a", "kind": "service", "label": "A", "provenance": "inferred" }
+  ],
+  "edges": [
+    { "id": "e.bad", "from": "svc.a", "to": "svc.nonexistent", "type": "sync", "provenance": "inferred" }
+  ],
+  "views": [],
+  "privacy": { "classification": "public", "boundary": "external-allowed" }
+}

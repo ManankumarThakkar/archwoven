@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "1",
+  "revision": 1,
+  "title": "View References Foreign Node",
+  "requirements": [],
+  "openQuestions": [],
+  "nodes": [
+    { "id": "svc.a", "kind": "service", "label": "A", "provenance": "inferred" }
+  ],
+  "edges": [],
+  "views": [
+    { "id": "view.architecture", "type": "architecture", "nodes": ["svc.a", "svc.only-in-other-view"], "edges": [] }
+  ],
+  "privacy": { "classification": "public", "boundary": "external-allowed" }
+}

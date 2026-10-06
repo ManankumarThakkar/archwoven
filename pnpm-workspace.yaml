@@ -1,0 +1,7 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Explicit build-script approval (pnpm strict supply-chain policy)
+allowBuilds:
+  esbuild: true
