@@ -1,0 +1,747 @@
+{
+  "schemaVersion": "1",
+  "revision": 1,
+  "title": "Stress 40",
+  "requirements": [],
+  "openQuestions": [],
+  "nodes": [
+    {
+      "id": "actor.user",
+      "kind": "actor",
+      "label": "User",
+      "provenance": "user-specified"
+    },
+    {
+      "id": "gw",
+      "kind": "gateway",
+      "label": "API Gateway",
+      "provenance": "inferred"
+    },
+    {
+      "id": "svc.s1",
+      "kind": "service",
+      "label": "Service 1",
+      "provenance": "source-supported"
+    },
+    {
+      "id": "svc.s2",
+      "kind": "service",
+      "label": "Service 2",
+      "provenance": "source-supported"
+    },
+    {
+      "id": "svc.s3",
+      "kind": "service",
+      "label": "Service 3",
+      "provenance": "source-supported"
+    },
+    {
+      "id": "svc.s4",
+      "kind": "service",
+      "label": "Service 4",
+      "provenance": "source-supported"
+    },
+    {
+      "id": "svc.s5",
+      "kind": "service",
+      "label": "Service 5",
+      "provenance": "source-supported"
+    },
+    {
+      "id": "svc.s6",
+      "kind": "service",
+      "label": "Service 6",
+      "provenance": "source-supported"
+    },
+    {
+      "id": "svc.s7",
+      "kind": "service",
+      "label": "Service 7",
+      "provenance": "source-supported"
+    },
+    {
+      "id": "svc.s8",
+      "kind": "service",
+      "label": "Service 8",
+      "provenance": "source-supported"
+    },
+    {
+      "id": "cmp.c1",
+      "kind": "component",
+      "label": "Component 1",
+      "provenance": "inferred"
+    },
+    {
+      "id": "cmp.c2",
+      "kind": "component",
+      "label": "Component 2",
+      "provenance": "inferred"
+    },
+    {
+      "id": "cmp.c3",
+      "kind": "component",
+      "label": "Component 3",
+      "provenance": "inferred"
+    },
+    {
+      "id": "cmp.c4",
+      "kind": "component",
+      "label": "Component 4",
+      "provenance": "inferred"
+    },
+    {
+      "id": "cmp.c5",
+      "kind": "component",
+      "label": "Component 5",
+      "provenance": "inferred"
+    },
+    {
+      "id": "cmp.c6",
+      "kind": "component",
+      "label": "Component 6",
+      "provenance": "inferred"
+    },
+    {
+      "id": "cmp.c7",
+      "kind": "component",
+      "label": "Component 7",
+      "provenance": "inferred"
+    },
+    {
+      "id": "cmp.c8",
+      "kind": "component",
+      "label": "Component 8",
+      "provenance": "inferred"
+    },
+    {
+      "id": "cmp.c9",
+      "kind": "component",
+      "label": "Component 9",
+      "provenance": "inferred"
+    },
+    {
+      "id": "cmp.c10",
+      "kind": "component",
+      "label": "Component 10",
+      "provenance": "inferred"
+    },
+    {
+      "id": "cmp.c11",
+      "kind": "component",
+      "label": "Component 11",
+      "provenance": "inferred"
+    },
+    {
+      "id": "cmp.c12",
+      "kind": "component",
+      "label": "Component 12",
+      "provenance": "inferred"
+    },
+    {
+      "id": "cmp.c13",
+      "kind": "component",
+      "label": "Component 13",
+      "provenance": "inferred"
+    },
+    {
+      "id": "cmp.c14",
+      "kind": "component",
+      "label": "Component 14",
+      "provenance": "inferred"
+    },
+    {
+      "id": "cmp.c15",
+      "kind": "component",
+      "label": "Component 15",
+      "provenance": "inferred"
+    },
+    {
+      "id": "cmp.c16",
+      "kind": "component",
+      "label": "Component 16",
+      "provenance": "inferred"
+    },
+    {
+      "id": "cmp.c17",
+      "kind": "component",
+      "label": "Component 17",
+      "provenance": "inferred"
+    },
+    {
+      "id": "cmp.c18",
+      "kind": "component",
+      "label": "Component 18",
+      "provenance": "inferred"
+    },
+    {
+      "id": "cmp.c19",
+      "kind": "component",
+      "label": "Component 19",
+      "provenance": "inferred"
+    },
+    {
+      "id": "cmp.c20",
+      "kind": "component",
+      "label": "Component 20",
+      "provenance": "inferred"
+    },
+    {
+      "id": "db.d1",
+      "kind": "datastore",
+      "label": "Store 1",
+      "provenance": "source-supported"
+    },
+    {
+      "id": "db.d2",
+      "kind": "datastore",
+      "label": "Store 2",
+      "provenance": "source-supported"
+    },
+    {
+      "id": "db.d3",
+      "kind": "datastore",
+      "label": "Store 3",
+      "provenance": "source-supported"
+    },
+    {
+      "id": "db.d4",
+      "kind": "datastore",
+      "label": "Store 4",
+      "provenance": "source-supported"
+    },
+    {
+      "id": "db.d5",
+      "kind": "datastore",
+      "label": "Store 5",
+      "provenance": "source-supported"
+    },
+    {
+      "id": "db.d6",
+      "kind": "datastore",
+      "label": "Store 6",
+      "provenance": "source-supported"
+    },
+    {
+      "id": "mq",
+      "kind": "queue",
+      "label": "Event Bus",
+      "provenance": "inferred"
+    },
+    {
+      "id": "ext.1",
+      "kind": "external",
+      "label": "Payment Provider",
+      "provenance": "user-specified"
+    },
+    {
+      "id": "ext.2",
+      "kind": "external",
+      "label": "Email Sender",
+      "provenance": "proposed"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e.u-gw",
+      "from": "actor.user",
+      "to": "gw",
+      "type": "sync",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.gw-s1",
+      "from": "gw",
+      "to": "svc.s1",
+      "type": "sync",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.s1-c1",
+      "from": "svc.s1",
+      "to": "cmp.c1",
+      "type": "sync",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.s1-d1",
+      "from": "svc.s1",
+      "to": "db.d1",
+      "type": "data",
+      "provenance": "source-supported"
+    },
+    {
+      "id": "e.gw-s2",
+      "from": "gw",
+      "to": "svc.s2",
+      "type": "sync",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.s2-c1",
+      "from": "svc.s2",
+      "to": "cmp.c1",
+      "type": "sync",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.s2-d2",
+      "from": "svc.s2",
+      "to": "db.d2",
+      "type": "data",
+      "provenance": "source-supported"
+    },
+    {
+      "id": "e.s2-s1",
+      "from": "svc.s2",
+      "to": "svc.s1",
+      "type": "sync",
+      "label": "callback",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.gw-s3",
+      "from": "gw",
+      "to": "svc.s3",
+      "type": "sync",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.s3-c1",
+      "from": "svc.s3",
+      "to": "cmp.c1",
+      "type": "sync",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.s3-d3",
+      "from": "svc.s3",
+      "to": "db.d3",
+      "type": "data",
+      "provenance": "source-supported"
+    },
+    {
+      "id": "e.s3-s2",
+      "from": "svc.s3",
+      "to": "svc.s2",
+      "type": "sync",
+      "label": "callback",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.gw-s4",
+      "from": "gw",
+      "to": "svc.s4",
+      "type": "sync",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.s4-c1",
+      "from": "svc.s4",
+      "to": "cmp.c1",
+      "type": "sync",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.s4-d4",
+      "from": "svc.s4",
+      "to": "db.d4",
+      "type": "data",
+      "provenance": "source-supported"
+    },
+    {
+      "id": "e.s4-s3",
+      "from": "svc.s4",
+      "to": "svc.s3",
+      "type": "sync",
+      "label": "callback",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.gw-s5",
+      "from": "gw",
+      "to": "svc.s5",
+      "type": "sync",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.s5-c1",
+      "from": "svc.s5",
+      "to": "cmp.c1",
+      "type": "sync",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.s5-d5",
+      "from": "svc.s5",
+      "to": "db.d5",
+      "type": "data",
+      "provenance": "source-supported"
+    },
+    {
+      "id": "e.s5-s4",
+      "from": "svc.s5",
+      "to": "svc.s4",
+      "type": "sync",
+      "label": "callback",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.gw-s6",
+      "from": "gw",
+      "to": "svc.s6",
+      "type": "sync",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.s6-c1",
+      "from": "svc.s6",
+      "to": "cmp.c1",
+      "type": "sync",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.s6-d6",
+      "from": "svc.s6",
+      "to": "db.d6",
+      "type": "data",
+      "provenance": "source-supported"
+    },
+    {
+      "id": "e.s6-s5",
+      "from": "svc.s6",
+      "to": "svc.s5",
+      "type": "sync",
+      "label": "callback",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.gw-s7",
+      "from": "gw",
+      "to": "svc.s7",
+      "type": "sync",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.s7-c1",
+      "from": "svc.s7",
+      "to": "cmp.c1",
+      "type": "sync",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.s7-s6",
+      "from": "svc.s7",
+      "to": "svc.s6",
+      "type": "sync",
+      "label": "callback",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.gw-s8",
+      "from": "gw",
+      "to": "svc.s8",
+      "type": "sync",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.s8-c1",
+      "from": "svc.s8",
+      "to": "cmp.c1",
+      "type": "sync",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.s8-s7",
+      "from": "svc.s8",
+      "to": "svc.s7",
+      "type": "sync",
+      "label": "callback",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.s1-self",
+      "from": "svc.s1",
+      "to": "svc.s1",
+      "type": "async",
+      "label": "retry",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.s3-self",
+      "from": "svc.s3",
+      "to": "svc.s3",
+      "type": "async",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.c2",
+      "from": "cmp.c1",
+      "to": "cmp.c2",
+      "type": "data",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.c3",
+      "from": "cmp.c2",
+      "to": "cmp.c3",
+      "type": "data",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.c4",
+      "from": "cmp.c3",
+      "to": "cmp.c4",
+      "type": "data",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.c5",
+      "from": "cmp.c4",
+      "to": "cmp.c5",
+      "type": "data",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.c6",
+      "from": "cmp.c5",
+      "to": "cmp.c6",
+      "type": "data",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.c7",
+      "from": "cmp.c6",
+      "to": "cmp.c7",
+      "type": "data",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.c8",
+      "from": "cmp.c7",
+      "to": "cmp.c8",
+      "type": "data",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.c9",
+      "from": "cmp.c8",
+      "to": "cmp.c9",
+      "type": "data",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.c10",
+      "from": "cmp.c9",
+      "to": "cmp.c10",
+      "type": "data",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.c11",
+      "from": "cmp.c10",
+      "to": "cmp.c11",
+      "type": "data",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.c12",
+      "from": "cmp.c11",
+      "to": "cmp.c12",
+      "type": "data",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.c13",
+      "from": "cmp.c12",
+      "to": "cmp.c13",
+      "type": "data",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.c14",
+      "from": "cmp.c13",
+      "to": "cmp.c14",
+      "type": "data",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.c15",
+      "from": "cmp.c14",
+      "to": "cmp.c15",
+      "type": "data",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.c16",
+      "from": "cmp.c15",
+      "to": "cmp.c16",
+      "type": "data",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.c17",
+      "from": "cmp.c16",
+      "to": "cmp.c17",
+      "type": "data",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.c18",
+      "from": "cmp.c17",
+      "to": "cmp.c18",
+      "type": "data",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.c19",
+      "from": "cmp.c18",
+      "to": "cmp.c19",
+      "type": "data",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.c20",
+      "from": "cmp.c19",
+      "to": "cmp.c20",
+      "type": "data",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.s8-mq",
+      "from": "svc.s8",
+      "to": "mq",
+      "type": "async",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.mq-c10",
+      "from": "mq",
+      "to": "cmp.c10",
+      "type": "async",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.s2-ext1",
+      "from": "svc.s2",
+      "to": "ext.1",
+      "type": "sync",
+      "provenance": "user-specified"
+    },
+    {
+      "id": "e.mq-ext2",
+      "from": "mq",
+      "to": "ext.2",
+      "type": "async",
+      "provenance": "proposed"
+    }
+  ],
+  "views": [
+    {
+      "id": "view.stress",
+      "type": "architecture",
+      "orientation": "TB",
+      "nodes": [
+        "actor.user",
+        "gw",
+        "svc.s1",
+        "svc.s2",
+        "svc.s3",
+        "svc.s4",
+        "svc.s5",
+        "svc.s6",
+        "svc.s7",
+        "svc.s8",
+        "cmp.c1",
+        "cmp.c2",
+        "cmp.c3",
+        "cmp.c4",
+        "cmp.c5",
+        "cmp.c6",
+        "cmp.c7",
+        "cmp.c8",
+        "cmp.c9",
+        "cmp.c10",
+        "cmp.c11",
+        "cmp.c12",
+        "cmp.c13",
+        "cmp.c14",
+        "cmp.c15",
+        "cmp.c16",
+        "cmp.c17",
+        "cmp.c18",
+        "cmp.c19",
+        "cmp.c20",
+        "db.d1",
+        "db.d2",
+        "db.d3",
+        "db.d4",
+        "db.d5",
+        "db.d6",
+        "mq",
+        "ext.1",
+        "ext.2"
+      ],
+      "edges": [
+        "e.u-gw",
+        "e.gw-s1",
+        "e.s1-c1",
+        "e.s1-d1",
+        "e.gw-s2",
+        "e.s2-c1",
+        "e.s2-d2",
+        "e.s2-s1",
+        "e.gw-s3",
+        "e.s3-c1",
+        "e.s3-d3",
+        "e.s3-s2",
+        "e.gw-s4",
+        "e.s4-c1",
+        "e.s4-d4",
+        "e.s4-s3",
+        "e.gw-s5",
+        "e.s5-c1",
+        "e.s5-d5",
+        "e.s5-s4",
+        "e.gw-s6",
+        "e.s6-c1",
+        "e.s6-d6",
+        "e.s6-s5",
+        "e.gw-s7",
+        "e.s7-c1",
+        "e.s7-s6",
+        "e.gw-s8",
+        "e.s8-c1",
+        "e.s8-s7",
+        "e.s1-self",
+        "e.s3-self",
+        "e.c2",
+        "e.c3",
+        "e.c4",
+        "e.c5",
+        "e.c6",
+        "e.c7",
+        "e.c8",
+        "e.c9",
+        "e.c10",
+        "e.c11",
+        "e.c12",
+        "e.c13",
+        "e.c14",
+        "e.c15",
+        "e.c16",
+        "e.c17",
+        "e.c18",
+        "e.c19",
+        "e.c20",
+        "e.s8-mq",
+        "e.mq-c10",
+        "e.s2-ext1",
+        "e.mq-ext2"
+      ]
+    }
+  ],
+  "privacy": {
+    "classification": "public",
+    "boundary": "external-allowed"
+  }
+}
