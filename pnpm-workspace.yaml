@@ -3,5 +3,5 @@ packages:
   - packages/*
 
 # Explicit build-script approval (pnpm strict supply-chain policy)
-onlyBuiltDependencies:
-  - esbuild
+allowBuilds:
+  esbuild: true
