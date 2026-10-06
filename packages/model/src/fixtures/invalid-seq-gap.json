@@ -1,0 +1,28 @@
+{
+  "schemaVersion": "1",
+  "revision": 1,
+  "title": "Sequence Gap",
+  "requirements": [],
+  "openQuestions": [],
+  "nodes": [
+    { "id": "svc.a", "kind": "service", "label": "A", "provenance": "inferred" },
+    { "id": "svc.b", "kind": "service", "label": "B", "provenance": "inferred" }
+  ],
+  "edges": [],
+  "views": [
+    {
+      "id": "view.sequence",
+      "type": "sequence",
+      "nodes": ["svc.a", "svc.b"],
+      "edges": [],
+      "sequence": {
+        "participants": ["svc.a", "svc.b"],
+        "messages": [
+          { "seq": 1, "from": "svc.a", "to": "svc.b", "label": "call", "kind": "call" },
+          { "seq": 3, "from": "svc.b", "to": "svc.a", "label": "reply", "kind": "return" }
+        ]
+      }
+    }
+  ],
+  "privacy": { "classification": "public", "boundary": "external-allowed" }
+}

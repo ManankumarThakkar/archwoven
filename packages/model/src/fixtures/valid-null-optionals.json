@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "1",
+  "revision": 1,
+  "title": "Minimal With Explicit Nulls",
+  "requirements": [],
+  "openQuestions": [],
+  "nodes": [
+    { "id": "svc.a", "kind": "service", "label": "A", "provenance": "inferred", "evidence": [{ "repo": null, "commit": null, "path": null, "lines": null, "note": null }], "group": null, "fields": null },
+    { "id": "svc.b", "kind": "service", "label": "B", "provenance": "inferred" }
+  ],
+  "edges": [
+    { "id": "e.ab", "from": "svc.a", "to": "svc.b", "type": "sync", "label": null, "cardinality": null, "provenance": "inferred" }
+  ],
+  "views": [
+    { "id": "view.architecture", "type": "architecture", "orientation": null, "nodes": ["svc.a", "svc.b"], "edges": ["e.ab"], "sequence": null, "focus": null }
+  ],
+  "privacy": { "classification": "public", "boundary": "external-allowed" },
+  "layout": null
+}
