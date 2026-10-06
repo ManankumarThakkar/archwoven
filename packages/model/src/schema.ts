@@ -14,7 +14,9 @@ export const EvidenceSchema = z
     repo: z.string().nullish(),
     commit: z.string().nullish(),
     path: z.string().nullish(),
-    lines: z.tuple([z.number().int(), z.number().int()]).nullish(),
+    /** [start, end] line range. Plain array (not tuple): Anthropic SDK's JSON-schema
+     * transformer rejects z.tuple's prefixItems output (SDK 0.131.0). Length pinned by refine. */
+    lines: z.array(z.number().int()).length(2).nullish(),
     note: z.string().nullish(),
   })
   .strict();

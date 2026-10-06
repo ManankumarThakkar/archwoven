@@ -1,3 +1,1 @@
-export const stub = (): never => {
-  throw new Error('@archwoven/llm: implemented at M1+');
-};
+export * from './client';
