@@ -63,7 +63,7 @@ export async function extractSpringBoot(dir: string): Promise<Fragment> {
       let kind: NodeKind | undefined;
       let classPrefix = '';
       const injected: string[] = [];
-      let kafkaTopic: string | null = null;
+      let lombokCtor = false;
 
       for (const mod of modifiers.children) {
         if (mod.type !== 'marker_annotation' && mod.type !== 'annotation') continue;
@@ -71,7 +71,7 @@ export async function extractSpringBoot(dir: string): Promise<Fragment> {
         const args = mod.childForFieldName('arguments')?.text ?? '';
         if (CLASS_KINDS[ann]) kind = CLASS_KINDS[ann];
         if (ann === 'RequestMapping') classPrefix = stringsIn(args)[0] ?? '';
-        if (ann === 'KafkaListener') kafkaTopic = stringsIn(args)[0] ?? null;
+        if (ann === 'RequiredArgsConstructor' || ann === 'AllArgsConstructor') lombokCtor = true;
       }
       if (!kind) return;
 
@@ -85,11 +85,16 @@ export async function extractSpringBoot(dir: string): Promise<Fragment> {
       if (body) {
         visit(body, 'field_declaration', (fd) => {
           const mods = childOfType(fd, 'modifiers');
-          const hasAutowired = mods?.children.some(
-            (m) => (m.type === 'marker_annotation' || m.type === 'annotation') && m.childForFieldName('name')?.text === 'Autowired',
-          );
+          if (!mods || mods.children.some((m) => m.text === 'static')) return;
+          const anns = mods.children
+            .filter((m) => m.type === 'marker_annotation' || m.type === 'annotation')
+            .map((m) => m.childForFieldName('name')?.text ?? '');
           const type = fd.childForFieldName('type')?.text;
-          if (hasAutowired && type) injected.push(type);
+          if (!type) return;
+          // Lombok @RequiredArgsConstructor: every private final field is constructor-injected
+          if (anns.includes('Autowired') || anns.includes('Inject') || (lombokCtor && /\bfinal\b/.test(fd.text))) {
+            injected.push(type);
+          }
         });
         visit(body, 'constructor_declaration', (ctor) => {
           for (const p of ctor.childForFieldName('parameters')?.namedChildren ?? []) {
@@ -99,18 +104,36 @@ export async function extractSpringBoot(dir: string): Promise<Fragment> {
             }
           }
         });
-        // HTTP endpoints
+        // HTTP endpoints, method-level listeners, setter injection
         visit(body, 'method_declaration', (md) => {
           const mods = childOfType(md, 'modifiers');
           if (!mods) return;
           for (const mod of mods.children) {
             if (mod.type !== 'marker_annotation' && mod.type !== 'annotation') continue;
             const ann = mod.childForFieldName('name')?.text ?? '';
+            const annArgs = mod.childForFieldName('arguments')?.text ?? '';
             const method = MAPPING_METHOD[ann];
-            if (!method) continue;
-            const raw = (stringsIn(mod.childForFieldName('arguments')?.text ?? '')[0] ?? '').replace(/\/+$/, '');
-            const full = classPrefix + (raw.startsWith('/') ? raw : raw ? `/${raw}` : '');
-            frag.endpoints.push({ method, path: full === '' ? '/' : full, evidence: evidence(relPath, md) });
+            if (method) {
+              const raw = (stringsIn(annArgs)[0] ?? '').replace(/\/+$/, '');
+              const full = classPrefix + (raw.startsWith('/') ? raw : raw ? `/${raw}` : '');
+              frag.endpoints.push({ method, path: full === '' ? '/' : full, evidence: evidence(relPath, md) });
+            }
+            if ((ann === 'KafkaListener' || ann === 'RabbitListener') && !/class_declaration/.test(md.parent?.type ?? '')) {
+              const topic = stringsIn(annArgs)[0];
+              if (topic) {
+                const qid = `java.queue.${topic.replace(/\./g, '-')}`;
+                addNode(qid, 'queue', topic, evidence(relPath, md));
+                addEdge(nodeId, qid, 'async', undefined, evidence(relPath, md));
+              }
+            }
+            if (ann === 'Autowired' || ann === 'Inject') {
+              for (const p of md.childForFieldName('parameters')?.namedChildren ?? []) {
+                if (p.type === 'formal_parameter') {
+                  const t = p.childForFieldName('type')?.text;
+                  if (t) injected.push(t);
+                }
+              }
+            }
           }
         });
         // Entity owning-side relations (ManyToOne/OneToOne); inverse sides labeled in gaps
@@ -127,7 +150,8 @@ export async function extractSpringBoot(dir: string): Promise<Fragment> {
         }
       }
 
-      for (const dep of injected) {
+      for (const rawDep of injected) {
+        const dep = rawDep.replace(/^.*\./, ''); // strip package qualifier from FQN param types
         const depId = `java.${dep}`;
         // Spring Data repositories are interfaces, not class_declaration — the injection site proves the node
         if (!seen.has(depId) && /(?:Repository|Service|Client)$/.test(dep)) {
@@ -137,29 +161,46 @@ export async function extractSpringBoot(dir: string): Promise<Fragment> {
         if (seen.has(depId)) addEdge(nodeId, depId, 'sync', undefined, ev);
       }
 
-      if (kafkaTopic) {
-        const qid = `java.queue.${kafkaTopic.replace(/\./g, '-')}`;
-        addNode(qid, 'queue', kafkaTopic, ev);
-        addEdge(nodeId, qid, 'async', undefined, ev);
+      // External calls (SPEC §3 matrix): URL literals in service/component/controller bodies + @FeignClient urls
+      if (kind && kind !== 'entity') {
+        for (const m of cls.text.matchAll(/https?:\/\/([^/"'\s]+)/g)) {
+          const extId = `java.ext.${m[1]!.replace(/\W+/g, '-')}`;
+          addNode(extId, 'external', m[1]!, ev);
+          addEdge(nodeId, extId, 'sync', undefined, ev);
+        }
+        const feign = /@FeignClient\([^)]*url\s*=\s*["']([^"']+)["']/.exec(cls.text);
+        if (feign) {
+          const host = feign[1]!.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+          const extId = `java.ext.${host.replace(/\W+/g, '-')}`;
+          addNode(extId, 'external', host, ev);
+          addEdge(nodeId, extId, 'sync', 'Feign', ev);
+        }
       }
     });
   }
 
   // Config: datasource + unresolved placeholders
+  const datastores: { id: string; name: string; ev: { path: string; lines: [number, number] } }[] = [];
   for (const file of walkFiles(dir, '.yml').concat(walkFiles(dir, '.properties'))) {
     const rel = `${basename(file)}`;
     const text = readFileSync(file, 'utf8');
     const lines = text.split('\n');
     for (const [re, name] of DATASTORES) {
-      const idx = lines.findIndex((l) => re.test(l));
+      const idx = lines.findIndex((l) => !/^\s*#/.test(l) && re.test(l)); // commented-out URLs are not live config
       if (idx < 0) continue;
+      const ev = { path: rel, lines: [idx + 1, idx + 1] as [number, number] };
       const id = `java.datastore.${name.toLowerCase()}`;
-      addNode(id, 'datastore', name, { path: rel, lines: [idx + 1, idx + 1] });
-      for (const repo of repositories) addEdge(repo, id, 'data');
+      addNode(id, 'datastore', name, ev);
+      if (!datastores.some((d) => d.id === id)) datastores.push({ id, name, ev });
     }
     for (const m of text.matchAll(/\$\{([A-Z0-9_.]+)\}/g)) {
       frag.gaps.push(`unresolved placeholder \${${m[1]}} in ${rel} — runtime value not statically provable`);
     }
+  }
+  if (datastores.length === 1) {
+    for (const repo of repositories) addEdge(repo, datastores[0]!.id, 'data', undefined, datastores[0]!.ev);
+  } else if (datastores.length > 1) {
+    frag.gaps.push(`multiple datasources (${datastores.map((d) => d.name).join(', ')}) — repo→datastore mapping not statically provable`);
   }
 
   return frag;

@@ -12,7 +12,7 @@ const FIXTURES: Record<string, { dir: string; extract: (dir: string) => ReturnTy
 
 export async function GET(req: Request) {
   const name = new URL(req.url).searchParams.get('repo') ?? 'spring-mini';
-  const fixture = FIXTURES[name];
+  const fixture = Object.hasOwn(FIXTURES, name) ? FIXTURES[name] : undefined;
   if (!fixture) {
     return Response.json({ error: `unknown fixture: ${name}`, allowed: Object.keys(FIXTURES) }, { status: 400 });
   }

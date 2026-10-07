@@ -73,6 +73,41 @@ describe('extractSpringBoot (spring-mini)', () => {
     expect(dangling).toEqual([]);
   });
 
+  it('extracts method-level @KafkaListener as queue node + async edge on the enclosing class', async () => {
+    const fragment = await extractSpringBoot(`${FIXTURES}spring-mini`);
+    const labelOf = new Map(fragment.nodes.map((n) => [n.id, n.label]));
+    expect(fragment.nodes.some((n) => n.kind === 'queue' && n.label === 'orders.events')).toBe(true);
+    expect(fragment.edges.some((e) => labelOf.get(e.from) === 'OrderService' && labelOf.get(e.to) === 'orders.events' && e.type === 'async')).toBe(true);
+  });
+
+  it('extracts RestTemplate URL calls as external nodes with sync edges', async () => {
+    const fragment = await extractSpringBoot(`${FIXTURES}spring-mini`);
+    const labelOf = new Map(fragment.nodes.map((n) => [n.id, n.label]));
+    expect(fragment.nodes.some((n) => n.kind === 'external' && n.label === 'pricing.example.com')).toBe(true);
+    expect(fragment.edges.some((e) => labelOf.get(e.from) === 'ProductService' && labelOf.get(e.to) === 'pricing.example.com')).toBe(true);
+  });
+
+  it('resolves Lombok @RequiredArgsConstructor and setter @Autowired as DI edges', async () => {
+    const fragment = await extractSpringBoot(`${FIXTURES}spring-mini`);
+    const labelOf = new Map(fragment.nodes.map((n) => [n.id, n.label]));
+    expect(fragment.edges.some((e) => labelOf.get(e.from) === 'NotificationService' && labelOf.get(e.to) === 'OrderRepository')).toBe(true);
+    expect(fragment.edges.some((e) => labelOf.get(e.from) === 'NotificationService' && labelOf.get(e.to) === 'ProductRepository')).toBe(true);
+    expect(fragment.edges.some((e) => labelOf.get(e.from) === 'ProductService' && labelOf.get(e.to) === 'OrderRepository')).toBe(true);
+  });
+
+  it('ignores commented-out jdbc URLs (no phantom datastore)', async () => {
+    const fragment = await extractSpringBoot(`${FIXTURES}spring-mini`);
+    expect(fragment.nodes.some((n) => n.kind === 'datastore' && n.label === 'MySQL')).toBe(false);
+  });
+
+  it('every source-supported edge carries at least one evidence link', async () => {
+    const spring = await extractSpringBoot(`${FIXTURES}spring-mini`);
+    const fastapi = await extractFastApi(`${FIXTURES}fastapi-mini`);
+    for (const e of [...spring.edges, ...fastapi.edges]) {
+      expect(e.evidence.length, `${e.id} has no evidence`).toBeGreaterThan(0);
+    }
+  });
+
   it('maps a bare root @GetMapping("/") to path "/"', async () => {
     const fragment = await extractSpringBoot(`${FIXTURES}spring-mini`);
     expect(fragment.endpoints.some((e) => e.method === 'GET' && e.path === '/')).toBe(true);

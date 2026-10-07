@@ -4,3 +4,4 @@ spring:
     username: shop
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+#    url: jdbc:mysql://old-host:3306/shop  # migrated off MySQL 2026-08

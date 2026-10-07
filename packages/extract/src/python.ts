@@ -22,11 +22,11 @@ export async function extractFastApi(dir: string): Promise<Fragment> {
     frag.nodes.push({ id, kind, label, provenance: 'source-supported', evidence: [ev] });
   };
   const edgeKeys = new Set<string>();
-  const addEdge = (from: string, to: string, type: 'sync' | 'data' | 'relation' | 'async', label?: string) => {
+  const addEdge = (from: string, to: string, type: 'sync' | 'data' | 'relation' | 'async', ev: Fragment['edges'][0]['evidence'][0], label?: string) => {
     const key = `${from}->${to}`;
     if (edgeKeys.has(key)) return;
     edgeKeys.add(key);
-    frag.edges.push({ id: `py.e${frag.edges.length + 1}`, from, to, type, label, provenance: 'source-supported', evidence: [] });
+    frag.edges.push({ id: `py.e${frag.edges.length + 1}`, from, to, type, label, provenance: 'source-supported', evidence: [ev] });
   };
 
   // Pass 1: parse everything, collect bindings.
@@ -49,6 +49,7 @@ export async function extractFastApi(dir: string): Promise<Fragment> {
   const prefixByRouter = new Map<string, string>();
   const factoryToClass = new Map<string, string>();
   let datastoreLabel: string | null = null;
+  let settingsEv: Fragment['edges'][0]['evidence'][0] = { path: 'settings.py', lines: [1, 1] };
   const sessionServiceIds: string[] = []; // resolved to datastore edges after pass 1 (settings.py may parse last)
 
   // Detect app vars, routers, services, entities, factories, settings datastore
@@ -74,14 +75,15 @@ export async function extractFastApi(dir: string): Promise<Fragment> {
         if (tn) {
           addNode(id, 'entity', tn, evidence(m.rel, cls));
           for (const fk of cls.text.matchAll(/ForeignKey\(\s*["'](\w+)\.(\w+)["']/g)) {
-            addEdge(id, entityLabelLookup(modules, fk[1]!) ?? fk[1]!, 'relation', 'N:1');
+            addEdge(id, entityLabelLookup(modules, fk[1]!) ?? fk[1]!, 'relation', evidence(m.rel, cls), 'N:1');
           }
         }
       } else if (/BaseSettings/.test(bases)) {
         const url = /DATABASE_URL[^=]*=\s*["']([^"']+)["']/.test(cls.text) ? RegExp.$1 : null;
         if (url && /postgres/i.test(url)) {
           datastoreLabel = 'PostgreSQL';
-          addNode('py:settings:datastore', 'datastore', 'PostgreSQL', evidence(m.rel, cls));
+          settingsEv = evidence(m.rel, cls);
+          addNode('py:settings:datastore', 'datastore', 'PostgreSQL', settingsEv);
         }
       } else if (/^services\//.test(m.rel)) {
         addNode(id, 'service', name, evidence(m.rel, cls));
@@ -89,7 +91,7 @@ export async function extractFastApi(dir: string): Promise<Fragment> {
         for (const hx of cls.text.matchAll(/https?:\/\/([^/"'\s]+)/g)) {
           const extId = `py:${m.rel}:ext:${hx[1]}`;
           addNode(extId, 'external', hx[1]!, evidence(m.rel, cls));
-          addEdge(id, extId, 'sync');
+          addEdge(id, extId, 'sync', evidence(m.rel, cls));
         }
       }
     });
@@ -101,7 +103,7 @@ export async function extractFastApi(dir: string): Promise<Fragment> {
     });
   }
   if (datastoreLabel) {
-    for (const sid of sessionServiceIds) addEdge(sid, 'py:settings:datastore', 'data');
+    for (const sid of sessionServiceIds) addEdge(sid, 'py:settings:datastore', 'data', settingsEv);
   }
 
   // Pass 2a: include_router prefixes for every module first — endpoint paths see them regardless of file order
@@ -115,7 +117,7 @@ export async function extractFastApi(dir: string): Promise<Fragment> {
       const rid = targetFile ? routerIdOfLabel.get(targetFile.replace(/\.py$/, '').split('/').pop() + '-router') : undefined;
       const appNode = frag.nodes.find((n) => n.kind === 'gateway');
       if (!appNode || !rid) return;
-      addEdge(appNode.id, rid, 'sync');
+      addEdge(appNode.id, rid, 'sync', evidence(m.rel, c));
       const staticPrefix = /prefix\s*=\s*["']([^"']+)["']/.exec(args);
       if (staticPrefix) prefixByRouter.set(rid, staticPrefix[1]!);
       const computed = /prefix\s*=\s*([\w.]+)/.exec(args);
@@ -143,7 +145,7 @@ export async function extractFastApi(dir: string): Promise<Fragment> {
       const full = varName === 'app' ? path : prefix + path;
       if (routerLabel && rid) {
         const appNode = frag.nodes.find((n) => n.kind === 'gateway');
-        if (appNode) addEdge(appNode.id, rid, 'sync');
+        if (appNode) addEdge(appNode.id, rid, 'sync', evidence(m.rel, dd));
       }
       frag.endpoints.push({ method: method.toUpperCase(), path: full, evidence: evidence(m.rel, dd) });
       // Depends edges on this endpoint's params
@@ -153,7 +155,7 @@ export async function extractFastApi(dir: string): Promise<Fragment> {
           const cls = factoryToClass.get(dep[1]!);
           if (cls) {
             const target = frag.nodes.find((n) => n.kind === 'service' && n.label === cls);
-            if (target) addEdge(rid, target.id, 'sync', 'Depends');
+            if (target) addEdge(rid, target.id, 'sync', evidence(m.rel, dd), 'Depends');
           }
         }
       }
@@ -163,7 +165,7 @@ export async function extractFastApi(dir: string): Promise<Fragment> {
         for (const bt of fn.text.matchAll(/add_task\(\s*(\w+)/g)) {
           const qid = `py:${m.rel}:bg:${bt[1]}`;
           addNode(qid, 'queue', `background:${bt[1]}`, evidence(m.rel, dd));
-          if (src) addEdge(src, qid, 'async');
+          if (src) addEdge(src, qid, 'async', evidence(m.rel, dd));
         }
       }
     });

@@ -3,6 +3,7 @@ import { SystemModelSchema, validateModel, type ViewType } from '@archwoven/mode
 import { STABLE_SYSTEM, MAX_REPAIRS, type GenerateOutcome, type TaskUsage } from './client';
 
 export const LOCAL_MODEL = 'gpt-oss:120b';
+export const MAX_OUTPUT_TOKENS = 8000; // runaway-generation guard, matches hosted max_tokens
 
 export interface LocalTaskUsage extends TaskUsage {
   ttftMs: number;
@@ -45,7 +46,7 @@ export async function generateModelLocal(
     const res = await doFetch(`${baseUrl}/api/chat`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ model, stream: true, think: opts.think ?? false, format, messages }),
+      body: JSON.stringify({ model, stream: true, think: opts.think ?? false, num_predict: MAX_OUTPUT_TOKENS, format, messages }),
     });
     if (!res.ok || !res.body) {
       lastErrors = [`ollama http ${res.status}`];
@@ -55,9 +56,25 @@ export async function generateModelLocal(
     let text = '';
     let ttftMs = 0;
     let final: OllamaChunk = {};
+    let streamError: string | null = null;
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let pending = '';
+    const handleLine = (line: string) => {
+      if (!line.trim()) return;
+      let chunk: OllamaChunk & { error?: string };
+      try {
+        chunk = JSON.parse(line) as OllamaChunk & { error?: string };
+      } catch {
+        return; // tolerate stream noise rather than losing the run
+      }
+      if (typeof chunk.error === 'string') {
+        streamError = chunk.error;
+        return;
+      }
+      text += chunk.message?.content ?? '';
+      if (chunk.done) final = chunk;
+    };
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -65,12 +82,14 @@ export async function generateModelLocal(
       pending += decoder.decode(value, { stream: true });
       const lines = pending.split('\n');
       pending = lines.pop() ?? '';
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        const chunk = JSON.parse(line) as OllamaChunk;
-        text += chunk.message?.content ?? '';
-        if (chunk.done) final = chunk;
-      }
+      for (const line of lines) handleLine(line);
+      if (streamError) break;
+    }
+    pending += decoder.decode(); // flush multibyte tail
+    if (pending) handleLine(pending);
+    if (streamError) {
+      lastErrors = [streamError];
+      break;
     }
 
     usage = {

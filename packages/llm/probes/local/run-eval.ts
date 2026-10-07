@@ -23,18 +23,21 @@ const STRESS: { view: ViewType; prompt: string } = {
     'Design a large marketplace platform with at least 40 distinct components: web and mobile gateways, API gateway, auth, users, catalog, search, cart, checkout, payments (PSP, wallet, fraud), inventory, warehouse, shipping (3 carriers), notifications (email, push, SMS), recommendations, reviews, pricing, promotions, analytics, event bus, caches, primary and replica databases per domain, admin tooling, and support ticketing. Give each its own node.',
 };
 
+// The plan's actual go/no-go criterion: ≤30 s end-to-end on ONE ~15k-token prompt.
+const LONG_PROMPT = `Design an architecture for a logistics platform. Requirements:\n${Array.from({ length: 150 }, (_, i) => `R${i + 1}: Capability ${i + 1} — shipment tracking, routing, billing, warehousing, customs, fleet maintenance, driver assignment, fuel management, toll processing, cold-chain monitoring, last-mile dispatch, returns handling, geofencing, ETA prediction, or carrier settlement (cycle ${Math.floor(i / 15) + 1}, item ${(i % 15) + 1}); must integrate with the corresponding upstream domain service and expose an API.`).join('\n')}`;
+
 async function main() {
-  console.log(`Probe D eval — ${MODEL} — ${PROMPTS.length} prompts + stress\n`);
+  console.log(`Probe D eval — ${MODEL} — ${PROMPTS.length} prompts + stress + 15k-token criterion\n`);
   const rows: { ok: boolean; repairs: number; nodes: number; ttft: number; ms: number }[] = [];
 
-  for (const { view, prompt } of [...PROMPTS, STRESS]) {
+  for (const { view, prompt, tag } of [...PROMPTS.map((p) => ({ ...p, tag: '' })), { ...STRESS, tag: ' STRESS' }, { view: 'architecture' as ViewType, prompt: LONG_PROMPT, tag: ' LONG15k' }]) {
     const r = await generateModelLocal(prompt, view, { model: MODEL });
     const u = r.usage as typeof r.usage & { ttftMs?: number };
     const nodes = r.ok ? r.model.nodes.length : 0;
     rows.push({ ok: r.ok, repairs: u.repairs, nodes, ttft: u.ttftMs ?? 0, ms: u.latencyMs });
     const errs = r.ok ? '' : ` ERRORS: ${r.errors.slice(0, 2).join(' | ')}`;
     console.log(
-      `${r.ok ? 'PASS' : 'FAIL'} [${view}${prompt === STRESS.prompt ? ' STRESS' : ''}] repairs=${u.repairs} nodes=${nodes} ttft=${((u.ttftMs ?? 0) / 1000).toFixed(1)}s total=${(u.latencyMs / 1000).toFixed(1)}s${errs}`,
+      `${r.ok ? 'PASS' : 'FAIL'} [${view}${tag}] repairs=${u.repairs} nodes=${nodes} outTok=${u.outputTokens} ttft=${((u.ttftMs ?? 0) / 1000).toFixed(1)}s total=${(u.latencyMs / 1000).toFixed(1)}s${errs}`,
     );
   }
 
