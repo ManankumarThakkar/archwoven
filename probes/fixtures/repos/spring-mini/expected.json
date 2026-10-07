@@ -1,0 +1,32 @@
+{
+  "nodes": [
+    { "kind": "service", "label": "OrderController" },
+    { "kind": "service", "label": "ProductController" },
+    { "kind": "service", "label": "OrderService" },
+    { "kind": "service", "label": "ProductService" },
+    { "kind": "service", "label": "OrderRepository" },
+    { "kind": "service", "label": "ProductRepository" },
+    { "kind": "service", "label": "HomeController" },
+    { "kind": "entity", "label": "Order" },
+    { "kind": "entity", "label": "User" },
+    { "kind": "datastore", "label": "PostgreSQL" },
+    { "kind": "queue", "label": "orders.events" }
+  ],
+  "edges": [
+    ["OrderController", "OrderService"],
+    ["ProductController", "ProductService"],
+    ["OrderService", "OrderRepository"],
+    ["OrderService", "orders.events"],
+    ["OrderRepository", "PostgreSQL"],
+    ["ProductService", "ProductRepository"],
+    ["ProductRepository", "PostgreSQL"],
+    ["Order", "User"]
+  ],
+  "endpoints": [
+    ["GET", "/orders"],
+    ["POST", "/orders"],
+    ["GET", "/products/{id}"],
+    ["GET", "/"]
+  ],
+  "gaps": ["${KAFKA_BOOTSTRAP_SERVERS}"]
+}

@@ -1,0 +1,6 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://db.internal:5432/shop
+    username: shop
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}

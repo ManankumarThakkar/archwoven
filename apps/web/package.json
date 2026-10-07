@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@archwoven/extract": "workspace:*",
     "@archwoven/model": "workspace:*",
     "@resvg/resvg-wasm": "2.6.2",
     "@xyflow/react": "12.12.0",
