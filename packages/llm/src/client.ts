@@ -99,13 +99,26 @@ export async function generateModel(
   let usage: TaskUsage | null = null;
 
   for (let attempt = 0; attempt <= MAX_REPAIRS; attempt++) {
-    const response = await client.messages.parse({
-      model: MODEL,
-      max_tokens: 8000,
-      system: [{ type: 'text', text: STABLE_SYSTEM, cache_control: { type: 'ephemeral' } }],
-      messages,
-      output_config: { format: zodOutputFormat(SystemModelSchema), effort },
-    });
+    let response: Awaited<ReturnType<ParseClient['messages']['parse']>>;
+    try {
+      response = await client.messages.parse({
+        model: MODEL,
+        max_tokens: 8000,
+        system: [{ type: 'text', text: STABLE_SYSTEM, cache_control: { type: 'ephemeral' } }],
+        messages,
+        output_config: { format: zodOutputFormat(SystemModelSchema), effort },
+      });
+    } catch (e) {
+      // Structured output unparseable (e.g. truncated at max_tokens) — a failed
+      // attempt, not a crash: ask for a complete regeneration within the repair budget.
+      lastErrors = [`previous output was not valid JSON: ${e instanceof Error ? e.message : String(e)}`];
+      usage = usageFrom({}, effort, Date.now() - t0, repairs);
+      if (attempt < MAX_REPAIRS) {
+        repairs++;
+        messages.push({ role: 'user', content: `Your previous response was not valid JSON matching the schema (it may have been truncated) — emit the complete valid JSON only, and keep it under the token budget.` });
+      }
+      continue;
+    }
     usage = usageFrom(response.usage, effort, Date.now() - t0, repairs);
 
     const result = validateModel(response.parsed_output);

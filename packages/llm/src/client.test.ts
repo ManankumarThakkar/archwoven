@@ -72,6 +72,34 @@ describe('generateModel (mocked SDK)', () => {
     expect(calls).toHaveLength(2);
   });
 
+  it('repairs when messages.parse throws (truncated/malformed structured output)', async () => {
+    const calls: unknown[] = [];
+    let i = 0;
+    const client: ParseClient = {
+      messages: {
+        parse(params: unknown) {
+          calls.push(params);
+          if (i++ === 0) return Promise.reject(new Error("Failed to parse structured output as JSON: Expected property name or '}' in JSON at position 3959"));
+          return Promise.resolve({ parsed_output: validFull, usage: USAGE });
+        },
+      },
+    };
+    const r = await generateModel('x', 'architecture', { client });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.usage.repairs).toBe(1);
+    expect(calls).toHaveLength(2);
+    expect(JSON.stringify(calls[1])).toContain('not valid JSON');
+  });
+
+  it('returns ok:false instead of throwing when every attempt fails to parse', async () => {
+    const client: ParseClient = {
+      messages: { parse: () => Promise.reject(new Error('Failed to parse structured output as JSON')) },
+    };
+    const r = await generateModel('x', 'architecture', { client });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors.join(' ')).toMatch(/parse|JSON/i);
+  });
+
   it('sends a stable cacheable system prefix with cache_control', async () => {
     const { client, calls } = fakeClient([{ parsed_output: validFull }]);
     await generateModel('x', 'architecture', { client });
