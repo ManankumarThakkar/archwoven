@@ -90,7 +90,7 @@ describe('generateModelLocal (Ollama adapter)', () => {
     }) as unknown as typeof fetch;
 
     const out = await generateModelLocal('shop', 'architecture', { fetchImpl: fakeFetch });
-    expect(out.ok).toBe(false);
+    if (out.ok) throw new Error('expected failure, got valid model');
     expect(out.errors[0]).toContain('not found');
     expect(calls).toBe(1);
   });
