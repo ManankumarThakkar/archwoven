@@ -235,7 +235,11 @@ importers:
         specifier: ^0.28.2
         version: 0.28.2
 
-  packages/jobs: {}
+  packages/jobs:
+    dependencies:
+      '@archwoven/model':
+        specifier: workspace:*
+        version: link:../model
 
   packages/llm:
     dependencies:
