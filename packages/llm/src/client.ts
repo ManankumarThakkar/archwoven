@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
+import { z } from 'zod';
 import {
   SystemModelSchema,
   validateModel,
@@ -9,6 +9,10 @@ import {
 
 export const MODEL = 'claude-opus-5-5';
 export const MAX_REPAIRS = 2;
+/** Structured outputs is a beta capability — without this header the API silently
+ *  ignores output_config.format and free-generates markdown. The SDK's beta namespace
+ *  does NOT add it for us on .create(); we must pass it explicitly. */
+export const STRUCTURED_OUTPUTS_BETA = 'structured-outputs-2025-12-15';
 
 export interface TaskUsage {
   model: string;
@@ -27,20 +31,37 @@ export type GenerateOutcome =
   | { ok: true; model: SystemModel; usage: TaskUsage }
   | { ok: false; errors: string[]; usage: TaskUsage };
 
+type RawUsage = {
+  input_tokens?: number;
+  cache_creation_input_tokens?: number;
+  cache_read_input_tokens?: number;
+  output_tokens?: number;
+};
+
 /** Minimal surface we need — lets tests inject a fake. */
-export interface ParseClient {
-  messages: {
-    parse(params: unknown): Promise<{
-      parsed_output: unknown;
-      usage: {
-        input_tokens?: number;
-        cache_creation_input_tokens?: number;
-        cache_read_input_tokens?: number;
-        output_tokens?: number;
-      };
-    }>;
+export interface StructuredClient {
+  beta: {
+    messages: {
+      create(params: unknown): Promise<{
+        content: { type: string; text?: string }[];
+        stop_reason: string | null;
+        usage: RawUsage;
+      }>;
+    };
   };
 }
+
+/**
+ * Faithful JSON schema sent to the API. We deliberately do NOT use the SDK's
+ * zodOutputFormat(): its transformJSONSchema strips `enum`/`minLength`/`default`
+ * into the description string, so the grammar stops constraining kind/type/
+ * provenance and the model drifts to a generic source/target/kind shape.
+ * `reused:'inline'` avoids $defs/$ref so the grammar is fully explicit.
+ */
+export const faithfulSchema = z.toJSONSchema(SystemModelSchema, {
+  reused: 'inline',
+  target: 'draft-2020-12',
+});
 
 /**
  * Stable system prefix — frozen bytes so prompt caching hits across every call.
@@ -58,12 +79,7 @@ Hard rules:
 - every view lists its member node ids and edge ids; every referenced id exists.
 - labels short (<= 40 chars); no HTML, no markdown, no comments in the JSON.`;
 
-function usageFrom(
-  usage: { input_tokens?: number; cache_creation_input_tokens?: number; cache_read_input_tokens?: number; output_tokens?: number },
-  effort: Effort,
-  latencyMs: number,
-  repairs: number,
-): TaskUsage {
+export function usageFrom(usage: RawUsage, effort: Effort, latencyMs: number, repairs: number): TaskUsage {
   return {
     model: MODEL,
     effort,
@@ -76,20 +92,26 @@ function usageFrom(
   };
 }
 
+const textOf = (content: { type: string; text?: string }[]) =>
+  content.filter((b) => b.type === 'text').map((b) => b.text ?? '').join('');
+
 /**
  * Generate (or repair) a system model for one view.
- * Structured output is constrained to SystemModelSchema; graph validation runs
- * client-side and validator errors are fed back for up to MAX_REPAIRS rounds.
+ * Structured output is constrained to a faithful SystemModelSchema via the beta
+ * endpoint; graph validation runs client-side and validator errors are fed back
+ * for up to MAX_REPAIRS rounds. We use .create() + our own parse so that a
+ * truncated or invalid response still yields the raw text we can quote back to
+ * the model — .parse() throws and discards it, so repairs never converge.
  */
 export async function generateModel(
   prompt: string,
   view: ViewType,
-  opts: { client?: ParseClient; effort?: Effort } = {},
+  opts: { client?: StructuredClient; effort?: Effort } = {},
 ): Promise<GenerateOutcome> {
   const effort: Effort = opts.effort ?? 'medium';
-  const client: ParseClient =
+  const client: StructuredClient =
     opts.client ??
-    (new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }) as unknown as ParseClient);
+    (new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }) as unknown as StructuredClient);
 
   const t0 = Date.now();
   const messages: unknown[] = [{ role: 'user', content: `View: ${view}\n\n${prompt}` }];
@@ -99,35 +121,44 @@ export async function generateModel(
   let usage: TaskUsage | null = null;
 
   for (let attempt = 0; attempt <= MAX_REPAIRS; attempt++) {
-    let response: Awaited<ReturnType<ParseClient['messages']['parse']>>;
+    let response: Awaited<ReturnType<StructuredClient['beta']['messages']['create']>>;
     try {
-      response = await client.messages.parse({
+      response = await client.beta.messages.create({
         model: MODEL,
-        max_tokens: 8000,
+        max_tokens: 16000,
+        betas: [STRUCTURED_OUTPUTS_BETA],
         system: [{ type: 'text', text: STABLE_SYSTEM, cache_control: { type: 'ephemeral' } }],
         messages,
-        output_config: { format: zodOutputFormat(SystemModelSchema), effort },
+        output_config: { format: { type: 'json_schema', schema: faithfulSchema, name: 'system_model' }, effort },
       });
     } catch (e) {
-      // Structured output unparseable (e.g. truncated at max_tokens) — a failed
-      // attempt, not a crash: ask for a complete regeneration within the repair budget.
-      lastErrors = [`previous output was not valid JSON: ${e instanceof Error ? e.message : String(e)}`];
+      lastErrors = [`request failed: ${e instanceof Error ? e.message : String(e)}`];
       usage = usageFrom({}, effort, Date.now() - t0, repairs);
-      if (attempt < MAX_REPAIRS) {
-        repairs++;
-        messages.push({ role: 'user', content: `Your previous response was not valid JSON matching the schema (it may have been truncated) — emit the complete valid JSON only, and keep it under the token budget.` });
-      }
-      continue;
+      continue; // transient/transport failure — retry within budget
     }
     usage = usageFrom(response.usage, effort, Date.now() - t0, repairs);
 
-    const result = validateModel(response.parsed_output);
+    const text = textOf(response.content);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch (e) {
+      lastErrors = [`output was not valid JSON (${response.stop_reason ?? 'unknown'}): ${e instanceof Error ? e.message : String(e)}`];
+      if (attempt < MAX_REPAIRS) {
+        repairs++;
+        messages.push({ role: 'assistant', content: text });
+        messages.push({ role: 'user', content: `Your previous response was not complete valid JSON${response.stop_reason === 'max_tokens' ? ' (it was truncated)' : ''} — emit the complete valid Archwoven system model JSON only, no markdown, no commentary.` });
+      }
+      continue;
+    }
+
+    const result = validateModel(parsed);
     if (result.ok) return { ok: true, model: result.model, usage };
 
     lastErrors = result.errors;
     if (attempt < MAX_REPAIRS) {
       repairs++;
-      messages.push({ role: 'assistant', content: JSON.stringify(response.parsed_output) });
+      messages.push({ role: 'assistant', content: text });
       messages.push({
         role: 'user',
         content: `The model JSON failed validation with these errors — fix them and emit the complete corrected JSON only:\n- ${lastErrors.join('\n- ')}`,
