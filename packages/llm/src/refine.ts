@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import { EditOpSchema, applyEditOps, type EditOp, type SystemModel, type ViewType } from '@archwoven/model';
 import {
-  MODEL, MAX_REPAIRS, STRUCTURED_OUTPUTS_BETA, usageFrom,
+  MODEL, MAX_REPAIRS, STRUCTURED_OUTPUTS_BETA, resolveApiKey, usageFrom,
   type Effort, type StructuredClient,
 } from './client';
 
@@ -39,7 +39,7 @@ export async function generateRefinement(
 ): Promise<RefineOutcome> {
   const effort: Effort = opts.effort ?? 'low';
   const client: StructuredClient =
-    opts.client ?? (new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }) as unknown as StructuredClient);
+    opts.client ?? (new Anthropic({ apiKey: resolveApiKey() }) as unknown as StructuredClient);
 
   const t0 = Date.now();
   const messages: unknown[] = [

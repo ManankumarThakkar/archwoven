@@ -9,6 +9,11 @@ import {
 
 export const MODEL = 'claude-opus-5-5';
 export const MAX_REPAIRS = 2;
+
+/** tsx/node --env-file does not strip surrounding quotes; a key written as
+ *  KEY="sk-ant-…" arrives with literal quotes and 401s. Sanitize defensively. */
+export const resolveApiKey = (raw = process.env.ANTHROPIC_API_KEY): string =>
+  (raw ?? '').trim().replace(/^["']|["']$/g, '');
 /** Structured outputs is a beta capability — without this header the API silently
  *  ignores output_config.format and free-generates markdown. The SDK's beta namespace
  *  does NOT add it for us on .create(); we must pass it explicitly. */
@@ -111,7 +116,7 @@ export async function generateModel(
   const effort: Effort = opts.effort ?? 'medium';
   const client: StructuredClient =
     opts.client ??
-    (new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }) as unknown as StructuredClient);
+    (new Anthropic({ apiKey: resolveApiKey() }) as unknown as StructuredClient);
 
   const t0 = Date.now();
   const messages: unknown[] = [{ role: 'user', content: `View: ${view}\n\n${prompt}` }];
