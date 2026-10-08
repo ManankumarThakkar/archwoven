@@ -3,12 +3,17 @@ import { z } from 'zod';
 import {
   SystemModelSchema,
   validateModel,
+  validFullModel,
   type SystemModel,
   type ViewType,
 } from '@archwoven/model';
 
 export const MODEL = 'claude-opus-5-5';
 export const MAX_REPAIRS = 2;
+
+/** Zero-spend mode for quota/e2e smoke: return a canned valid model, never call the API. */
+export const fakeMode = () => process.env.ARCHWOVEN_FAKE === '1';
+const fakeUsage = (effort: Effort): TaskUsage => ({ model: MODEL, effort, inputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 0, latencyMs: 0, repairs: 0 });
 
 /** tsx/node --env-file does not strip surrounding quotes; a key written as
  *  KEY="sk-ant-…" arrives with literal quotes and 401s. Sanitize defensively. */
@@ -114,6 +119,7 @@ export async function generateModel(
   opts: { client?: StructuredClient; effort?: Effort } = {},
 ): Promise<GenerateOutcome> {
   const effort: Effort = opts.effort ?? 'medium';
+  if (!opts.client && fakeMode()) return { ok: true, model: structuredClone(validFullModel), usage: fakeUsage(effort) };
   const client: StructuredClient =
     opts.client ??
     (new Anthropic({ apiKey: resolveApiKey() }) as unknown as StructuredClient);

@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import { EditOpSchema, applyEditOps, type EditOp, type SystemModel, type ViewType } from '@archwoven/model';
 import {
-  MODEL, MAX_REPAIRS, STRUCTURED_OUTPUTS_BETA, resolveApiKey, usageFrom,
+  MODEL, MAX_REPAIRS, STRUCTURED_OUTPUTS_BETA, fakeMode, resolveApiKey, usageFrom,
   type Effort, type StructuredClient,
 } from './client';
 
@@ -38,6 +38,10 @@ export async function generateRefinement(
   opts: { client?: StructuredClient; effort?: Effort } = {},
 ): Promise<RefineOutcome> {
   const effort: Effort = opts.effort ?? 'low';
+  if (!opts.client && fakeMode()) {
+    const ops: EditOp[] = [{ op: 'add', target: 'svc.cache', patch: { id: 'svc.cache', kind: 'service', label: 'Cache', provenance: 'proposed' }, baseRevision: model.revision, summary: '+Cache service' }];
+    return { ok: true, ops, usage: { model: MODEL, effort, inputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 0, latencyMs: 0, repairs: 0 } };
+  }
   const client: StructuredClient =
     opts.client ?? (new Anthropic({ apiKey: resolveApiKey() }) as unknown as StructuredClient);
 

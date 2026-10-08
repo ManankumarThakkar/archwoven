@@ -12,7 +12,7 @@ const model: SystemModel = {
     { id: 'oq-2', text: 'Which payment provider?' },
   ],
   nodes: [
-    { id: 'svc.orders', kind: 'service', label: 'Orders', provenance: 'user-specified', evidence: [{ repo: 'acme/shop', path: 'src/orders/OrdersService.java', lines: [10, 42] }] },
+    { id: 'svc.orders', kind: 'service', label: 'Orders', provenance: 'user-specified', evidence: [{ repo: 'acme/shop', commit: 'abc1234', path: 'src/orders/OrdersService.java', lines: [10, 42] }] },
     { id: 'svc.cache', kind: 'service', label: 'Cache', provenance: 'proposed', evidence: [] },
   ],
   edges: [{ id: 'e.orders-cache', from: 'svc.orders', to: 'svc.cache', type: 'sync', label: 'cache lookup', provenance: 'inferred', evidence: [] }],
@@ -28,7 +28,7 @@ describe('inspectorFor', () => {
     expect(p!.label).toBe('Orders');
     expect(p!.provenance).toBe('user-specified');
     expect(p!.role).toMatch(/service/i);
-    expect(p!.evidence[0]).toMatchObject({ label: 'OrdersService.java:10-42', href: expect.stringContaining('acme/shop') });
+    expect(p!.evidence[0]).toMatchObject({ label: 'OrdersService.java:10-42', href: 'https://github.com/acme/shop/blob/abc1234/src/orders/OrdersService.java#L10' });
   });
 
   it('proposed vs source-supported are distinct in the payload (scenario 6)', () => {
