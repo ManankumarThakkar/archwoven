@@ -120,6 +120,7 @@ describe('generateModelLocal (Ollama adapter)', () => {
 
     await generateModelLocal('shop', 'architecture', { fetchImpl: fakeFetch });
     expect(body.num_predict).toBe(8000);
+    expect(body.keep_alive).toBe('10m');
   });
 
   it('requests constrained decoding with the SystemModel JSON schema, streamed', async () => {

@@ -46,7 +46,7 @@ export async function generateModelLocal(
     const res = await doFetch(`${baseUrl}/api/chat`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ model, stream: true, think: opts.think ?? false, num_predict: MAX_OUTPUT_TOKENS, format, messages }),
+      body: JSON.stringify({ model, stream: true, think: opts.think ?? false, num_predict: MAX_OUTPUT_TOKENS, keep_alive: '10m', format, messages }),
     });
     if (!res.ok || !res.body) {
       lastErrors = [`ollama http ${res.status}`];

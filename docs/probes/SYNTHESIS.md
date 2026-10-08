@@ -7,7 +7,7 @@
 | A — rendering | Can model JSON render + export as interactive diagrams? | **GO** | golden 626×480, 0 overlaps; stress 39 nodes 1231×3548, 0 overlaps; PNG via resvg-wasm |
 | B — Claude structured | Does hosted structured output hit validity/token targets? | **CONDITIONAL GO** | mock suite 28/28 (parse + repair + cache shape); **live eval pending API key** — the only open M1 item |
 | C — extraction | tree-sitter WASM extracts Spring/FastAPI structure in-app? | **GO** | fixtures ≥0.9 precision / ≥0.8 recall; petclinic 50 files → 18 nodes/13 edges/17 endpoints in 46 ms, ~100% manual precision |
-| D — local model | Can gpt-oss:120b carry the private path? | **GO** | 6/6 schema-valid (100%), 42-node stress intact, warm TTFT 0.3 s, 65 GB disk |
+| D — local model | Can gpt-oss:120b carry the private path? | **GO (ratification pending)** | 7/7 schema-valid (100%), 42-node stress intact, warm TTFT 0.3–0.6 s, 58 tok/s, 65 GB disk; the literal ≤30 s/15k-prompt gate fails at 253 s because the model answered with 160 nodes — re-scope needs user sign-off |
 
 **M1 status:** three green, one conditional (B live eval blocked on `ANTHROPIC_API_KEY`, ~$0.50–1.00 of the approved ≤$5 budget). The mock suite already proves the parse/repair/cache plumbing; the live run calibrates real token counts and first-pass validity.
 

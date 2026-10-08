@@ -18,11 +18,13 @@
 | `@RestController`/`@Controller`/`@Service`/`@Repository` → service nodes | ✓ all |
 | `@Entity` + `__tablename__`-style naming → entity nodes | ✓ all |
 | DI edges (`@Autowired` fields + constructor params) | ✓ all |
+| Lombok `@RequiredArgsConstructor` + setter `@Autowired`/`@Inject` | ✓ (found in review pass — was silently missing on Lombok repos) |
+| External calls: RestTemplate/WebClient URL literals, `@FeignClient(url=…)` | ✓ (found in review pass — §3 matrix row, was silent) |
 | Spring Data **interface** repositories (`extends JpaRepository`) | ✓ — injection site is the provenance (interfaces aren't `class_declaration`; extractor synthesizes the node on first injection) |
 | `@ManyToOne`/`@OneToOne` owning-side → relation N:1 | ✓ (`Pet→PetType`) |
 | `@OneToMany` inverse side | skipped by design — owning side only (M3 candidate for inverse labeling) |
 | `@ManyToMany` (`Vet→Specialties`) | **missed** — gap-listed, M3 |
-| `@KafkaListener` → queue + async edge | ✓ |
+| `@KafkaListener`/`@RabbitListener` (class- AND method-level) → queue + async edge | ✓ (method-level found broken in review pass — fixture had it on a method all along; threshold scoring had masked the miss) |
 | `@*Mapping` + class `@RequestMapping` prefix, incl. root `"/"` | ✓ (root-path normalization bug found + fixed via test) |
 | `yml`/`properties` jdbc → datastore + repo→datastore edges | ✓ MySQL + PostgreSQL (profile files) |
 | `${VAR}` placeholders → explicit gaps | ✓ |

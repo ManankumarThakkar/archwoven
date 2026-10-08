@@ -4,6 +4,7 @@
  * 5 prompts from probe B's set + one 40-node output stress (Review Focus 5).
  * Prints per-prompt rows + aggregate: schema-valid rate, TTFT, total latency.
  */
+import { execFileSync } from 'node:child_process';
 import { generateModelLocal, LOCAL_MODEL } from '../../src/local';
 import type { ViewType } from '@archwoven/model';
 
@@ -28,6 +29,10 @@ const LONG_PROMPT = `Design an architecture for a logistics platform. Requiremen
 
 async function main() {
   console.log(`Probe D eval — ${MODEL} — ${PROMPTS.length} prompts + stress + 15k-token criterion\n`);
+  // Warm the model into RAM via CLI (Node fetch's 300s headers timeout can't survive a 65 GB cold load)
+  console.log('warming model (may take minutes if unloaded)...');
+  execFileSync('ollama', ['run', MODEL, 'Reply with the single word: ready'], { timeout: 900_000, stdio: 'ignore' });
+  console.log('model warm\n');
   const rows: { ok: boolean; repairs: number; nodes: number; ttft: number; ms: number }[] = [];
 
   for (const { view, prompt, tag } of [...PROMPTS.map((p) => ({ ...p, tag: '' })), { ...STRESS, tag: ' STRESS' }, { view: 'architecture' as ViewType, prompt: LONG_PROMPT, tag: ' LONG15k' }]) {
