@@ -1,19 +1,21 @@
 import { randomUUID } from 'node:crypto';
 import { openStore, type Store, type Tier } from '@archwoven/jobs';
-import { generateModel, type GenerateOutcome } from '@archwoven/llm';
-import type { ViewType } from '@archwoven/model';
+import { generateModel, generateRefinement, type GenerateOutcome, type RefineOutcome } from '@archwoven/llm';
+import type { SystemModel, ViewType } from '@archwoven/model';
 
 /**
  * Server singletons + injectable seams. Tests replace `serverDeps.store`
- * (":memory:") and `serverDeps.generateModel` (canned outcome) — production
- * wiring lives here and nowhere else.
+ * (":memory:") and `serverDeps.generateModel` / `serverDeps.generateRefinement`
+ * (canned outcomes) — production wiring lives here and nowhere else.
  */
 export const serverDeps: {
   store: Store;
   generateModel: (prompt: string, view: ViewType) => Promise<GenerateOutcome>;
+  generateRefinement: (instruction: string, model: SystemModel, view: ViewType) => Promise<RefineOutcome>;
 } = {
   store: openStore(process.env.ARCHWOVEN_DB ?? 'data/archwoven.db'),
   generateModel: (prompt, view) => generateModel(prompt, view),
+  generateRefinement: (instruction, model, view) => generateRefinement(instruction, model, view),
 };
 
 export const PROMPT_TOKEN_LIMIT = 25_000;
