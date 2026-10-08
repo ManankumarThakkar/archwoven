@@ -1,0 +1,21 @@
+:root { color-scheme: dark; }
+
+/* Visible focus for keyboard users on every interactive element. */
+:focus-visible {
+  outline: 2px solid #5eead4;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Respect reduced-motion: stop React Flow's animated edges and any transitions. */
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+  .react-flow__edge-path { animation: none !important; }
+}
+
+/* Tablet / narrow: stack the workspace columns instead of a fixed three-pane row. */
+@media (max-width: 900px) {
+  .workspace-shell { flex-direction: column !important; }
+  .workspace-shell > aside { width: 100% !important; border-right: none !important; border-left: none !important; border-bottom: 1px solid #1f2937; }
+  .workspace-shell main { min-height: 50vh; }
+}

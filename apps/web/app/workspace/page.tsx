@@ -115,7 +115,7 @@ export default function WorkspacePage() {
         <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 6, background: '#111a2e', color: '#93c5fd' }}>🔒 private · external-allowed</span>
         <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 6, background: '#111a2e', color: '#fbbf24' }}>◐ {remaining}/6 credits today</span>
       </header>
-      <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
+      <div className="workspace-shell" style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         <ControlPanel running={state.kind === 'running'} remaining={remaining} onGenerate={generate} />
         {showCanvas ? (
           <main style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
