@@ -1,10 +1,13 @@
 'use client';
 
-import { useReducer } from 'react';
-import type { ViewType } from '@archwoven/model';
+import { useReducer, useState } from 'react';
+import type { SystemModel, ViewType } from '@archwoven/model';
 import { initial, next } from './states';
-import type { Event, Stage } from './states';
+import type { Stage } from './states';
 import { ControlPanel } from './ControlPanel';
+import { Canvas } from './Canvas';
+import { Inspector } from './InspectorPanel';
+import { inspectorFor } from './inspector';
 
 const STAGE_LABEL: Record<Stage, string> = {
   validating: 'Validating your description',
@@ -15,14 +18,21 @@ const STAGE_LABEL: Record<Stage, string> = {
 
 export default function WorkspacePage() {
   const [state, dispatch] = useReducer(next, initial);
+  const [model, setModel] = useState<SystemModel | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
   const remaining = 6; // real remaining is wired in Task 9 (quota ladder)
+
+  const loadModel = async (modelId: string) => {
+    const res = await fetch(`/api/models/${modelId}`);
+    if (res.ok) setModel((await res.json()).model as SystemModel);
+  };
 
   const poll = async (jobId: string) => {
     for (;;) {
       const res = await fetch(`/api/jobs/${jobId}`);
       const job = (await res.json()) as { status: string; stage?: Stage | null; modelId: string; revision: number; error?: string | null };
       if (job.status === 'running' && job.stage) { dispatch({ type: 'STAGE', stage: job.stage }); await new Promise((r) => setTimeout(r, 400)); continue; }
-      if (job.status === 'succeeded') { dispatch({ type: 'SUCCESS', modelId: job.modelId, revision: job.revision }); return; }
+      if (job.status === 'succeeded') { dispatch({ type: 'SUCCESS', modelId: job.modelId, revision: job.revision }); void loadModel(job.modelId); return; }
       dispatch({ type: 'ERROR', message: job.error ?? 'generation failed' });
       return;
     }
@@ -44,6 +54,9 @@ export default function WorkspacePage() {
     void poll(jobId);
   };
 
+  const showCanvas = (state.kind === 'success' || state.kind === 'partial') && model;
+  const viewTabs = model?.views ?? [];
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#070b14', color: '#e5e7eb' }}>
       <header style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: '1px solid #1f2937' }}>
@@ -53,9 +66,21 @@ export default function WorkspacePage() {
       </header>
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         <ControlPanel running={state.kind === 'running'} remaining={remaining} onGenerate={generate} />
-        <main style={{ flex: 1, display: 'grid', placeItems: 'center', padding: 24, color: '#8b98b8' }}>
-          <CanvasPlaceholder state={state} onReset={() => dispatch({ type: 'RESET' })} />
-        </main>
+        {showCanvas ? (
+          <>
+            <main style={{ flex: 1, minWidth: 0, position: 'relative' }}>
+              <div style={{ position: 'absolute', top: 8, left: 8, zIndex: 5, display: 'flex', gap: 6 }}>
+                {viewTabs.map((v) => <span key={v.id} style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, background: '#111a2e', color: '#cbd5e1' }}>{v.type}</span>)}
+              </div>
+              <Canvas model={model} viewId={viewTabs[0]?.id ?? ''} onSelect={setSelected} />
+            </main>
+            <Inspector payload={selected ? inspectorFor(model, selected) : null} />
+          </>
+        ) : (
+          <main style={{ flex: 1, display: 'grid', placeItems: 'center', padding: 24, color: '#8b98b8' }}>
+            <CanvasPlaceholder state={state} onReset={() => dispatch({ type: 'RESET' })} />
+          </main>
+        )}
       </div>
     </div>
   );
