@@ -43,7 +43,7 @@ describe('POST /api/refine', () => {
   it('stale baseRevision → 409 with rebase payload carrying the latest revision', async () => {
     const res = await POST(req({ modelId: 'm1', baseRevision: validFullModel.revision + 99, instruction: 'add a cache' }));
     expect(res.status).toBe(409);
-    const body = (await res.json()) as { reason: string; model: { revision: number }; revision: number };
+    const body = (await res.json()) as { reason: string; model: { revision: number; nodes: unknown[] }; revision: number };
     expect(body.reason).toBe('stale-revision');
     expect(body.revision).toBe(validFullModel.revision);
     expect(body.model.nodes).toEqual(validFullModel.nodes);
