@@ -5,3 +5,5 @@ packages:
 # Explicit build-script approval (pnpm strict supply-chain policy)
 allowBuilds:
   esbuild: true
+  tree-sitter-java: true
+  tree-sitter-python: true

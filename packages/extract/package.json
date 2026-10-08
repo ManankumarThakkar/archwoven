@@ -3,9 +3,20 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "main": "src/index.ts",
-  "types": "src/index.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "scripts": {
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --external:web-tree-sitter --outfile=dist/index.js && tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@archwoven/model": "workspace:*",
+    "tree-sitter-java": "^0.23.5",
+    "tree-sitter-python": "^0.25.0",
+    "web-tree-sitter": "^0.27.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.1",
+    "esbuild": "^0.28.2"
   }
 }

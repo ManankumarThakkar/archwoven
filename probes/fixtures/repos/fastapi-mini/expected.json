@@ -1,0 +1,80 @@
+{
+  "nodes": [
+    {
+      "kind": "gateway",
+      "label": "app"
+    },
+    {
+      "kind": "service",
+      "label": "orders-router"
+    },
+    {
+      "kind": "service",
+      "label": "OrderService"
+    },
+    {
+      "kind": "datastore",
+      "label": "PostgreSQL"
+    },
+    {
+      "kind": "entity",
+      "label": "orders"
+    },
+    {
+      "kind": "entity",
+      "label": "users"
+    },
+    {
+      "kind": "external",
+      "label": "payments.example.com"
+    },
+    {
+      "kind": "queue",
+      "label": "background:send_receipt"
+    }
+  ],
+  "edges": [
+    [
+      "app",
+      "orders-router"
+    ],
+    [
+      "orders-router",
+      "OrderService"
+    ],
+    [
+      "OrderService",
+      "PostgreSQL"
+    ],
+    [
+      "OrderService",
+      "payments.example.com"
+    ],
+    [
+      "orders",
+      "users"
+    ],
+    [
+      "orders-router",
+      "background:send_receipt"
+    ]
+  ],
+  "endpoints": [
+    [
+      "GET",
+      "/health"
+    ],
+    [
+      "GET",
+      "/orders/{order_id}"
+    ],
+    [
+      "POST",
+      "/orders"
+    ]
+  ],
+  "gaps": [
+    "computed prefix",
+    "settings.ROUTER_PREFIX"
+  ]
+}
