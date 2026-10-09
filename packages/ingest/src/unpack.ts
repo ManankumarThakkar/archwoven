@@ -1,5 +1,6 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, posix } from 'node:path';
+import { gunzipSync } from 'node:zlib';
 
 /**
  * Safe tar unpack (§14) — an explicit ustar block reader, not a library
@@ -16,9 +17,14 @@ export interface UnpackResult {
 
 export interface UnpackCaps {
   maxFiles: number;
+  /** cap on the COMPRESSED download (fetch side) */
   maxTotalBytes: number;
   maxFileBytes: number;
+  /** cap on the DECOMPRESSED archive (gzip-bomb guard); default 100 MB */
+  maxExpandedBytes?: number;
 }
+
+const MAX_EXPANDED_DEFAULT = 100 * 1024 * 1024;
 
 const VENDOR_SEGMENTS = new Set(['node_modules', 'target', 'build', '.git', '.gradle', '__pycache__', 'venv', '.venv']);
 const VENDOR_FILES = /^(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|go\.sum|Gemfile\.lock)$/;
@@ -39,9 +45,19 @@ const octal = (b: Uint8Array): number => {
 /** strip the codeload "{repo}-{sha}/" root prefix GitHub always adds */
 const normalize = (raw: string): string => raw.replace(/^\.\//, '').replace(/^[^/]+-(?:[0-9a-f]{7,40}|[\w.-]+)\//, '');
 
-export async function unpackTarball(tarball: ArrayBuffer, destDir: string, caps: UnpackCaps): Promise<UnpackResult> {
+export async function unpackTarball(tarball: ArrayBufferView | ArrayBuffer, destDir: string, caps: UnpackCaps): Promise<UnpackResult> {
   mkdirSync(destDir, { recursive: true });
-  const buf = new Uint8Array(tarball);
+  let buf = ArrayBuffer.isView(tarball)
+    ? new Uint8Array(tarball.buffer, tarball.byteOffset, tarball.byteLength)
+    : new Uint8Array(tarball);
+  // codeload serves .tar.gz — inflate before the block reader, then re-apply
+  // the byte cap to the DECOMPRESSED size (a small gzip can hide a big bomb).
+  if (buf[0] === 0x1f && buf[1] === 0x8b) {
+    const inflated = gunzipSync(buf);
+    const expandedCap = caps.maxExpandedBytes ?? MAX_EXPANDED_DEFAULT;
+    if (inflated.byteLength > expandedCap) throw new Error(`oversized: decompressed archive exceeds ${expandedCap} bytes`);
+    buf = new Uint8Array(inflated.buffer, inflated.byteOffset, inflated.byteLength);
+  }
   const files: string[] = [];
   const skipped: { path: string; reason: string }[] = [];
   let totalWritten = 0;
@@ -96,7 +112,7 @@ export async function unpackTarball(tarball: ArrayBuffer, destDir: string, caps:
       continue;
     }
     if (size > caps.maxFileBytes) { skipped.push({ path: gapPath, reason: `size:${size}>${caps.maxFileBytes}` }); continue; }
-    if (totalWritten + size > caps.maxTotalBytes) { skipped.push({ path: gapPath, reason: 'total-size-cap' }); continue; }
+    if (totalWritten + size > (caps.maxExpandedBytes ?? MAX_EXPANDED_DEFAULT)) { skipped.push({ path: gapPath, reason: 'expanded-size-cap' }); continue; }
     if (looksBinary(body)) { skipped.push({ path: gapPath, reason: 'binary' }); continue; }
 
     const abs = join(destDir, rel);

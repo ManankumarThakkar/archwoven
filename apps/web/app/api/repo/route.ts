@@ -83,24 +83,29 @@ export async function POST(req: Request) {
       if (usage) recordUsage(serverDeps.store, { sessionId, tier, action: 'repo', usage, retries, outcome: 'failed' });
     };
     try {
+      // cancel may have landed while queued — a cancelled job must never restart
+      if (controller.signal.aborted) return;
       serverDeps.store.updateJob(jobId, { status: 'running', stage: 'fetching' });
+      // stage writes are skipped once cancelled, so the poll never shows a stage on a dead job
+      const stage = (s: string) => { if (!repoJobRegistry.get(jobId)?.settled) serverDeps.store.updateJob(jobId, { stage: s }); };
       const ingest = await serverDeps.ingestRepo(
         { owner: parsed.owner, repo: parsed.repo, ref: parsed.ref ?? (body.ref ? String(body.ref) : undefined), subdir },
-        { signal: controller.signal, onStage: (s) => serverDeps.store.updateJob(jobId, { stage: s }) },
+        { signal: controller.signal, onStage: stage },
       );
       if (!ingest.ok) return fail(ingest.message);
+      if (controller.signal.aborted) return;
 
-      serverDeps.store.updateJob(jobId, { stage: 'designing' });
+      stage('designing');
       const out = await serverDeps.assembleRepoModel(ingest.fragment, { owner: parsed.owner, repo: parsed.repo, sha: ingest.sha, framework: ingest.framework }, { signal: controller.signal });
-      serverDeps.store.updateJob(jobId, { stage: 'validating-output' });
+      stage('validating-output');
       if (!out.ok) return fail(out.errors.join('; '), out.usage, out.usage.repairs);
       const checked = validateModel(out.model);
       if (!checked.ok) return fail(checked.errors.join('; '), out.usage, out.usage.repairs);
+      if (!claim()) return; // cancelled during design — cancel owns the terminal write
       serverDeps.store.saveRevision(jobId, checked.model, sessionId);
       serverDeps.store.updateJob(jobId, { stage: 'laying-out' });
       recordUsage(serverDeps.store, { sessionId, tier, action: 'repo', usage: out.usage, retries: out.usage.repairs, outcome: out.usage.repairs > 0 ? 'repaired' : 'ok' });
       serverDeps.store.updateJob(jobId, { status: 'succeeded', gaps: ingest.gaps });
-      claim();
     } catch (e) {
       if ((e as Error)?.name === 'AbortError') return; // cancelled — cancel route owns the settle
       fail(e instanceof Error ? e.message : 'unknown error');

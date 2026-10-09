@@ -154,6 +154,43 @@ describe('POST /api/repo', () => {
     gate.resolve();
   });
 
+  it('a cancelled job is never overwritten by the job body finishing late', async () => {
+    let releaseIngest!: () => void;
+    const ingesting = new Promise<void>((r) => { releaseIngest = r; });
+    serverDeps.ingestRepo = async (_p, opts) => {
+      await ingesting;
+      if (opts?.signal?.aborted) throw Object.assign(new Error('aborted'), { name: 'AbortError' });
+      return okIngest;
+    };
+    const res = await POST(req({ url: 'https://github.com/foo/bar' }));
+    const { jobId } = (await res.json()) as { jobId: string };
+    for (let i = 0; i < 200; i++) {
+      if (serverDeps.store.getJob(jobId)?.stage === 'fetching') break;
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    await CANCEL(cancelReq(jobId), { params: Promise.resolve({ id: jobId }) });
+    releaseIngest(); // ingest completes AFTER the cancel — the body must not resurrect the job
+    await new Promise((r) => setTimeout(r, 80));
+    expect(serverDeps.store.getJob(jobId)!.status).toBe('cancelled');
+    expect(serverDeps.store.creditsUsed('test-sess', day())).toBe(0);
+  });
+
+  it('cancel before the job body starts → body never runs, status stays cancelled', async () => {
+    resetSlots(1);
+    let releaseFirst!: () => void;
+    const first = new Promise<void>((r) => { releaseFirst = r; });
+    serverDeps.assembleRepoModel = () => first.then(() => ({ ok: true as const, model: structuredClone(validFullModel), usage }));
+    const a = await POST(req({ url: 'https://github.com/foo/bar' })); // holds the only slot
+    const { jobId: aId } = (await a.json()) as { jobId: string };
+    const b = await POST(req({ url: 'https://github.com/foo/baz' })); // stays queued
+    const { jobId: bId } = (await b.json()) as { jobId: string };
+    await CANCEL(cancelReq(bId), { params: Promise.resolve({ id: bId }) });
+    releaseFirst();
+    await waitJob(aId);
+    await new Promise((r) => setTimeout(r, 80));
+    expect(serverDeps.store.getJob(bId)!.status).toBe('cancelled');
+  });
+
   it('cancel after success is a no-op — no double refund', async () => {
     const res = await POST(req({ url: 'https://github.com/foo/bar' }));
     const { jobId } = (await res.json()) as { jobId: string };

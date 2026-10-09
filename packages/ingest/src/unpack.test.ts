@@ -1,4 +1,5 @@
 import { mkdtempSync, existsSync, readFileSync, rmSync } from 'node:fs';
+import { gzipSync } from 'node:zlib';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -83,6 +84,32 @@ describe('unpackTarball (§14 tarball safety)', () => {
     const buf = tar([tarEntry('spring-petclinic-abc123/src/main/java/App.java', 'x')]);
     const r = await unpackTarball(buf, dest, CAPS);
     expect(r.files).toEqual(['src/main/java/App.java']);
+  });
+
+  it('accepts gzip-compressed tarballs (codeload serves .tar.gz)', async () => {
+    const dest = mkDest();
+    const gz = gzipSync(Buffer.from(tar([tarEntry('repo-a/pom.xml', '<project/>'), tarEntry('repo-a/../evil', 'x')])));
+    const r = await unpackTarball(gz, dest, CAPS);
+    expect(r.files).toEqual(['pom.xml']);
+    expect(r.skipped.some((s) => s.reason === 'traversal')).toBe(true);
+  });
+
+  it('rejects a decompressed archive over maxExpandedBytes (gzip bomb guard)', async () => {
+    const dest = mkDest();
+    const gz = gzipSync(Buffer.from(tar([tarEntry('repo-a/big.txt', 'x'.repeat(100 * 1024))])));
+    await expect(unpackTarball(gz, dest, { ...CAPS, maxExpandedBytes: 64 * 1024 })).rejects.toThrow(/oversized/i);
+  });
+
+  it('inflates past maxTotalBytes when the expanded size stays under maxExpandedBytes', async () => {
+    const dest = mkDest();
+    const gz = gzipSync(Buffer.from(tar([
+      tarEntry('repo-a/f1.txt', 'x'.repeat(40 * 1024)),
+      tarEntry('repo-a/f2.txt', 'y'.repeat(40 * 1024)),
+      tarEntry('repo-a/f3.txt', 'z'.repeat(40 * 1024)),
+    ])));
+    expect(gz.byteLength).toBeLessThan(64 * 1024); // compressed well under the fetch cap
+    const r = await unpackTarball(gz, dest, { ...CAPS, maxTotalBytes: 64 * 1024 });
+    expect(r.files).toEqual(['f1.txt', 'f2.txt', 'f3.txt']); // 120KB expanded < default 100MB
   });
 
   it('cleanupDir removes the temp dir', async () => {
