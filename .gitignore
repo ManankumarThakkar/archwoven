@@ -5,6 +5,10 @@ dist/
 coverage/
 *.sqlite
 *.sqlite-*
+# runtime databases — never commit user data
+*.db
+*.db-journal
+data/
 .env
 .env.*
 .DS_Store

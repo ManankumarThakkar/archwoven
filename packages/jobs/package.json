@@ -7,5 +7,8 @@
   "types": "src/index.ts",
   "scripts": {
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@archwoven/model": "workspace:*"
   }
 }

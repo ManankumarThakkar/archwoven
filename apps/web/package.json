@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "@archwoven/extract": "workspace:*",
+    "@archwoven/jobs": "workspace:*",
+    "@archwoven/llm": "workspace:*",
     "@archwoven/model": "workspace:*",
     "@resvg/resvg-wasm": "2.6.2",
     "@xyflow/react": "12.12.0",

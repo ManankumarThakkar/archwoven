@@ -178,6 +178,12 @@ importers:
       '@archwoven/extract':
         specifier: workspace:*
         version: link:../../packages/extract
+      '@archwoven/jobs':
+        specifier: workspace:*
+        version: link:../../packages/jobs
+      '@archwoven/llm':
+        specifier: workspace:*
+        version: link:../../packages/llm
       '@archwoven/model':
         specifier: workspace:*
         version: link:../../packages/model
@@ -235,7 +241,11 @@ importers:
         specifier: ^0.28.2
         version: 0.28.2
 
-  packages/jobs: {}
+  packages/jobs:
+    dependencies:
+      '@archwoven/model':
+        specifier: workspace:*
+        version: link:../model
 
   packages/llm:
     dependencies:
