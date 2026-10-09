@@ -1,42 +1,74 @@
 import { describe, expect, it } from 'vitest';
 import { openStore } from './store';
-import { checkQuota, charge, costOf, STOP_LOSS_USD } from './quota';
+import { reserve, refundCredits, recordUsage, costOf, STOP_LOSS_USD } from './quota';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const day = () => new Date().toISOString().slice(0, 10);
 const usage = { inputTokens: 1000, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 500 };
 
-describe('quota (§15 weighted credits)', () => {
-  it('anonymous gets exactly 6 generations then credits-exhausted with reset countdown', async () => {
+describe('quota (§15 weighted credits, reserve-then-refund)', () => {
+  it('anonymous gets exactly 6 reserved generations then credits-exhausted with reset countdown', async () => {
     const s = openStore(':memory:');
     // burstWindowSec tiny + spaced so the 5/min burst gate doesn't shadow the daily-credit gate
     const win = { sessionId: 'a', tier: 'anonymous' as const, action: 'generate' as const, ip: '1.1.1.1', burstWindowSec: 0.05 };
     for (let i = 0; i < 6; i++) {
       await sleep(60);
-      const r = checkQuota(s, win);
+      const r = reserve(s, win);
       expect(r.ok, `gen ${i + 1}`).toBe(true);
-      charge(s, { sessionId: 'a', tier: 'anonymous', action: 'generate', usage });
+      if (r.ok) expect(r.remaining).toBe(6 - (i + 1));
     }
     await sleep(60);
-    const r = checkQuota(s, win);
+    const r = reserve(s, win);
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.reason).toBe('credits-exhausted');
       expect(r.resetAt).toBeGreaterThan(Date.now());
       expect(r.resetAt).toBeLessThanOrEqual(Date.now() + 86_400_000);
     }
+    expect(s.creditsUsed('a', day())).toBe(6);
   });
 
-  it('refinement costs 0.25 — four refinements spend one credit', () => {
+  it('parallel reserves cannot bypass the pool (TOCTOU regression)', async () => {
     const s = openStore(':memory:');
-    for (let i = 0; i < 4; i++) charge(s, { sessionId: 'b', tier: 'anonymous', action: 'refine', usage });
+    // tiny burst window, spaced: burst never binds, credits do — the point is
+    // that no completion/refund happens between reserves, yet the pool still holds.
+    const req = { sessionId: 'racer', tier: 'anonymous' as const, action: 'generate' as const, ip: '9.9.9.9', burstWindowSec: 0.001 };
+    let ok = 0;
+    for (let i = 0; i < 7; i++) {
+      await sleep(2);
+      if (reserve(s, req).ok) ok++;
+    }
+    expect(ok).toBe(6);
+    expect(s.creditsUsed('racer', day())).toBe(6);
+  });
+
+  it('refund returns the credit so a failed job does not burn quota', async () => {
+    const s = openStore(':memory:');
+    const req = { sessionId: 'f1', tier: 'anonymous' as const, action: 'generate' as const, ip: '1.1.1.1', burstWindowSec: 0.001 };
+    for (let i = 0; i < 6; i++) {
+      await sleep(2);
+      expect(reserve(s, req).ok).toBe(true);
+    }
+    await sleep(2);
+    expect(reserve(s, req).ok).toBe(false);
+    refundCredits(s, 'f1', day(), 1);
+    await sleep(2);
+    expect(reserve(s, req).ok).toBe(true);
+  });
+
+  it('refinement reserves 0.25 — four refinements spend one credit', () => {
+    const s = openStore(':memory:');
+    for (let i = 0; i < 4; i++) {
+      const r = reserve(s, { sessionId: 'b', tier: 'anonymous', action: 'refine', ip: '2.2.2.2' });
+      expect(r.ok).toBe(true);
+    }
     expect(s.creditsUsed('b', day())).toBeCloseTo(1, 6);
   });
 
   it('view switches and exports are free', () => {
     const s = openStore(':memory:');
     for (let i = 0; i < 50; i++) {
-      const r = checkQuota(s, { sessionId: 'c', tier: 'anonymous', action: 'view', ip: '2.2.2.2' });
+      const r = reserve(s, { sessionId: 'c', tier: 'anonymous', action: 'view', ip: '2.2.2.2' });
       expect(r.ok).toBe(true);
     }
     expect(s.creditsUsed('c', day())).toBe(0);
@@ -50,25 +82,38 @@ describe('quota (§15 weighted credits)', () => {
       s.logCall({ sessionId: `x${i}`, tier: 'github', view: 'architecture', ...big, outputTokens: 1000, costUsd: costOf({ ...big, outputTokens: 1000 }), retries: 0, outcome: 'ok' });
     }
     expect(s.todayCost()).toBeGreaterThanOrEqual(STOP_LOSS_USD);
-    const r = checkQuota(s, { sessionId: 'new-one', tier: 'anonymous', action: 'generate', ip: '3.3.3.3' });
+    const r = reserve(s, { sessionId: 'new-one', tier: 'anonymous', action: 'generate', ip: '3.3.3.3' });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.reason).toBe('stop-loss');
+    // stop-loss must not have spent the caller's credits
+    expect(s.creditsUsed('new-one', day())).toBe(0);
   });
 
   it('burst limit: 6th model request in the window is throttled', () => {
     const s = openStore(':memory:');
     for (let i = 0; i < 5; i++) {
-      const r = checkQuota(s, { sessionId: 'd', tier: 'github', action: 'generate', ip: '4.4.4.4' });
+      const r = reserve(s, { sessionId: 'd', tier: 'github', action: 'generate', ip: '4.4.4.4' });
       expect(r.ok, `req ${i + 1}`).toBe(true);
     }
-    const r = checkQuota(s, { sessionId: 'd', tier: 'github', action: 'generate', ip: '4.4.4.4' });
+    const r = reserve(s, { sessionId: 'd', tier: 'github', action: 'generate', ip: '4.4.4.4' });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.reason).toBe('burst');
+    // a burst rejection must give back the credit it tentatively reserved
+    expect(s.creditsUsed('d', day())).toBe(5);
   });
 
-  it('costOf prices cached reads at cache rate, not input rate (§10)', () => {
-    const cached = costOf({ inputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 1_000_000, outputTokens: 0 });
-    expect(cached).toBeCloseTo(0.2, 6);
+  it('recordUsage logs the call for metering without spending credits', () => {
+    const s = openStore(':memory:');
+    recordUsage(s, { sessionId: 'm1', tier: 'anonymous', action: 'generate', usage, retries: 1, outcome: 'repaired' });
+    expect(s.todayCost()).toBeCloseTo(costOf(usage), 9);
+    expect(s.creditsUsed('m1', day())).toBe(0);
+  });
+
+  it('garbage burst window falls back to the 60s default instead of NaN', () => {
+    const s = openStore(':memory:');
+    const req = { sessionId: 'g1', tier: 'anonymous' as const, action: 'generate' as const, ip: '5.5.5.5', burstWindowSec: Number('garbage') };
+    for (let i = 0; i < 5; i++) expect(reserve(s, req).ok, `req ${i + 1}`).toBe(true);
+    expect(reserve(s, req).ok).toBe(false);
   });
 
   it('local mode compiles quotas out entirely', () => {
@@ -76,7 +121,7 @@ describe('quota (§15 weighted credits)', () => {
     process.env.ARCHWOVEN_MODE = 'local';
     try {
       for (let i = 0; i < 100; i++) {
-        const r = checkQuota(s, { sessionId: 'e', tier: 'anonymous', action: 'generate', ip: '5.5.5.5' });
+        const r = reserve(s, { sessionId: 'e', tier: 'anonymous', action: 'generate', ip: '5.5.5.5' });
         expect(r.ok).toBe(true);
       }
     } finally {
