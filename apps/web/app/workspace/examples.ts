@@ -28,3 +28,15 @@ export const EXAMPLES: Record<ViewType, Example[]> = {
     { label: 'API gateway', prompt: 'API gateway routing to auth, orders, and search services', view: 'component-detail' },
   ],
 };
+
+export interface RepoExample {
+  label: string;
+  url: string;
+  ref: string;
+}
+
+/** Public repos with framework coverage (Spring Boot / FastAPI), pinned to a ref. */
+export const REPO_EXAMPLES: RepoExample[] = [
+  { label: 'Spring PetClinic', url: 'https://github.com/spring-projects/spring-petclinic', ref: 'main' },
+  { label: 'FastAPI framework', url: 'https://github.com/tiangolo/fastapi', ref: 'main' },
+];

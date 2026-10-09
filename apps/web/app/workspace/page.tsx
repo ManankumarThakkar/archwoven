@@ -3,8 +3,8 @@
 import { useEffect, useReducer, useRef, useState } from 'react';
 import type { EditOp, SystemModel, ViewType } from '@archwoven/model';
 import { initial, next } from './states';
-import type { Stage } from './states';
-import { ControlPanel } from './ControlPanel';
+import type { Mode, Stage } from './states';
+import { ControlPanel, type RepoForm } from './ControlPanel';
 import { Canvas } from './Canvas';
 import { Inspector } from './InspectorPanel';
 import { inspectorFor } from './inspector';
@@ -16,6 +16,9 @@ const STAGE_LABEL: Record<Stage, string> = {
   queued: 'Queued for a free slot',
   validating: 'Validating your description',
   generating: 'Designing the architecture',
+  fetching: 'Fetching the repository',
+  extracting: 'Reading the code',
+  designing: 'Designing the architecture',
   'validating-output': 'Checking the model',
   'laying-out': 'Arranging the diagram',
   saving: 'Saving your diagram',
@@ -40,7 +43,9 @@ export default function WorkspacePage() {
   const [pool, setPool] = useState(6);
   const [fake, setFake] = useState(false);
   const [queuedPos, setQueuedPos] = useState<number | null>(null);
+  const [mode, setMode] = useState<Mode>('describe');
   const modelIdRef = useRef<string | null>(null);
+  const jobIdRef = useRef<string | null>(null);
 
   const rememberModel = (id: string) => {
     modelIdRef.current = id;
@@ -73,7 +78,7 @@ export default function WorkspacePage() {
     const deadline = Date.now() + 120_000;
     let misses = 0;
     for (;;) {
-      let job: { status: string; stage?: Stage | null; modelId: string; revision: number; queuePosition?: number | null; error?: string | null } | null = null;
+      let job: { status: string; stage?: Stage | null; modelId: string; revision: number; queuePosition?: number | null; gaps?: string[]; error?: string | null } | null = null;
       try {
         const res = await fetch(`/api/jobs/${jobId}`);
         if (res.status === 404) { dispatch({ type: 'ERROR', message: 'This generation no longer exists — please try again.' }); return; }
@@ -98,10 +103,12 @@ export default function WorkspacePage() {
         await new Promise((r) => setTimeout(r, 400));
         continue;
       }
+      if (job.status === 'cancelled') { setQueuedPos(null); dispatch({ type: 'CANCEL' }); return; }
       if (job.status === 'succeeded') {
         setQueuedPos(null);
         setModelId(job.modelId);
-        dispatch({ type: 'SUCCESS', modelId: job.modelId, revision: job.revision });
+        if (job.gaps && job.gaps.length > 0) dispatch({ type: 'PARTIAL', modelId: job.modelId, revision: job.revision, gaps: job.gaps });
+        else dispatch({ type: 'SUCCESS', modelId: job.modelId, revision: job.revision });
         void loadModel(job.modelId);
         return;
       }
@@ -124,7 +131,33 @@ export default function WorkspacePage() {
     if (!res.ok) { dispatch({ type: 'ERROR', message: (await res.text()) || 'request failed' }); return; }
     const { jobId, remaining } = (await res.json()) as { jobId: string; remaining?: number };
     if (typeof remaining === 'number') setRemaining(remaining);
+    jobIdRef.current = jobId;
     void poll(jobId);
+  };
+
+  const generateRepo = async (form: RepoForm) => {
+    dispatch({ type: 'GENERATE_REPO' });
+    const res = await fetch('/api/repo', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ...form, view: 'architecture', idempotencyKey: idempotencyKeyFor(`${form.url}|${form.subdir ?? ''}|${form.ref ?? ''}`, 'architecture') }),
+    });
+    if (res.status === 429) {
+      const q = (await res.json()) as { reason: string; message?: string; resetAt?: number };
+      dispatch({ type: 'QUOTA_BLOCKED', reason: q.reason, resetAt: q.resetAt ?? Date.now() + 60_000, message: q.message ?? '' });
+      return;
+    }
+    if (!res.ok) { dispatch({ type: 'ERROR', message: (await res.text()) || 'request failed' }); return; }
+    const { jobId, remaining } = (await res.json()) as { jobId: string; remaining?: number };
+    if (typeof remaining === 'number') setRemaining(remaining);
+    jobIdRef.current = jobId;
+    void poll(jobId);
+  };
+
+  const cancelJob = async () => {
+    const id = jobIdRef.current;
+    if (!id) return;
+    await fetch(`/api/jobs/${id}/cancel`, { method: 'POST' }).catch(() => undefined);
+    // the poll observes `cancelled` and dispatches CANCEL — no double transition here
   };
 
   const refine = async (instruction: string) => {
@@ -205,9 +238,22 @@ export default function WorkspacePage() {
         <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 6, background: '#111a2e', color: '#93c5fd' }}>{privacy}</span>
         <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 6, background: '#111a2e', color: '#fbbf24' }}>◐ {remaining ?? pool}/{pool} credits today</span>
         {fake && <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 6, background: '#3b0d0d', color: '#fca5a5' }}>DEMO DATA</span>}
+        {state.kind === 'partial' && state.gaps.length > 0 && (
+          <span title={state.gaps.join('\n')} style={{ fontSize: 12, padding: '2px 8px', borderRadius: 6, background: '#3b2f0d', color: '#fbbf24' }}>⚠ {state.gaps.length} gaps</span>
+        )}
       </header>
       <div className="workspace-shell" style={{ display: 'flex', flex: 1, minHeight: 0 }}>
-        <ControlPanel running={state.kind === 'running'} remaining={remaining ?? pool} onGenerate={generate} />
+        <ControlPanel
+          running={state.kind === 'running'}
+          remaining={remaining ?? pool}
+          mode={mode}
+          prefill={state.kind === 'idle' ? state.prefill : undefined}
+          onMode={(m) => { setMode(m); dispatch({ type: 'MODE', mode: m }); }}
+          onGenerate={generate}
+          onGenerateRepo={generateRepo}
+          onRepoExample={(url, ref) => dispatch({ type: 'REPO_SELECT', url, ref })}
+          onCancel={cancelJob}
+        />
         {showCanvas ? (
           <main style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
             <div style={{ position: 'absolute', top: 8, left: 8, zIndex: 5, display: 'flex', gap: 6 }}>
@@ -223,7 +269,7 @@ export default function WorkspacePage() {
             <CanvasPlaceholder state={state} queuedPos={queuedPos} onReset={() => dispatch({ type: 'RESET' })} />
           </main>
         )}
-        {showCanvas && <Inspector payload={selected ? inspectorFor(model, selected) : null} />}
+        {showCanvas && <Inspector payload={selected ? inspectorFor(model, selected) : null} gaps={state.kind === 'partial' ? state.gaps : undefined} />}
       </div>
     </div>
   );

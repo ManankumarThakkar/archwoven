@@ -9,11 +9,12 @@ export type Tier = 'anonymous' | 'github';
 export interface Job {
   id: string;
   modelId: string;
-  kind: 'generate' | 'refine';
+  kind: 'generate' | 'refine' | 'repo';
   idempotencyKey?: string;
   status: JobStatus;
   stage?: string;
   error?: string;
+  gaps?: string[];
   sessionId?: string;
   createdAt: string;
 }
@@ -52,7 +53,7 @@ export function openStore(path = 'data/archwoven.db') {
     CREATE TABLE IF NOT EXISTS jobs (
       id TEXT PRIMARY KEY, model_id TEXT NOT NULL, kind TEXT NOT NULL,
       idempotency_key TEXT, status TEXT NOT NULL DEFAULT 'queued',
-      stage TEXT, error TEXT, session_id TEXT,
+      stage TEXT, error TEXT, gaps TEXT, session_id TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE (session_id, idempotency_key)
     );
@@ -87,11 +88,13 @@ export function openStore(path = 'data/archwoven.db') {
     CREATE TABLE IF NOT EXISTS jobs (
       id TEXT PRIMARY KEY, model_id TEXT NOT NULL, kind TEXT NOT NULL,
       idempotency_key TEXT, status TEXT NOT NULL DEFAULT 'queued',
-      stage TEXT, error TEXT, session_id TEXT,
+      stage TEXT, error TEXT, gaps TEXT, session_id TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE (session_id, idempotency_key)
     );
   `);
+  // dev-scratch DBs created before the gaps column: add it in place
+  try { db.exec('ALTER TABLE jobs ADD COLUMN gaps TEXT'); } catch { /* column exists */ }
 
   // Orphan sweep: an in-process job died with its process — settle it honestly
   // and give back the credits it reserved.
@@ -101,7 +104,7 @@ export function openStore(path = 'data/archwoven.db') {
   const today = new Date().toISOString().slice(0, 10);
   for (const o of orphans) {
     if (!o.session_id) continue;
-    const w = o.kind === 'refine' ? 0.25 : 1;
+    const w = o.kind === 'refine' ? 0.25 : o.kind === 'repo' ? 2 : 1;
     refund.run(w, o.session_id, today);
   }
 
@@ -131,12 +134,13 @@ export function openStore(path = 'data/archwoven.db') {
       const r = db.prepare('SELECT * FROM jobs WHERE idempotency_key = ? AND session_id = ?').get(key, sessionId) as SqlRow | undefined;
       return r ? rowToJob(r) : null;
     },
-    updateJob(id: string, patch: { status?: JobStatus; stage?: string; error?: string }): void {
+    updateJob(id: string, patch: { status?: JobStatus; stage?: string; error?: string; gaps?: string[] }): void {
       const sets: string[] = [];
       const args: (string | number)[] = [];
       if (patch.status) { sets.push('status = ?'); args.push(patch.status); }
       if (patch.stage) { sets.push('stage = ?'); args.push(patch.stage); }
       if (patch.error !== undefined) { sets.push('error = ?'); args.push(patch.error); }
+      if (patch.gaps !== undefined) { sets.push('gaps = ?'); args.push(JSON.stringify(patch.gaps)); }
       if (!sets.length) return;
       db.prepare(`UPDATE jobs SET ${sets.join(', ')} WHERE id = ?`).run(...args, id);
     },
@@ -217,6 +221,7 @@ const rowToJob = (r: SqlRow): Job => ({
   status: String(r.status) as JobStatus,
   stage: r.stage == null ? undefined : String(r.stage),
   error: r.error == null ? undefined : String(r.error),
+  gaps: r.gaps == null ? undefined : (JSON.parse(String(r.gaps)) as string[]),
   sessionId: r.session_id == null ? undefined : String(r.session_id),
   createdAt: String(r.created_at),
 });

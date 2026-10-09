@@ -1,6 +1,6 @@
 import { refundCredits, WEIGHTS, type Action } from '@archwoven/jobs';
 import { serverDeps, readOrCreateSession } from '../../../../lib/server';
-import { repoJobRegistry } from '../../../repo/route';
+import { repoJobRegistry } from '../../../../lib/repo-registry';
 
 export const runtime = 'nodejs';
 

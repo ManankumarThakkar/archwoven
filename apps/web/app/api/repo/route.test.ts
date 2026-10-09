@@ -164,6 +164,15 @@ describe('POST /api/repo', () => {
     expect(serverDeps.store.creditsUsed('test-sess', day())).toBe(2);
   });
 
+  it('poll surfaces ingest gaps on the succeeded job', async () => {
+    serverDeps.ingestRepo = async () => ({ ...okIngest, gaps: ['no database detected', 'submodule(s) skipped'] });
+    const res = await POST(req({ url: 'https://github.com/foo/bar' }));
+    const { jobId } = (await res.json()) as { jobId: string };
+    await waitJob(jobId);
+    const poll = await GET(getReq(jobId), { params: Promise.resolve({ id: jobId }) });
+    expect((await poll.json()).gaps).toEqual(['no database detected', 'submodule(s) skipped']);
+  });
+
   it('ownership: another session cannot cancel or read the job', async () => {
     const gate = deferred();
     serverDeps.assembleRepoModel = (_f, _m, opts) =>

@@ -7,12 +7,9 @@ import {
   creditsExhaustedCopy, STOP_LOSS_COPY, BURST_COPY,
 } from '../../lib/server';
 import { withSlot } from '../../lib/llm-limiter';
+import { repoJobRegistry } from '../../lib/repo-registry';
 
 export const runtime = 'nodejs';
-
-/** In-flight repo jobs: cancel flips status + aborts the controller; `settled`
- *  is the atomic (same-event-loop) claim so cancel and job-failure refund once. */
-export const repoJobRegistry = new Map<string, { controller: AbortController; settled: boolean }>();
 
 const safeSubdir = (s: string): boolean =>
   /^[\w.-]+(\/[\w.-]+)*$/.test(s) && s.split('/').every((seg) => seg !== '.' && seg !== '..');
@@ -102,7 +99,7 @@ export async function POST(req: Request) {
       serverDeps.store.saveRevision(jobId, checked.model, sessionId);
       serverDeps.store.updateJob(jobId, { stage: 'laying-out' });
       recordUsage(serverDeps.store, { sessionId, tier, action: 'repo', usage: out.usage, retries: out.usage.repairs, outcome: out.usage.repairs > 0 ? 'repaired' : 'ok' });
-      serverDeps.store.updateJob(jobId, { status: 'succeeded' });
+      serverDeps.store.updateJob(jobId, { status: 'succeeded', gaps: ingest.gaps });
       claim();
     } catch (e) {
       if ((e as Error)?.name === 'AbortError') return; // cancelled — cancel route owns the settle
