@@ -1,0 +1,86 @@
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import type { Fragment } from '@archwoven/extract';
+import { pinCommit, fetchTarball, type GithubApiFetch } from './fetch';
+import { unpackTarball, cleanupDir, type UnpackCaps } from './unpack';
+import { detectFramework } from './detect';
+
+/**
+ * Repo ingest orchestration: pin → fetch → unpack → detect → extract.
+ * The SHA pinned here is the analysis's only truth; temp files are removed
+ * in `finally` (§14 retention: temp clones deleted after the job).
+ */
+export interface IngestDeps {
+  fetcher: GithubApiFetch;
+  extractSpringBoot: (dir: string) => Promise<Fragment>;
+  extractFastApi: (dir: string) => Promise<Fragment>;
+  tmpRoot?: string;
+}
+
+export type IngestResult =
+  | { ok: true; sha: string; framework: string; fragment: Fragment; gaps: string[]; filesScanned: number }
+  | { ok: false; reason: string; message: string };
+
+const DEFAULT_CAPS: UnpackCaps = {
+  maxFiles: 3000,
+  maxTotalBytes: 25 * 1024 * 1024,
+  maxFileBytes: 512 * 1024,
+};
+
+export async function ingestRepo(
+  parsed: { owner: string; repo: string; ref?: string; subdir?: string },
+  deps: IngestDeps,
+  opts: { signal?: AbortSignal; caps?: UnpackCaps } = {},
+): Promise<IngestResult> {
+  const caps = opts.caps ?? DEFAULT_CAPS;
+
+  const pinned = await pinCommit(deps.fetcher, { owner: parsed.owner, repo: parsed.repo }, parsed.ref, opts.signal);
+  if (!pinned.ok) return { ok: false, reason: pinned.reason, message: pinned.message };
+
+  let tarball: ArrayBuffer;
+  try {
+    tarball = await fetchTarball(deps.fetcher, { owner: parsed.owner, repo: parsed.repo }, pinned.sha, { maxBytes: caps.maxTotalBytes, signal: opts.signal });
+  } catch (e) {
+    if ((e as Error)?.name === 'AbortError') throw e;
+    return { ok: false, reason: 'fetch-failed', message: e instanceof Error ? e.message : String(e) };
+  }
+
+  const workDir = mkdtempSync(join(deps.tmpRoot ?? tmpdir(), 'aw-ingest-'));
+  try {
+    const { files, skipped } = await unpackTarball(tarball, workDir, caps);
+    const gaps: string[] = skipped.map((s) => `${s.path}: ${s.reason}`);
+
+    if (files.length === 0) return { ok: false, reason: 'empty-repository', message: 'The repository has no analyzable source files after safety filtering.' };
+
+    // subdir narrows both detection and extraction — one framework, one scope
+    const scoped = parsed.subdir ? files.filter((f) => f.startsWith(parsed.subdir + '/')).map((f) => f.slice(parsed.subdir!.length + 1)) : files;
+    if (scoped.length === 0) return { ok: false, reason: 'empty-subdir', message: `No files under ${parsed.subdir} after safety filtering.` };
+
+    if (files.includes('.gitmodules')) gaps.push('submodule(s) declared — codeload excludes submodule contents; they were not analyzed');
+    if (files.includes('.gitattributes') && /filter=lfs/.test(readSafe(workDir, '.gitattributes'))) gaps.push('Git LFS pointers — large binary files were not downloaded');
+
+    const framework = detectFramework(scoped, (rel) => readSafe(workDir, joinDir(parsed.subdir, rel)));
+    if (framework === 'mixed') {
+      return { ok: false, reason: 'mixed-frameworks', message: 'This monorepo contains both Spring Boot and FastAPI services — narrow to one service subdirectory.' };
+    }
+    if (framework === 'unsupported') {
+      return { ok: false, reason: 'unsupported-framework', message: 'No Spring Boot or FastAPI constructs found — M3 supports those two frameworks.' };
+    }
+
+    const extractDir = parsed.subdir ? join(workDir, parsed.subdir) : workDir;
+    try {
+      const fragment = framework === 'spring-boot' ? await deps.extractSpringBoot(extractDir) : await deps.extractFastApi(extractDir);
+      return { ok: true, sha: pinned.sha, framework, fragment, gaps: [...gaps, ...fragment.gaps], filesScanned: scoped.length };
+    } catch (e) {
+      return { ok: false, reason: 'extraction-failed', message: e instanceof Error ? e.message : String(e) };
+    }
+  } finally {
+    cleanupDir(workDir);
+  }
+}
+
+const readSafe = (dir: string, rel: string): string => {
+  try { return readFileSync(join(dir, rel), 'utf8'); } catch { return ''; }
+};
+const joinDir = (subdir: string | undefined, rel: string): string => (subdir ? join(subdir, rel) : rel);
