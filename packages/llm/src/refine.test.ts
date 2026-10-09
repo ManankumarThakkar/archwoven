@@ -36,12 +36,18 @@ const danglingOp: EditOp = {
   summary: '+ghost edge',
 };
 
-function fakeClient(canned: unknown[]): { client: StructuredClient; calls: unknown[] } {
+function fakeClient(canned: unknown[], opts: { countedTokens?: number; countFails?: boolean } = {}): { client: StructuredClient; calls: unknown[] } {
   const calls: unknown[] = [];
   let i = 0;
   return {
     calls,
     client: {
+      messages: {
+        countTokens() {
+          if (opts.countFails) return Promise.reject(new Error('count unavailable'));
+          return Promise.resolve({ input_tokens: opts.countedTokens ?? 500 });
+        },
+      },
       beta: {
         messages: {
           create(params: unknown) {
@@ -100,5 +106,29 @@ describe('generateRefinement', () => {
     const r = await generateRefinement('x', m, 'architecture', { client });
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.ops[0]!.baseRevision).toBe(1);
+  });
+
+  it('accumulates billed usage across repair attempts (§15 metering)', async () => {
+    const m = mkModel();
+    const { client } = fakeClient(['not json', [addCacheOp]]);
+    const r = await generateRefinement('x', m, 'architecture', { client });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.usage.outputTokens).toBe(USAGE.output_tokens * 2);
+      expect(r.usage.inputTokens).toBe(USAGE.input_tokens * 2);
+    }
+  });
+
+  it('counts tokens before send; oversized or uncountable context never reaches the model', async () => {
+    const m = mkModel();
+    const big = fakeClient([[addCacheOp]], { countedTokens: 30_000 });
+    const r1 = await generateRefinement('x', m, 'architecture', { client: big.client });
+    expect(r1.ok).toBe(false);
+    expect(big.calls).toHaveLength(0);
+
+    const fail = fakeClient([[addCacheOp]], { countFails: true });
+    const r2 = await generateRefinement('x', m, 'architecture', { client: fail.client });
+    expect(r2.ok).toBe(false);
+    expect(fail.calls).toHaveLength(0);
   });
 });

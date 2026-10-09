@@ -10,6 +10,20 @@ import {
 
 export const MODEL = 'claude-opus-5-5';
 export const MAX_REPAIRS = 2;
+/** §15 LOCKED: max_tokens ≤ 8k. If live truncation recurs, the fix is effort-low
+ *  output or a spec config-review amendment — never silent drift in code. */
+export const MAX_TOKENS = 8192;
+/** §15 LOCKED: assembled context > 25k tokens is rejected before send. */
+export const CONTEXT_TOKEN_LIMIT = 25_000;
+
+/**
+ * Always talk to api.anthropic.com directly. The SDK defaults baseURL to
+ * process.env.ANTHROPIC_BASE_URL — a dev shell behind a proxy (Claude Code's
+ * 127.0.0.1:2018) would silently drop output_config and free-generate markdown,
+ * and would forward the API key to whatever proxy is configured.
+ */
+export const makeAnthropic = (apiKey: string): Anthropic =>
+  new Anthropic({ apiKey, baseURL: 'https://api.anthropic.com' });
 
 /** Zero-spend mode for quota/e2e smoke: return a canned valid model, never call the API. */
 export const fakeMode = () => process.env.ARCHWOVEN_FAKE === '1';
@@ -41,7 +55,7 @@ export type GenerateOutcome =
   | { ok: true; model: SystemModel; usage: TaskUsage }
   | { ok: false; errors: string[]; usage: TaskUsage };
 
-type RawUsage = {
+export type RawUsage = {
   input_tokens?: number;
   cache_creation_input_tokens?: number;
   cache_read_input_tokens?: number;
@@ -50,6 +64,9 @@ type RawUsage = {
 
 /** Minimal surface we need — lets tests inject a fake. */
 export interface StructuredClient {
+  messages: {
+    countTokens(params: { model: string; system: unknown; messages: unknown[] }): Promise<{ input_tokens: number }>;
+  };
   beta: {
     messages: {
       create(params: unknown): Promise<{
@@ -121,33 +138,51 @@ export async function generateModel(
   const effort: Effort = opts.effort ?? 'medium';
   if (!opts.client && fakeMode()) return { ok: true, model: structuredClone(validFullModel), usage: fakeUsage(effort) };
   const client: StructuredClient =
-    opts.client ??
-    (new Anthropic({ apiKey: resolveApiKey() }) as unknown as StructuredClient);
+    opts.client ?? (makeAnthropic(resolveApiKey()) as unknown as StructuredClient);
 
   const t0 = Date.now();
   const messages: unknown[] = [{ role: 'user', content: `View: ${view}\n\n${prompt}` }];
+  const system = [{ type: 'text', text: STABLE_SYSTEM, cache_control: { type: 'ephemeral' } }];
+
+  // §15 per-request gate: exact token count before send. Fail closed — an
+  // uncounted send is exactly the oversized context the gate exists to stop.
+  try {
+    const counted = await client.messages.countTokens({ model: MODEL, system, messages });
+    if (counted.input_tokens > CONTEXT_TOKEN_LIMIT) {
+      return { ok: false, errors: ['assembled context exceeds the 25k token limit — scope the description down to one system or flow'], usage: usageFrom({}, effort, Date.now() - t0, 0) };
+    }
+  } catch (e) {
+    return { ok: false, errors: [`context token count failed: ${e instanceof Error ? e.message : String(e)}`], usage: usageFrom({}, effort, Date.now() - t0, 0) };
+  }
 
   let lastErrors: string[] = [];
   let repairs = 0;
-  let usage: TaskUsage | null = null;
+  // Billed usage accumulates across every attempt — repairs cost real money and
+  // the stop-loss/§11 meter must see it, not just the last attempt.
+  const billed: Required<RawUsage> = { input_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, output_tokens: 0 };
+  const addUsage = (u: RawUsage) => {
+    billed.input_tokens += u.input_tokens ?? 0;
+    billed.cache_creation_input_tokens += u.cache_creation_input_tokens ?? 0;
+    billed.cache_read_input_tokens += u.cache_read_input_tokens ?? 0;
+    billed.output_tokens += u.output_tokens ?? 0;
+  };
 
   for (let attempt = 0; attempt <= MAX_REPAIRS; attempt++) {
     let response: Awaited<ReturnType<StructuredClient['beta']['messages']['create']>>;
     try {
       response = await client.beta.messages.create({
         model: MODEL,
-        max_tokens: 16000,
+        max_tokens: MAX_TOKENS,
         betas: [STRUCTURED_OUTPUTS_BETA],
-        system: [{ type: 'text', text: STABLE_SYSTEM, cache_control: { type: 'ephemeral' } }],
+        system,
         messages,
         output_config: { format: { type: 'json_schema', schema: faithfulSchema, name: 'system_model' }, effort },
       });
     } catch (e) {
       lastErrors = [`request failed: ${e instanceof Error ? e.message : String(e)}`];
-      usage = usageFrom({}, effort, Date.now() - t0, repairs);
       continue; // transient/transport failure — retry within budget
     }
-    usage = usageFrom(response.usage, effort, Date.now() - t0, repairs);
+    addUsage(response.usage);
 
     const text = textOf(response.content);
     let parsed: unknown;
@@ -164,7 +199,7 @@ export async function generateModel(
     }
 
     const result = validateModel(parsed);
-    if (result.ok) return { ok: true, model: result.model, usage };
+    if (result.ok) return { ok: true, model: result.model, usage: usageFrom(billed, effort, Date.now() - t0, repairs) };
 
     lastErrors = result.errors;
     if (attempt < MAX_REPAIRS) {
@@ -177,5 +212,5 @@ export async function generateModel(
     }
   }
 
-  return { ok: false, errors: lastErrors, usage: usage ?? usageFrom({}, effort, Date.now() - t0, repairs) };
+  return { ok: false, errors: lastErrors, usage: usageFrom(billed, effort, Date.now() - t0, repairs) };
 }

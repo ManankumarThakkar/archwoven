@@ -1,10 +1,10 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import { EditOpSchema, applyEditOps, type EditOp, type SystemModel, type ViewType } from '@archwoven/model';
 import {
-  MODEL, MAX_REPAIRS, STRUCTURED_OUTPUTS_BETA, fakeMode, resolveApiKey, usageFrom,
+  CONTEXT_TOKEN_LIMIT, MAX_REPAIRS, MODEL, STRUCTURED_OUTPUTS_BETA, fakeMode, makeAnthropic, resolveApiKey, usageFrom,
   type Effort, type StructuredClient,
 } from './client';
+import type { RawUsage } from './client';
 
 export type RefineOutcome =
   | { ok: true; ops: EditOp[]; usage: ReturnType<typeof usageFrom> }
@@ -43,16 +43,33 @@ export async function generateRefinement(
     return { ok: true, ops, usage: { model: MODEL, effort, inputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 0, latencyMs: 0, repairs: 0 } };
   }
   const client: StructuredClient =
-    opts.client ?? (new Anthropic({ apiKey: resolveApiKey() }) as unknown as StructuredClient);
+    opts.client ?? (makeAnthropic(resolveApiKey()) as unknown as StructuredClient);
 
   const t0 = Date.now();
   const messages: unknown[] = [
     { role: 'user', content: `View: ${view}\n\nCurrent model JSON (revision ${model.revision}):\n${JSON.stringify(model)}\n\nInstruction: ${instruction}` },
   ];
+  const system = [{ type: 'text', text: REFINEMENT_SYSTEM, cache_control: { type: 'ephemeral' } }];
+
+  // §15 per-request gate: exact token count before send; fail closed.
+  try {
+    const counted = await client.messages.countTokens({ model: MODEL, system, messages });
+    if (counted.input_tokens > CONTEXT_TOKEN_LIMIT) {
+      return { ok: false, errors: ['assembled context exceeds the 25k token limit — scope the instruction down'], usage: usageFrom({}, effort, Date.now() - t0, 0) };
+    }
+  } catch (e) {
+    return { ok: false, errors: [`context token count failed: ${e instanceof Error ? e.message : String(e)}`], usage: usageFrom({}, effort, Date.now() - t0, 0) };
+  }
 
   let lastErrors: string[] = [];
   let repairs = 0;
-  let usage = usageFrom({}, effort, 0, 0);
+  const billed: Required<RawUsage> = { input_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, output_tokens: 0 };
+  const addUsage = (u: RawUsage) => {
+    billed.input_tokens += u.input_tokens ?? 0;
+    billed.cache_creation_input_tokens += u.cache_creation_input_tokens ?? 0;
+    billed.cache_read_input_tokens += u.cache_read_input_tokens ?? 0;
+    billed.output_tokens += u.output_tokens ?? 0;
+  };
 
   for (let attempt = 0; attempt <= MAX_REPAIRS; attempt++) {
     let response: Awaited<ReturnType<StructuredClient['beta']['messages']['create']>>;
@@ -61,16 +78,15 @@ export async function generateRefinement(
         model: MODEL,
         max_tokens: 4000,
         betas: [STRUCTURED_OUTPUTS_BETA],
-        system: [{ type: 'text', text: REFINEMENT_SYSTEM, cache_control: { type: 'ephemeral' } }],
+        system,
         messages,
         output_config: { format: { type: 'json_schema', schema: opsSchema, name: 'edit_ops' }, effort },
       });
     } catch (e) {
       lastErrors = [`request failed: ${e instanceof Error ? e.message : String(e)}`];
-      usage = usageFrom({}, effort, Date.now() - t0, repairs);
       continue;
     }
-    usage = usageFrom(response.usage, effort, Date.now() - t0, repairs);
+    addUsage(response.usage);
 
     const text = textOf(response.content);
     let ops: unknown;
@@ -94,7 +110,7 @@ export async function generateRefinement(
         lastErrors = [`baseRevision must be ${model.revision}`];
       } else {
         const applied = applyEditOps(model, checked.data);
-        if (applied.ok) return { ok: true, ops: checked.data, usage };
+        if (applied.ok) return { ok: true, ops: checked.data, usage: usageFrom(billed, effort, Date.now() - t0, repairs) };
         lastErrors = applied.errors;
       }
     }
@@ -105,5 +121,5 @@ export async function generateRefinement(
     }
   }
 
-  return { ok: false, errors: lastErrors, usage };
+  return { ok: false, errors: lastErrors, usage: usageFrom(billed, effort, Date.now() - t0, repairs) };
 }

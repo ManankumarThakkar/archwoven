@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { generateModel, MAX_REPAIRS, STABLE_SYSTEM, faithfulSchema } from './client';
+import { generateModel, makeAnthropic, MAX_REPAIRS, MAX_TOKENS, STABLE_SYSTEM, faithfulSchema } from './client';
 import type { StructuredClient } from './client';
 import validFull from '@archwoven/model/src/fixtures/valid-full.json';
 import dangling from '@archwoven/model/src/fixtures/invalid-dangling-edge.json';
@@ -9,12 +9,18 @@ const USAGE = { input_tokens: 1200, cache_creation_input_tokens: 900, cache_read
 const text = (v: unknown) => [{ type: 'text', text: typeof v === 'string' ? v : JSON.stringify(v) }];
 
 /** canned: each entry is the model's text output (object → stringified, string → raw, null → empty). */
-function fakeClient(canned: (unknown | null)[]): { client: StructuredClient; calls: unknown[] } {
+function fakeClient(canned: (unknown | null)[], opts: { countedTokens?: number; countFails?: boolean } = {}): { client: StructuredClient; calls: unknown[] } {
   const calls: unknown[] = [];
   let i = 0;
   return {
     calls,
     client: {
+      messages: {
+        countTokens() {
+          if (opts.countFails) return Promise.reject(new Error('count unavailable'));
+          return Promise.resolve({ input_tokens: opts.countedTokens ?? 500 });
+        },
+      },
       beta: {
         messages: {
           create(params: unknown) {
@@ -80,5 +86,49 @@ describe('generateModel (mocked SDK)', () => {
     // enum survives on the wire — the SDK's zodOutputFormat would have stripped it
     expect(first.output_config.format.schema.properties.edges.items.properties.type.enum).toEqual(['sync', 'async', 'data', 'relation', 'control']);
     expect('$defs' in faithfulSchema).toBe(false);
+  });
+
+  it('sends max_tokens at the §15-locked ceiling, never above', async () => {
+    const { client, calls } = fakeClient([validFull]);
+    await generateModel('x', 'architecture', { client });
+    expect((calls[0] as { max_tokens: number }).max_tokens).toBe(8192);
+    expect(MAX_TOKENS).toBeLessThanOrEqual(8192);
+  });
+
+  it('accumulates billed usage across every attempt (§15 metering)', async () => {
+    const { client } = fakeClient(['```json\n{"revision":1', validFull]);
+    const r = await generateModel('x', 'architecture', { client });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      // both attempts were billed by Anthropic; the old code logged only the last
+      expect(r.usage.outputTokens).toBe(USAGE.output_tokens * 2);
+      expect(r.usage.inputTokens).toBe(USAGE.input_tokens * 2);
+    }
+  });
+
+  it('counts tokens before send and rejects oversized context without calling the model', async () => {
+    const { client, calls } = fakeClient([validFull], { countedTokens: 30_000 });
+    const r = await generateModel('x', 'architecture', { client });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors.join(' ')).toMatch(/oversized|too large|scope/i);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('fails closed when the token count is unavailable — no uncounted sends', async () => {
+    const { client, calls } = fakeClient([validFull], { countFails: true });
+    const r = await generateModel('x', 'architecture', { client });
+    expect(r.ok).toBe(false);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('pins baseURL to api.anthropic.com even when a proxy env var is set', () => {
+    const prev = process.env.ANTHROPIC_BASE_URL;
+    process.env.ANTHROPIC_BASE_URL = 'http://127.0.0.1:2018/v1';
+    try {
+      expect(makeAnthropic('sk-test').baseURL).toBe('https://api.anthropic.com');
+    } finally {
+      if (prev === undefined) delete process.env.ANTHROPIC_BASE_URL;
+      else process.env.ANTHROPIC_BASE_URL = prev;
+    }
   });
 });
