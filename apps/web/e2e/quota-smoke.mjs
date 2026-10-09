@@ -16,11 +16,13 @@
 const BASE = process.argv[2] ?? 'http://localhost:3000';
 const GAP_MS = Number(process.env.SMOKE_GAP_MS ?? 120); // let the burst window expire between calls
 
-async function postGenerate(cookie) {
+async function postGenerate(cookie, prompt) {
   const res = await fetch(`${BASE}/api/generate`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...(cookie ? { cookie } : {}) },
-    body: JSON.stringify({ prompt: 'shop', view: 'architecture', idempotencyKey: crypto.randomUUID() }),
+    // distinct prompts: the client now derives a stable idempotency key per
+    // (prompt, view), so repeats of the SAME prompt would dedupe to one job.
+    body: JSON.stringify({ prompt, view: 'architecture', idempotencyKey: crypto.randomUUID() }),
   });
   const setCookie = res.headers.get('set-cookie');
   const sid = setCookie ? /aw_sid=([\w-]+)/.exec(setCookie)?.[1] : undefined;
@@ -47,7 +49,7 @@ async function main() {
   let cookie = '';
   let last;
   for (let i = 1; i <= 7; i++) {
-    last = await postGenerate(cookie);
+    last = await postGenerate(cookie, `shop system ${i}`);
     if (last.sid) cookie = `aw_sid=${last.sid}`;
     if (last.status === 202) await waitDone(cookie, last.body.jobId);
     if (i <= 6) check(`generate #${i} accepted`, last.status === 202, `status ${last.status}`);

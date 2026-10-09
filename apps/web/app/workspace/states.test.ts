@@ -8,19 +8,46 @@ describe('workspace state machine', () => {
   it('generate walks every stage in order then succeeds', () => {
     let s = next(initial, { type: 'GENERATE' });
     expect(s).toEqual({ kind: 'running', stage: 'validating' });
-    for (const stage of ['generating', 'validating-output', 'laying-out'] as const) {
+    for (const stage of ['generating', 'validating-output', 'laying-out', 'saving'] as const) {
       s = next(s, { type: 'STAGE', stage });
       expect(s).toEqual({ kind: 'running', stage });
     }
-    expect(STAGES).toEqual(['validating', 'generating', 'validating-output', 'laying-out']);
+    expect(STAGES).toEqual(['queued', 'validating', 'generating', 'validating-output', 'laying-out', 'saving']);
+    // a queued job (concurrency cap) re-enters running at the queued stage
+    s = next(next(initial, { type: 'GENERATE' }), { type: 'STAGE', stage: 'queued' });
+    expect(s).toEqual({ kind: 'running', stage: 'queued' });
     s = next(s, { type: 'SUCCESS', modelId: 'm1', revision: 1 });
     expect(s).toEqual({ kind: 'success', modelId: 'm1', revision: 1 });
   });
 
-  it('quota-blocked carries the reset countdown data', () => {
+  it('quota-blocked carries the reset countdown and the honest server copy', () => {
     const resetAt = Date.now() + 3_600_000;
-    const s = run([{ type: 'QUOTA_BLOCKED', reason: 'credits-exhausted', resetAt }]);
-    expect(s).toEqual({ kind: 'quota-blocked', reason: 'credits-exhausted', resetAt });
+    const s = run([{ type: 'QUOTA_BLOCKED', reason: 'credits-exhausted', resetAt, message: "You've used today's free generations — resets in 1h 0m. Sign in with GitHub for 30/day." }]);
+    expect(s.kind).toBe('quota-blocked');
+    if (s.kind === 'quota-blocked') {
+      expect(s.reason).toBe('credits-exhausted');
+      expect(s.resetAt).toBe(resetAt);
+      expect(s.message).toMatch(/resets in/);
+    }
+  });
+
+  it('every stage renders a real label — never "undefined"', () => {
+    const labels: Record<string, string> = {
+      queued: 'Queued', validating: 'Validating', generating: 'Designing',
+      'validating-output': 'Checking', 'laying-out': 'Arranging', saving: 'Saving',
+    };
+    for (const stage of STAGES) {
+      expect(labels[stage], `label for ${stage}`).toBeTruthy();
+    }
+  });
+
+  it('a 409 rebase returns to success with the latest model instead of hiding the canvas', () => {
+    const s = run([
+      { type: 'GENERATE' },
+      { type: 'SUCCESS', modelId: 'm1', revision: 2 },
+      { type: 'REBASE', modelId: 'm1', revision: 5 },
+    ]);
+    expect(s).toEqual({ kind: 'success', modelId: 'm1', revision: 5 });
   });
 
   it('example click fills input but never enters running (scenario 1)', () => {
@@ -44,6 +71,6 @@ describe('workspace state machine', () => {
   });
 
   it('reset returns to idle from any terminal state', () => {
-    expect(run([{ type: 'QUOTA_BLOCKED', reason: 'burst', resetAt: 1 }, { type: 'RESET' }])).toEqual({ kind: 'idle' });
+    expect(run([{ type: 'QUOTA_BLOCKED', reason: 'burst', resetAt: 1, message: 'Slow down a touch' }, { type: 'RESET' }])).toEqual({ kind: 'idle' });
   });
 });

@@ -2,8 +2,15 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { validFullModel } from '@archwoven/model';
 import { openStore } from '@archwoven/jobs';
 import { serverDeps } from '../../lib/server';
+import { resetSlots } from '../../lib/llm-limiter';
 import { GET } from '../jobs/[id]/route';
 import { POST } from './route';
+
+const deferred = () => {
+  let resolve!: () => void;
+  const promise = new Promise<void>((r) => { resolve = r; });
+  return { promise, resolve };
+};
 
 const usage = { model: 'claude-opus-5-5', effort: 'medium' as const, inputTokens: 1000, cacheWriteTokens: 5000, cacheReadTokens: 10000, outputTokens: 1500, latencyMs: 500, repairs: 0 };
 
@@ -26,6 +33,7 @@ async function waitJob(id: string) {
 beforeEach(() => {
   serverDeps.store = openStore(':memory:');
   serverDeps.generateModel = async () => ({ ok: true as const, model: validFullModel, usage });
+  resetSlots(2);
 });
 
 describe('POST /api/generate', () => {
@@ -97,6 +105,73 @@ describe('POST /api/generate', () => {
     const res = await POST(req({ prompt: 'shop', view: 'architecture', idempotencyKey: 'fresh' }, ''));
     expect(res.headers.get('set-cookie')).toMatch(/aw_sid=/);
   });
+
+  it('202 body carries the live remaining credits', async () => {
+    const res = await POST(req({ prompt: 'shop', view: 'architecture', idempotencyKey: 'rem1' }));
+    const body = (await res.json()) as { jobId: string; remaining: number };
+    expect(body.remaining).toBe(5);
+  });
+
+  it('idempotency dedupe is session-scoped — another session with the same key gets its own job', async () => {
+    const a = await POST(req({ prompt: 'shop', view: 'architecture', idempotencyKey: 'shared' }));
+    const { jobId: id1 } = (await a.json()) as { jobId: string };
+    await waitJob(id1);
+    const b = await POST(req({ prompt: 'shop', view: 'architecture', idempotencyKey: 'shared' }, 'aw_sid=other-sess'));
+    expect(b.status).toBe(202);
+    const { jobId: id2 } = (await b.json()) as { jobId: string };
+    expect(id2).not.toBe(id1);
+    await waitJob(id2);
+    expect(serverDeps.store.creditsUsed('other-sess', new Date().toISOString().slice(0, 10))).toBe(1);
+  });
+
+  it('excess parallel generates queue with a visible position (§15 concurrency cap)', async () => {
+    const gate = deferred();
+    serverDeps.generateModel = async () => {
+      await gate.promise;
+      return { ok: true as const, model: validFullModel, usage };
+    };
+    const ids: string[] = [];
+    for (const k of ['q1', 'q2', 'q3']) {
+      const res = await POST(req({ prompt: `p${k}`, view: 'architecture', idempotencyKey: k }));
+      expect(res.status).toBe(202);
+      ids.push(((await res.json()) as { jobId: string }).jobId);
+    }
+    await new Promise((r) => setTimeout(r, 20));
+    const third = await GET(new Request(`http://localhost/api/jobs/${ids[2]}`, { headers: { cookie: 'aw_sid=test-sess' } }), { params: Promise.resolve({ id: ids[2]! }) });
+    const body = (await third.json()) as { status: string; queuePosition: number | null };
+    expect(body.status).toBe('queued');
+    expect(body.queuePosition).toBe(1);
+    gate.resolve();
+    for (const id of ids) await waitJob(id);
+  });
+
+  it('credits are reserved at accept and refunded when the job fails', async () => {
+    const gate = deferred();
+    serverDeps.generateModel = async () => {
+      await gate.promise;
+      return { ok: false as const, errors: ['boom'], usage };
+    };
+    const res = await POST(req({ prompt: 'shop', view: 'architecture', idempotencyKey: 'rr' }));
+    const { jobId } = (await res.json()) as { jobId: string };
+    // reserved at accept (job still blocked in the model call):
+    expect(serverDeps.store.creditsUsed('test-sess', new Date().toISOString().slice(0, 10))).toBe(1);
+    gate.resolve();
+    await waitJob(jobId);
+    // refunded after failure:
+    expect(serverDeps.store.creditsUsed('test-sess', new Date().toISOString().slice(0, 10))).toBe(0);
+  });
+
+  it('failed provider call is still metered to call_log (§11 data, stop-loss input)', async () => {
+    serverDeps.generateModel = async () => ({ ok: false as const, errors: ['boom'], usage });
+    expect(serverDeps.store.todayCost()).toBe(0);
+    const res = await POST(req({ prompt: 'shop', view: 'architecture', idempotencyKey: 'meter' }));
+    const { jobId } = (await res.json()) as { jobId: string };
+    await waitJob(jobId);
+    // the failed attempt billed real tokens — the old code logged nothing here,
+    // so todayCost (the stop-loss input) undercounted every failure.
+    expect(serverDeps.store.todayCost()).toBeGreaterThan(0);
+    expect(serverDeps.store.creditsUsed('test-sess', new Date().toISOString().slice(0, 10))).toBe(0);
+  });
 });
 
 describe('GET /api/jobs/:id', () => {
@@ -104,10 +179,18 @@ describe('GET /api/jobs/:id', () => {
     const res = await POST(req({ prompt: 'shop', view: 'architecture', idempotencyKey: 'poll' }));
     const { jobId } = (await res.json()) as { jobId: string };
     await waitJob(jobId);
-    const jobRes = await GET(new Request(`http://localhost/api/jobs/${jobId}`), { params: Promise.resolve({ id: jobId }) });
+    const jobRes = await GET(new Request(`http://localhost/api/jobs/${jobId}`, { headers: { cookie: 'aw_sid=test-sess' } }), { params: Promise.resolve({ id: jobId }) });
     const body = (await jobRes.json()) as { status: string; modelId: string; revision: number };
     expect(body.status).toBe('succeeded');
     expect(body.modelId).toBe(jobId);
     expect(body.revision).toBe(validFullModel.revision);
+  });
+
+  it('another session cannot read your job', async () => {
+    const res = await POST(req({ prompt: 'shop', view: 'architecture', idempotencyKey: 'priv' }));
+    const { jobId } = (await res.json()) as { jobId: string };
+    await waitJob(jobId);
+    const leak = await GET(new Request(`http://localhost/api/jobs/${jobId}`, { headers: { cookie: 'aw_sid=mallory' } }), { params: Promise.resolve({ id: jobId }) });
+    expect(leak.status).toBe(404);
   });
 });

@@ -21,9 +21,16 @@ const req = (body: unknown) =>
     body: JSON.stringify(body),
   });
 
+const reqAs = (body: unknown, cookie: string) =>
+  new Request('http://localhost/api/refine', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie },
+    body: JSON.stringify(body),
+  });
+
 beforeEach(() => {
   serverDeps.store = openStore(':memory:');
-  serverDeps.store.saveRevision('m1', validFullModel);
+  serverDeps.store.saveRevision('m1', validFullModel, 'test-sess');
   serverDeps.generateRefinement = async () => ({ ok: true as const, ops: [addCacheOp], usage });
 });
 
@@ -60,11 +67,24 @@ describe('POST /api/refine', () => {
     expect(called).toBe(false);
   });
 
-  it('refinement failure → 502, credits NOT spent, prior revision preserved', async () => {
+  it('refinement failure → 502, reserved credit refunded, prior revision preserved', async () => {
     serverDeps.generateRefinement = async () => ({ ok: false as const, errors: ['provider exploded'], usage });
     const res = await POST(req({ modelId: 'm1', baseRevision: validFullModel.revision, instruction: 'x' }));
     expect(res.status).toBe(502);
     expect(serverDeps.store.creditsUsed('test-sess', new Date().toISOString().slice(0, 10))).toBe(0);
     expect(serverDeps.store.getRevision('m1')?.revision).toBe(validFullModel.revision);
+    // the failed attempt was still metered (§11)
+    expect(serverDeps.store.todayCost()).toBeGreaterThan(0);
+  });
+
+  it('another session cannot refine your model', async () => {
+    let called = false;
+    serverDeps.generateRefinement = async () => {
+      called = true;
+      return { ok: true as const, ops: [addCacheOp], usage };
+    };
+    const res = await POST(reqAs({ modelId: 'm1', baseRevision: validFullModel.revision, instruction: 'x' }, 'aw_sid=mallory'));
+    expect(res.status).toBe(404);
+    expect(called).toBe(false);
   });
 });

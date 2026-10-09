@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { summarizeOps, pushHistory, undo } from './refine-flow';
+import { summarizeOps, pushHistory, undo, idempotencyKeyFor } from './refine-flow';
 import type { EditOp, SystemModel } from '@archwoven/model';
 
 const addCache: EditOp = { op: 'add', target: 'svc.cache', patch: { id: 'svc.cache', kind: 'service', label: 'Cache', provenance: 'proposed' }, baseRevision: 1, summary: '' };
@@ -34,5 +34,14 @@ describe('refine flow', () => {
   it('undo of a single-entry stack is a no-op', () => {
     const stack = pushHistory([], rev(1));
     expect(undo(stack).model?.revision).toBe(1);
+  });
+
+  it('idempotencyKeyFor is stable per (prompt, view) so a retry dedupes instead of double-charging', () => {
+    const k1 = idempotencyKeyFor('an e-commerce shop', 'architecture');
+    const k2 = idempotencyKeyFor('an e-commerce shop', 'architecture');
+    expect(k2).toBe(k1);
+    expect(idempotencyKeyFor('an e-commerce shop', 'sequence')).not.toBe(k1);
+    expect(idempotencyKeyFor('an e-commerce shop with caching', 'architecture')).not.toBe(k1);
+    expect(k1).toMatch(/^[0-9a-f]{8,}$/);
   });
 });

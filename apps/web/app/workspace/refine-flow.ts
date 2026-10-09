@@ -1,6 +1,22 @@
-import type { EditOp, SystemModel } from '@archwoven/model';
+import type { EditOp, SystemModel, ViewType } from '@archwoven/model';
 
 const short = (id: string) => id.split('.').pop() ?? id;
+
+/**
+ * Stable idempotency key per (prompt, view): a retry after a lost response
+ * dedupes on the server instead of double-charging. A deliberate re-run of
+ * the same prompt returns the same job — changing the prompt starts fresh.
+ * FNV-1a, hex.
+ */
+export function idempotencyKeyFor(prompt: string, view: ViewType): string {
+  let h = 0x811c9dc5;
+  const s = `${view}Ā${prompt}`;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16).padStart(8, '0');
+}
 
 const isEdgePatch = (op: EditOp) => 'from' in op.patch && 'to' in op.patch;
 
