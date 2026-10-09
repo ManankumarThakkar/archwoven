@@ -122,7 +122,7 @@ export function openStore(path = 'data/archwoven.db') {
       return row ? (JSON.parse(row.json) as SystemModel) : null;
     },
 
-    createJob(job: { id: string; modelId: string; kind: 'generate' | 'refine'; idempotencyKey?: string; sessionId: string }): void {
+    createJob(job: { id: string; modelId: string; kind: 'generate' | 'refine' | 'repo'; idempotencyKey?: string; sessionId: string }): void {
       db.prepare('INSERT INTO jobs (id, model_id, kind, idempotency_key, session_id) VALUES (?, ?, ?, ?, ?)').run(
         job.id, job.modelId, job.kind, job.idempotencyKey ?? null, job.sessionId,
       );
@@ -149,6 +149,15 @@ export function openStore(path = 'data/archwoven.db') {
       db.prepare(
         'INSERT INTO call_log (session_id, tier, view, input_tokens, cache_write_tokens, cache_read_tokens, output_tokens, cost_usd, retries, outcome) VALUES (?,?,?,?,?,?,?,?,?,?)',
       ).run(rec.sessionId, rec.tier, rec.view, rec.inputTokens, rec.cacheWriteTokens, rec.cacheReadTokens, rec.outputTokens, rec.costUsd, rec.retries, rec.outcome);
+    },
+    listCalls(sessionId: string): CallRec[] {
+      const rows = db.prepare('SELECT * FROM call_log WHERE session_id = ? ORDER BY id').all(sessionId) as Record<string, unknown>[];
+      return rows.map((r) => ({
+        sessionId: String(r.session_id), tier: r.tier as Tier, view: String(r.view),
+        inputTokens: Number(r.input_tokens), cacheWriteTokens: Number(r.cache_write_tokens),
+        cacheReadTokens: Number(r.cache_read_tokens), outputTokens: Number(r.output_tokens),
+        costUsd: Number(r.cost_usd), retries: Number(r.retries), outcome: r.outcome as CallRec['outcome'],
+      }));
     },
     todayCost(): number {
       const r = db.prepare("SELECT COALESCE(SUM(cost_usd), 0) AS c FROM call_log WHERE date(created_at) = date('now')").get() as { c: number };

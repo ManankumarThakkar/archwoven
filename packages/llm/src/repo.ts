@@ -34,7 +34,7 @@ const pinEvidence = (model: { nodes: { evidence: Evidence[] }[]; edges: { eviden
 export async function assembleRepoModel(
   fragment: Fragment,
   meta: { owner: string; repo: string; sha: string; framework: string },
-  opts: { client?: StructuredClient; effort?: Effort } = {},
+  opts: { client?: StructuredClient; effort?: Effort; signal?: AbortSignal } = {},
 ): Promise<GenerateOutcome> {
   const effort: Effort = opts.effort ?? 'medium';
   const repoFull = `${meta.owner}/${meta.repo}`;
@@ -71,6 +71,7 @@ export async function assembleRepoModel(
   };
 
   for (let attempt = 0; attempt <= MAX_REPAIRS; attempt++) {
+    if (opts.signal?.aborted) return { ok: false, errors: ['cancelled'], usage: usageFrom(billed, effort, Date.now() - t0, repairs) };
     let response: Awaited<ReturnType<StructuredClient['beta']['messages']['create']>>;
     try {
       response = await client.beta.messages.create({
@@ -80,7 +81,7 @@ export async function assembleRepoModel(
         system,
         messages,
         output_config: { format: { type: 'json_schema', schema: faithfulSchema, name: 'system_model' }, effort },
-      });
+      }, { signal: opts.signal });
     } catch (e) {
       lastErrors = [`request failed: ${e instanceof Error ? e.message : String(e)}`];
       continue;

@@ -31,10 +31,11 @@ const DEFAULT_CAPS: UnpackCaps = {
 export async function ingestRepo(
   parsed: { owner: string; repo: string; ref?: string; subdir?: string },
   deps: IngestDeps,
-  opts: { signal?: AbortSignal; caps?: UnpackCaps } = {},
+  opts: { signal?: AbortSignal; caps?: UnpackCaps; onStage?: (stage: 'fetching' | 'extracting') => void } = {},
 ): Promise<IngestResult> {
   const caps = opts.caps ?? DEFAULT_CAPS;
 
+  opts.onStage?.('fetching');
   const pinned = await pinCommit(deps.fetcher, { owner: parsed.owner, repo: parsed.repo }, parsed.ref, opts.signal);
   if (!pinned.ok) return { ok: false, reason: pinned.reason, message: pinned.message };
 
@@ -69,6 +70,7 @@ export async function ingestRepo(
     }
 
     const extractDir = parsed.subdir ? join(workDir, parsed.subdir) : workDir;
+    opts.onStage?.('extracting');
     try {
       const fragment = framework === 'spring-boot' ? await deps.extractSpringBoot(extractDir) : await deps.extractFastApi(extractDir);
       return { ok: true, sha: pinned.sha, framework, fragment, gaps: [...gaps, ...fragment.gaps], filesScanned: scoped.length };

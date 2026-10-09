@@ -178,6 +178,9 @@ importers:
       '@archwoven/extract':
         specifier: workspace:*
         version: link:../../packages/extract
+      '@archwoven/ingest':
+        specifier: workspace:*
+        version: link:../../packages/ingest
       '@archwoven/jobs':
         specifier: workspace:*
         version: link:../../packages/jobs
