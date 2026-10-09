@@ -6,8 +6,9 @@ A scripted end-to-end run of the plain-English vertical slice with §15 fair-use
 ```bash
 echo 'ANTHROPIC_API_KEY=sk-ant-…' > .env.local   # valid DIRECT key (see blocker note above)
 pnpm install
-pnpm --filter @archwoven/web build
-ARCHWOVEN_FAKE=1 pnpm --filter @archwoven/web start   # or drop FAKE for real model
+pnpm --filter web build
+# FAKE mode in production requires an explicit demo ack (assertSafeRuntime guard):
+ARCHWOVEN_FAKE=1 ARCHWOVEN_DEMO_ACK=1 pnpm --filter web start   # or drop FAKE for real model
 # open http://localhost:3000
 ```
 
@@ -29,13 +30,22 @@ End-to-end HTTP flow against `next start`:
 generate: 202 → succeeded rev 1
 loaded:   rev 1  nodes 10  views 3
 refine:   200  rev 1 → 2  nodes 10 → 11  summary ["+Cache service"]
-stale:    409  (rebase payload carries latest)
+stale:    409  (rebase payload carries latest; canvas now stays visible)
 ```
 
 Quota ladder (`apps/web/e2e/quota-smoke.mjs`):
 ```
 generate #1..#6 accepted (202) · #7 blocked (429)
 reset copy + GitHub upsell present → ALL PASS
+```
+
+Guardrails verified live (post-review):
+```
+/api/quota:        {"remaining":6→5,"pool":6,"tier":"anonymous","fake":true}
+cross-session:     GET /api/models|jobs/<id>, refine, undo → 404 for other session
+undo:              POST /api/models/<id>/undo {prevRevision} → forward rev 2, durable
+boot guard:        production + ARCHWOVEN_FAKE without ARCHWOVEN_DEMO_ACK → refuses to start
+header chips:      live credit meter (6→5), privacy from model.privacy, DEMO DATA banner in fake mode
 ```
 
 ## Real-key run (pending)

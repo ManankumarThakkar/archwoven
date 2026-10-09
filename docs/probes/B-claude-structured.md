@@ -31,10 +31,11 @@ Ran the eval with the key in `.env.local`. Every architecture/sequence prompt fa
 - `client.beta.messages.create` + explicit `structured-outputs-2025-12-15` header.
 - A **faithful inline schema** (`z.toJSONSchema(..., { reused: 'inline' })`) that keeps every `enum`; verified on the wire that `edges.items.type.enum` survives and there are no `$defs`.
 - `.create()` + our own `JSON.parse` + `validateModel`, so a truncated/invalid response still yields the raw text we quote back — repairs now carry **specific validator errors + the prior JSON**.
-- `max_tokens` raised to 16000 (thinking is always-on for opus-5-5; 8000 truncated).
+- **`baseURL` pinned to `https://api.anthropic.com`** via `makeAnthropic()` in both `client.ts` and `refine.ts` — the SDK otherwise inherits `ANTHROPIC_BASE_URL`, so any dev shell behind the Claude Code proxy would silently drop `output_config` and forward the API key to that proxy. A unit test poisons the env var and asserts the pin.
+- `max_tokens` at the §15-locked **8192**, with an exact `count_tokens` pre-send gate (rejects >25k assembled context, fails closed). If live truncation recurs, the fix is effort-low output or a spec config-review amendment — not silent drift.
 - Key sanitized against `--env-file` quote/whitespace artifacts.
 
-Commits: `7953aba` (enforcement), `193e2a4` (refine), `1a2222e` (key sanitize). Offline suite **84/84**, `tsc` clean on `llm` + `web`.
+Commits: `7953aba` (enforcement), `193e2a4` (refine), `1a2222e` (key sanitize); review-fix pass adds the baseURL pin + token gate. Offline suite green, `tsc` clean on `llm` + `web`.
 
 ## What is still required to close Probe B
 
