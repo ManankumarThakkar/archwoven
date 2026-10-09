@@ -11,8 +11,7 @@
   },
   "dependencies": {
     "@archwoven/extract": "workspace:*",
-    "@archwoven/model": "workspace:*",
-    "tar": "^7.4.0"
+    "@archwoven/model": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.19.1"
