@@ -129,14 +129,15 @@ export function validateModel(raw: unknown): ValidationResult {
   }
 
   for (const v of m.views) {
-    if (!v.mainPath) continue;
+    const mp = v.mainPath;
+    if (!mp) continue;
     const viewNodes = new Set(v.nodes);
-    for (const id of v.mainPath) {
+    for (const id of mp) {
       if (!viewNodes.has(id)) errors.push(`view "${v.id}" mainPath references node outside the view: "${id}"`);
     }
-    for (let i = 0; i + 1 < v.mainPath.length; i++) {
-      const hasEdge = m.edges.some((e) => e.from === v.mainPath[i] && e.to === v.mainPath[i + 1]);
-      if (!hasEdge) errors.push(`view "${v.id}" mainPath pair without forward edge: "${v.mainPath[i]}"→"${v.mainPath[i + 1]}"`);
+    for (let i = 0; i + 1 < mp.length; i++) {
+      const hasEdge = m.edges.some((e) => e.from === mp[i] && e.to === mp[i + 1]);
+      if (!hasEdge) errors.push(`view "${v.id}" mainPath pair without forward edge: "${mp[i]}"→"${mp[i + 1]}"`);
     }
   }
 

@@ -19,6 +19,7 @@ const mkModel = (): SystemModel => ({
   ],
   views: [{ id: 'v.arch', type: 'architecture', nodes: ['svc.api', 'svc.orders', 'datastore.db'], edges: ['e.api-orders', 'e.orders-db'] }],
   privacy: { classification: 'public', boundary: 'external-allowed' },
+  boundaries: [], guidedViews: [],
   layout: { 'svc.api': { x: 0, y: 0 }, 'svc.orders': { x: 100, y: 0 }, 'datastore.db': { x: 200, y: 50 } },
 });
 

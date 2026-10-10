@@ -18,6 +18,7 @@ const mkModel = (): SystemModel => ({
   edges: [{ id: 'e.api-orders', from: 'svc.api', to: 'svc.orders', type: 'sync', provenance: 'user-specified', evidence: [] }],
   views: [{ id: 'v.arch', type: 'architecture', nodes: ['svc.api', 'svc.orders'], edges: ['e.api-orders'] }],
   privacy: { classification: 'public', boundary: 'external-allowed' },
+  boundaries: [], guidedViews: [],
 });
 
 const addCacheOp: EditOp = {
