@@ -261,7 +261,7 @@ export default function WorkspacePage() {
                 <button key={v.id} onClick={() => setActiveView(v.id)} style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, border: '1px solid ' + (v.id === activeView ? '#5eead4' : '#1f2937'), background: v.id === activeView ? '#0f2e2b' : '#111a2e', color: '#cbd5e1', cursor: 'pointer' }}>{v.type}</button>
               ))}
             </div>
-            <div style={{ flex: 1, minHeight: 0 }}><Canvas model={model} viewId={activeView || viewTabs[0]?.id || ''} onSelect={setSelected} /></div>
+            <div style={{ flex: 1, minHeight: 0 }}><Canvas model={model} modelId={modelId ?? ''} viewId={activeView || viewTabs[0]?.id || ''} onSelect={setSelected} /></div>
             <RefineBar busy={refining} summary={summary} canUndo={history.length > 1} onRefine={refine} onUndo={doUndo} onExport={doExport} />
           </main>
         ) : (
