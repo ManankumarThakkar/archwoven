@@ -19,3 +19,4 @@ jobs:
       - run: pnpm -r build
       - run: pnpm typecheck
       - run: pnpm test
+      - run: pnpm bench:selftest

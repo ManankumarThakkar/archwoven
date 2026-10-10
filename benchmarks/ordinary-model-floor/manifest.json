@@ -1,0 +1,24 @@
+{
+  "suite": "ordinary-model-floor",
+  "version": 1,
+  "cases": [
+    "todo-api",
+    "checkout",
+    "boring-crud"
+  ],
+  "gates": [
+    "semantic",
+    "validate",
+    "visual-review"
+  ],
+  "defectTags": [
+    "clipping",
+    "node-overlap",
+    "label-overlap",
+    "hidden-route",
+    "stacked-edge",
+    "weak-hierarchy",
+    "unbalanced-whitespace",
+    "theme-contrast"
+  ]
+}

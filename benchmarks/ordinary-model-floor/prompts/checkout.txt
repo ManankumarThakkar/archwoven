@@ -1,0 +1,1 @@
+A checkout flow: customers hit an API gateway routed to an order service which charges Stripe.

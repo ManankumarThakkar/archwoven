@@ -6,9 +6,13 @@
   "main": "src/index.ts",
   "types": "src/index.ts",
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist/index.js"
   },
   "dependencies": {
     "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
   }
 }

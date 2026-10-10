@@ -1,0 +1,62 @@
+{
+  "id": "todo-api",
+  "requirements": {
+    "nodes": [
+      {
+        "key": "user",
+        "labels": [
+          "Customer",
+          "User"
+        ],
+        "type": "actor"
+      },
+      {
+        "key": "api",
+        "labels": [
+          "API",
+          "API Gateway"
+        ],
+        "type": "gateway"
+      },
+      {
+        "key": "orders",
+        "labels": [
+          "Order Service",
+          "Orders"
+        ],
+        "type": "service"
+      },
+      {
+        "key": "db",
+        "labels": [
+          "PostgreSQL",
+          "DB"
+        ],
+        "type": "datastore"
+      }
+    ],
+    "relationships": [
+      {
+        "from": "user",
+        "to": "api",
+        "labels": [
+          "requests"
+        ]
+      },
+      {
+        "from": "api",
+        "to": "orders",
+        "labels": [
+          "handles"
+        ]
+      },
+      {
+        "from": "orders",
+        "to": "db",
+        "labels": [
+          "persists"
+        ]
+      }
+    ]
+  }
+}

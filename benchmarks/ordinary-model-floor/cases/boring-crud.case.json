@@ -1,0 +1,62 @@
+{
+  "id": "boring-crud",
+  "requirements": {
+    "nodes": [
+      {
+        "key": "user",
+        "labels": [
+          "Customer",
+          "User"
+        ],
+        "type": "actor"
+      },
+      {
+        "key": "gateway",
+        "labels": [
+          "API Gateway",
+          "Gateway"
+        ],
+        "type": "gateway"
+      },
+      {
+        "key": "catalog",
+        "labels": [
+          "Catalog Service",
+          "Catalog"
+        ],
+        "type": "service"
+      },
+      {
+        "key": "db",
+        "labels": [
+          "PostgreSQL",
+          "DB"
+        ],
+        "type": "datastore"
+      }
+    ],
+    "relationships": [
+      {
+        "from": "user",
+        "to": "gateway",
+        "labels": [
+          "requests"
+        ]
+      },
+      {
+        "from": "gateway",
+        "to": "catalog",
+        "labels": [
+          "serves"
+        ]
+      },
+      {
+        "from": "catalog",
+        "to": "db",
+        "labels": [
+          "reads"
+        ]
+      }
+    ]
+  }
+}

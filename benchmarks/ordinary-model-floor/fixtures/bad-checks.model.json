@@ -1,0 +1,363 @@
+{
+  "schemaVersion": "1",
+  "revision": 1,
+  "title": "E-commerce Platform",
+  "requirements": [
+    {
+      "id": "req-1",
+      "text": "Handle online orders with payments",
+      "status": "stated"
+    },
+    {
+      "id": "req-2",
+      "text": "Add a Redis cache for product lookups",
+      "status": "clarified"
+    }
+  ],
+  "openQuestions": [
+    {
+      "id": "oq-1",
+      "text": "Is inventory held in Postgres or a dedicated service?"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "actor.user",
+      "kind": "actor",
+      "label": "Customer",
+      "provenance": "user-specified"
+    },
+    {
+      "id": "gateway.api",
+      "kind": "gateway",
+      "label": "API Gateway",
+      "provenance": "inferred"
+    },
+    {
+      "id": "svc.orders",
+      "kind": "service",
+      "label": "Order Service",
+      "provenance": "user-specified"
+    },
+    {
+      "id": "svc.catalog",
+      "kind": "service",
+      "label": "Catalog Service",
+      "provenance": "user-specified"
+    },
+    {
+      "id": "datastore.postgres",
+      "kind": "datastore",
+      "label": "PostgreSQL",
+      "provenance": "inferred"
+    },
+    {
+      "id": "datastore.redis",
+      "kind": "datastore",
+      "label": "Redis Cache",
+      "provenance": "proposed",
+      "evidence": [
+        {
+          "note": "user requested cache for product lookups (req-2)"
+        }
+      ]
+    },
+    {
+      "id": "external.stripe",
+      "kind": "external",
+      "label": "Stripe",
+      "provenance": "user-specified"
+    },
+    {
+      "id": "entity.user",
+      "kind": "entity",
+      "label": "users",
+      "provenance": "user-specified",
+      "fields": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "key": "pk"
+        },
+        {
+          "name": "email",
+          "type": "text",
+          "key": "uk"
+        }
+      ]
+    },
+    {
+      "id": "entity.product",
+      "kind": "entity",
+      "label": "products",
+      "provenance": "user-specified",
+      "fields": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "key": "pk"
+        },
+        {
+          "name": "price_cents",
+          "type": "integer"
+        }
+      ]
+    },
+    {
+      "id": "entity.order",
+      "kind": "entity",
+      "label": "orders",
+      "provenance": "user-specified",
+      "fields": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "key": "pk"
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "key": "fk"
+        },
+        {
+          "name": "status",
+          "type": "text"
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "e.user-api",
+      "from": "actor.user",
+      "to": "gateway.api",
+      "type": "sync",
+      "label": "HTTPS",
+      "provenance": "inferred",
+      "role": "main"
+    },
+    {
+      "id": "e.api-orders",
+      "from": "gateway.api",
+      "to": "svc.orders",
+      "type": "sync",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.api-catalog",
+      "from": "gateway.api",
+      "to": "svc.catalog",
+      "type": "sync",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.orders-pg",
+      "from": "svc.orders",
+      "to": "datastore.postgres",
+      "type": "data",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.catalog-pg",
+      "from": "svc.catalog",
+      "to": "datastore.postgres",
+      "type": "data",
+      "provenance": "inferred"
+    },
+    {
+      "id": "e.orders-stripe",
+      "from": "svc.orders",
+      "to": "external.stripe",
+      "type": "sync",
+      "label": "payments",
+      "provenance": "user-specified"
+    },
+    {
+      "id": "e.orders-redis",
+      "from": "svc.catalog",
+      "to": "datastore.redis",
+      "type": "data",
+      "provenance": "proposed",
+      "evidence": [
+        {
+          "note": "proposed addition per req-2; not yet observed"
+        }
+      ]
+    },
+    {
+      "id": "er.user-order",
+      "from": "entity.user",
+      "to": "entity.order",
+      "type": "relation",
+      "cardinality": "1:N",
+      "provenance": "user-specified"
+    },
+    {
+      "id": "er.order-product",
+      "from": "entity.order",
+      "to": "entity.product",
+      "type": "relation",
+      "cardinality": "N:M",
+      "provenance": "user-specified"
+    }
+  ],
+  "views": [
+    {
+      "id": "view.architecture",
+      "type": "architecture",
+      "orientation": "TB",
+      "nodes": [
+        "actor.user",
+        "gateway.api",
+        "svc.orders",
+        "svc.catalog",
+        "datastore.postgres",
+        "datastore.redis",
+        "external.stripe"
+      ],
+      "edges": [
+        "e.user-api",
+        "e.api-orders",
+        "e.api-catalog",
+        "e.orders-pg",
+        "e.catalog-pg",
+        "e.orders-stripe",
+        "e.orders-redis"
+      ],
+      "mainPath": [
+        "actor.user",
+        "gateway.api",
+        "svc.orders"
+      ]
+    },
+    {
+      "id": "view.sequence",
+      "type": "sequence",
+      "nodes": [
+        "actor.user",
+        "gateway.api",
+        "svc.orders",
+        "external.stripe"
+      ],
+      "edges": [],
+      "sequence": {
+        "participants": [
+          "actor.user",
+          "gateway.api",
+          "svc.orders",
+          "external.stripe"
+        ],
+        "messages": [
+          {
+            "seq": 1,
+            "from": "actor.user",
+            "to": "gateway.api",
+            "label": "POST /orders",
+            "kind": "call"
+          },
+          {
+            "seq": 2,
+            "from": "gateway.api",
+            "to": "svc.orders",
+            "label": "createOrder",
+            "kind": "call"
+          },
+          {
+            "seq": 3,
+            "from": "svc.orders",
+            "to": "external.stripe",
+            "label": "charge",
+            "kind": "call",
+            "fragment": {
+              "type": "alt",
+              "covers": [
+                3,
+                4
+              ]
+            }
+          },
+          {
+            "seq": 4,
+            "from": "external.stripe",
+            "to": "svc.orders",
+            "label": "payment result",
+            "kind": "return"
+          },
+          {
+            "seq": 5,
+            "from": "svc.orders",
+            "to": "gateway.api",
+            "label": "order confirmation",
+            "kind": "return"
+          }
+        ]
+      }
+    },
+    {
+      "id": "view.er",
+      "type": "er",
+      "nodes": [
+        "entity.user",
+        "entity.product",
+        "entity.order"
+      ],
+      "edges": [
+        "er.user-order",
+        "er.order-product"
+      ]
+    }
+  ],
+  "privacy": {
+    "classification": "public",
+    "boundary": "external-allowed"
+  },
+  "semanticChecks": {
+    "allowedRoots": [
+      "actor.user",
+      "entity.user"
+    ],
+    "allowedTerminals": [
+      "external.stripe",
+      "datastore.postgres",
+      "datastore.redis",
+      "entity.user",
+      "entity.product"
+    ],
+    "requiredEdges": [
+      {
+        "from": "actor.user",
+        "to": "gateway.api",
+        "type": "sync"
+      }
+    ],
+    "requiredPaths": [
+      {
+        "from": "actor.user",
+        "to": "entity.user"
+      }
+    ]
+  },
+  "boundaries": [
+    {
+      "id": "b.core",
+      "label": "Core platform",
+      "wraps": [
+        "gateway.api",
+        "svc.orders",
+        "svc.catalog"
+      ]
+    }
+  ],
+  "guidedViews": [
+    {
+      "id": "gv.happy",
+      "label": "Request path",
+      "focus": [
+        "actor.user",
+        "gateway.api",
+        "svc.orders"
+      ],
+      "note": "A user request through the API gateway into the orders service."
+    }
+  ]
+}
