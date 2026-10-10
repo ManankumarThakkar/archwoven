@@ -1,5 +1,5 @@
 import type { Fragment } from '@archwoven/extract';
-import { validateModel, validFullModel, type Evidence } from '@archwoven/model';
+import { validateModel, validFullModelExtended, type Evidence } from '@archwoven/model';
 import {
   MODEL, MAX_REPAIRS, MAX_TOKENS, CONTEXT_TOKEN_LIMIT, STRUCTURED_OUTPUTS_BETA,
   makeAnthropic, resolveApiKey, fakeMode, faithfulSchema, usageFrom,
@@ -21,7 +21,8 @@ Hard rules:
 - Every evidence object must carry repo "owner/name" and commit — the values given in the message.
 - Emit ONLY a valid Archwoven system model JSON (schemaVersion "1"); revision is 1; ids stable, lowercase, dotted.
 - Provenance for anything from the fragment is source-supported; recommendations are proposed, never user-specified.
-- labels short (<= 40 chars); no HTML, no markdown, no comments in the JSON.`;
+- labels short (<= 40 chars); no HTML, no markdown, no comments in the JSON.
+- Optional semantic fields — emit them ONLY when the fragment proves them: semanticChecks (allowedRoots/allowedTerminals from edge-less nodes, requiredEdges/requiredPaths from seen bindings), view mainPath (ordered node ids along real edges), edge role (main|branch|async|return|error), boundaries (wraps node ids, one boundary per node), guidedViews (<= 5 chapters with focus node ids). Never emit a check your own output would fail.`;
 
 /** JSON.stringify, then escape `</` so a `</repo-data>` inside a string value
  *  cannot close the fence; `\/` is a legal JSON escape and parses back identically. */
@@ -39,7 +40,7 @@ export async function assembleRepoModel(
   const effort: Effort = opts.effort ?? 'medium';
   const repoFull = `${meta.owner}/${meta.repo}`;
   if (!opts.client && fakeMode()) {
-    const model = structuredClone(validFullModel);
+    const model = structuredClone(validFullModelExtended);
     pinEvidence(model, repoFull, meta.sha);
     return { ok: true, model, usage: { model: MODEL, effort, inputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 0, latencyMs: 0, repairs: 0 } };
   }
