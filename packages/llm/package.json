@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",
+    "@archwoven/extract": "workspace:*",
     "@archwoven/model": "workspace:*",
     "zod": "^4.6.5"
   },

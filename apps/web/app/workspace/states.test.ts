@@ -12,7 +12,7 @@ describe('workspace state machine', () => {
       s = next(s, { type: 'STAGE', stage });
       expect(s).toEqual({ kind: 'running', stage });
     }
-    expect(STAGES).toEqual(['queued', 'validating', 'generating', 'validating-output', 'laying-out', 'saving']);
+    expect(STAGES).toEqual(['queued', 'validating', 'generating', 'fetching', 'extracting', 'designing', 'validating-output', 'laying-out', 'saving']);
     // a queued job (concurrency cap) re-enters running at the queued stage
     s = next(next(initial, { type: 'GENERATE' }), { type: 'STAGE', stage: 'queued' });
     expect(s).toEqual({ kind: 'running', stage: 'queued' });
@@ -34,6 +34,7 @@ describe('workspace state machine', () => {
   it('every stage renders a real label — never "undefined"', () => {
     const labels: Record<string, string> = {
       queued: 'Queued', validating: 'Validating', generating: 'Designing',
+      fetching: 'Fetching the repository', extracting: 'Reading the code', designing: 'Designing the architecture',
       'validating-output': 'Checking', 'laying-out': 'Arranging', saving: 'Saving',
     };
     for (const stage of STAGES) {
@@ -72,5 +73,35 @@ describe('workspace state machine', () => {
 
   it('reset returns to idle from any terminal state', () => {
     expect(run([{ type: 'QUOTA_BLOCKED', reason: 'burst', resetAt: 1, message: 'Slow down a touch' }, { type: 'RESET' }])).toEqual({ kind: 'idle' });
+  });
+
+  it('mode switch preserves prompt and URL prefill independently', () => {
+    let s = run([{ type: 'EXAMPLE_SELECT', prompt: 'shop', view: 'architecture' }]);
+    s = next(s, { type: 'MODE', mode: 'repo' });
+    expect(s.kind === 'idle' && s.mode).toBe('repo');
+    expect(s.kind === 'idle' && s.prefill?.prompt).toBe('shop');
+    s = next(s, { type: 'REPO_SELECT', url: 'https://github.com/foo/bar', ref: 'main' });
+    expect(s.kind === 'idle' && s.prefill?.url).toBe('https://github.com/foo/bar');
+    expect(s.kind === 'idle' && s.prefill?.prompt).toBe('shop'); // describe draft survives
+    s = next(s, { type: 'MODE', mode: 'describe' });
+    expect(s.kind === 'idle' && s.mode).toBe('describe');
+    expect(s.kind === 'idle' && s.prefill?.url).toBe('https://github.com/foo/bar'); // repo draft survives
+  });
+
+  it('repo example chip prefills the URL without entering running (scenario 1 parity)', () => {
+    const s = run([{ type: 'REPO_SELECT', url: 'https://github.com/spring-projects/spring-petclinic', ref: 'main' }]);
+    expect(s.kind).toBe('idle');
+    expect(s.kind === 'idle' && s.mode).toBe('repo');
+  });
+
+  it('GENERATE_REPO runs through the repo stages and cancel stops it', () => {
+    let s = next(initial, { type: 'GENERATE_REPO' });
+    expect(s).toEqual({ kind: 'running', stage: 'queued' });
+    s = next(s, { type: 'STAGE', stage: 'fetching' });
+    expect(s).toEqual({ kind: 'running', stage: 'fetching' });
+    s = next(s, { type: 'STAGE', stage: 'extracting' });
+    expect(s).toEqual({ kind: 'running', stage: 'extracting' });
+    s = next(s, { type: 'CANCEL' });
+    expect(s).toEqual({ kind: 'cancelled' });
   });
 });

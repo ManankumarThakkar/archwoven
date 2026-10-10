@@ -17,3 +17,6 @@ next-env.d.ts
 
 # Reference material (third-party screenshots — not committed)
 *.png
+
+# SDD scratch (ledgers, briefs, review packages, research notes) — never committed
+.superpowers/

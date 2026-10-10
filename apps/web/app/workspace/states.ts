@@ -1,11 +1,13 @@
 import type { ViewType } from '@archwoven/model';
 
 /** Real generation stages surfaced by /api/jobs polling (queued = §15 concurrency slot). */
-export const STAGES = ['queued', 'validating', 'generating', 'validating-output', 'laying-out', 'saving'] as const;
+export const STAGES = ['queued', 'validating', 'generating', 'fetching', 'extracting', 'designing', 'validating-output', 'laying-out', 'saving'] as const;
 export type Stage = (typeof STAGES)[number];
 
+export type Mode = 'describe' | 'repo';
+
 export type WorkspaceState =
-  | { kind: 'idle'; prefill?: { prompt: string; view: ViewType } }
+  | { kind: 'idle'; mode?: Mode; prefill?: { prompt?: string; view?: ViewType; url?: string; subdir?: string; ref?: string } }
   | { kind: 'clarifying'; questions: string[] }
   | { kind: 'running'; stage: Stage }
   | { kind: 'success'; modelId: string; revision: number }
@@ -29,6 +31,9 @@ export type Event =
   | { type: 'QUOTA_BLOCKED'; reason: string; resetAt: number; message: string }
   | { type: 'PAUSE'; message: string }
   | { type: 'EXAMPLE_SELECT'; prompt: string; view: ViewType }
+  | { type: 'MODE'; mode: Mode }
+  | { type: 'REPO_SELECT'; url: string; subdir?: string; ref?: string }
+  | { type: 'GENERATE_REPO' }
   | { type: 'RESET' };
 
 export const initial: WorkspaceState = { kind: 'idle' };
@@ -66,7 +71,15 @@ export function next(state: WorkspaceState, event: Event): WorkspaceState {
     case 'PAUSE':
       return { kind: 'paused', message: event.message };
     case 'EXAMPLE_SELECT':
-      return { kind: 'idle', prefill: { prompt: event.prompt, view: event.view } };
+      return { kind: 'idle', mode: state.kind === 'idle' ? state.mode : undefined, prefill: { ...(state.kind === 'idle' ? state.prefill : undefined), prompt: event.prompt, view: event.view } };
+    // Mode switch preserves both drafts independently — switching never drops what the other mode holds.
+    case 'MODE':
+      return state.kind === 'running' ? state : { kind: 'idle', mode: event.mode, prefill: state.kind === 'idle' ? state.prefill : undefined };
+    // Repo chips prefill URL/subdir/ref only — never auto-generate (scenario 1 parity).
+    case 'REPO_SELECT':
+      return state.kind === 'running' ? state : { kind: 'idle', mode: 'repo', prefill: { ...(state.kind === 'idle' ? state.prefill : undefined), url: event.url, subdir: event.subdir, ref: event.ref } };
+    case 'GENERATE_REPO':
+      return running('queued');
     case 'RESET':
       return { kind: 'idle' };
   }

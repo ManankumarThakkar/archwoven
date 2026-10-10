@@ -2,8 +2,21 @@
 
 import type { InspectorPayload } from './inspector';
 
-export function Inspector({ payload }: { payload: InspectorPayload | null }) {
-  if (!payload) return <div style={{ padding: 16, color: '#8b98b8' }}>Select a node or edge to inspect its provenance.</div>;
+export function Inspector({ payload, gaps }: { payload: InspectorPayload | null; gaps?: string[] }) {
+  if (!payload) {
+    if (gaps && gaps.length > 0) {
+      return (
+        <aside style={{ padding: 16, width: 300, borderLeft: '1px solid #1f2937', color: '#e5e7eb' }}>
+          <div style={{ fontSize: 12, color: '#fbbf24', marginBottom: 6 }}>Gaps ({gaps.length}) — what this diagram could not prove</div>
+          <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, color: '#fbbf24' }}>
+            {gaps.map((g, i) => <li key={i}>{g}</li>)}
+          </ul>
+          <div style={{ marginTop: 10, fontSize: 12, color: '#8b98b8' }}>Select a node or edge to inspect its provenance.</div>
+        </aside>
+      );
+    }
+    return <div style={{ padding: 16, color: '#8b98b8' }}>Select a node or edge to inspect its provenance.</div>;
+  }
   return (
     <aside style={{ padding: 16, width: 300, borderLeft: '1px solid #1f2937', display: 'flex', flexDirection: 'column', gap: 10, color: '#e5e7eb' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

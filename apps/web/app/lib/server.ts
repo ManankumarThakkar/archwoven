@@ -1,21 +1,30 @@
 import { randomUUID } from 'node:crypto';
 import { openStore, type Store, type Tier } from '@archwoven/jobs';
-import { generateModel, generateRefinement, type GenerateOutcome, type RefineOutcome } from '@archwoven/llm';
+import { generateModel, generateRefinement, assembleRepoModel, type GenerateOutcome, type RefineOutcome } from '@archwoven/llm';
+import { ingestRepo, type IngestResult } from '@archwoven/ingest';
+import { extractSpringBoot, extractFastApi, type Fragment } from '@archwoven/extract';
 import type { SystemModel, ViewType } from '@archwoven/model';
 
 /**
  * Server singletons + injectable seams. Tests replace `serverDeps.store`
  * (":memory:") and `serverDeps.generateModel` / `serverDeps.generateRefinement`
- * (canned outcomes) — production wiring lives here and nowhere else.
+ * / `serverDeps.ingestRepo` / `serverDeps.assembleRepoModel` (canned outcomes)
+ * — production wiring lives here and nowhere else.
  */
 export const serverDeps: {
   store: Store;
   generateModel: (prompt: string, view: ViewType) => Promise<GenerateOutcome>;
   generateRefinement: (instruction: string, model: SystemModel, view: ViewType) => Promise<RefineOutcome>;
+  ingestRepo: (parsed: { owner: string; repo: string; ref?: string; subdir?: string }, opts?: { signal?: AbortSignal; onStage?: (stage: 'fetching' | 'extracting') => void }) => Promise<IngestResult>;
+  assembleRepoModel: (fragment: Fragment, meta: { owner: string; repo: string; sha: string; framework: string }, opts?: { signal?: AbortSignal }) => Promise<GenerateOutcome>;
 } = {
   store: openStore(process.env.ARCHWOVEN_DB ?? 'data/archwoven.db'),
   generateModel: (prompt, view) => generateModel(prompt, view),
   generateRefinement: (instruction, model, view) => generateRefinement(instruction, model, view),
+  // §14: URLs reaching this seam are already parseRepoUrl-validated (github.com only);
+  // repo content is untrusted data, never executed — extraction is static analysis only.
+  ingestRepo: (parsed, opts) => ingestRepo(parsed, { fetcher: (url, init) => fetch(url, init), extractSpringBoot, extractFastApi }, opts),
+  assembleRepoModel: (fragment, meta, opts) => assembleRepoModel(fragment, meta, opts),
 };
 
 export const PROMPT_TOKEN_LIMIT = 25_000;

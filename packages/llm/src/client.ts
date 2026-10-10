@@ -69,7 +69,7 @@ export interface StructuredClient {
   };
   beta: {
     messages: {
-      create(params: unknown): Promise<{
+      create(params: unknown, options?: { signal?: AbortSignal }): Promise<{
         content: { type: string; text?: string }[];
         stop_reason: string | null;
         usage: RawUsage;

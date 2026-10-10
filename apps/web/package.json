@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@archwoven/extract": "workspace:*",
+    "@archwoven/ingest": "workspace:*",
     "@archwoven/jobs": "workspace:*",
     "@archwoven/llm": "workspace:*",
     "@archwoven/model": "workspace:*",

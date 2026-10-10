@@ -10,5 +10,5 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   if (!job || job.sessionId !== sessionId) return Response.json({ error: 'job not found' }, { status: 404 });
   const revision = job.status === 'succeeded' ? serverDeps.store.getRevision(job.modelId)?.revision ?? null : null;
   const queuePosition = job.status === 'queued' ? slotPosition(id) : null;
-  return Response.json({ status: job.status, stage: job.stage ?? null, modelId: job.modelId, revision, queuePosition, error: job.error ?? null });
+  return Response.json({ status: job.status, stage: job.stage ?? null, modelId: job.modelId, revision, queuePosition, gaps: job.gaps ?? [], error: job.error ?? null });
 }

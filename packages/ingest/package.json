@@ -1,0 +1,24 @@
+{
+  "name": "@archwoven/ingest",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./url": "./dist/url.js"
+  },
+  "scripts": {
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --external:@archwoven/extract --outfile=dist/index.js && esbuild src/url.ts --bundle --format=esm --outfile=dist/url.js && tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@archwoven/extract": "workspace:*",
+    "@archwoven/model": "workspace:*"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "@types/node": "^24.19.1"
+  }
+}
