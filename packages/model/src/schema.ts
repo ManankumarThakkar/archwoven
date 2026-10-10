@@ -60,6 +60,10 @@ export type Node = z.infer<typeof NodeSchema>;
 export const EdgeTypeSchema = z.enum(['sync', 'async', 'data', 'relation', 'control']);
 export type EdgeType = z.infer<typeof EdgeTypeSchema>;
 
+/** Edge's narrative role (M4, optional): powers mainPath playback + route exploration. */
+export const EdgeRoleSchema = z.enum(['main', 'branch', 'async', 'return', 'error']);
+export type EdgeRole = z.infer<typeof EdgeRoleSchema>;
+
 export const CardinalitySchema = z.enum(['1:1', '1:N', 'N:M']);
 export type Cardinality = z.infer<typeof CardinalitySchema>;
 
@@ -71,6 +75,7 @@ export const EdgeSchema = z
     type: EdgeTypeSchema,
     label: z.string().nullish(),
     cardinality: CardinalitySchema.nullish(),
+    role: EdgeRoleSchema.nullish(),
     provenance: ProvenanceSchema,
     evidence: z.array(EvidenceSchema).default([]),
   })
@@ -120,6 +125,8 @@ export const ViewSchema = z
     edges: z.array(z.string()),
     sequence: SequenceMetaSchema.nullish(),
     focus: z.string().nullish(),
+    /** ordered node ids; consecutive pairs must have a forward edge (checked in validateModel) */
+    mainPath: z.array(z.string()).min(2).nullish(),
   })
   .strict();
 export type View = z.infer<typeof ViewSchema>;
@@ -150,6 +157,30 @@ export const PrivacySchema = z
   .strict();
 export type Privacy = z.infer<typeof PrivacySchema>;
 
+/** Machine-checkable integrity (M4, optional): extraction emits from detected routes,
+ *  validateModel enforces at every revision. Absent = no enforcement (backward compat). */
+export const SemanticChecksSchema = z
+  .object({
+    allowedRoots: z.array(z.string()).default([]),
+    allowedTerminals: z.array(z.string()).default([]),
+    requiredEdges: z.array(z.object({ from: z.string(), to: z.string(), type: EdgeTypeSchema.nullish() }).strict()).default([]),
+    requiredPaths: z.array(z.object({ from: z.string(), to: z.string() }).strict()).default([]),
+  })
+  .strict();
+export type SemanticChecks = z.infer<typeof SemanticChecksSchema>;
+
+/** Grouping container over node ids; a node may sit in at most one (validateModel). */
+export const BoundarySchema = z
+  .object({ id: z.string().min(1), label: z.string().min(1), wraps: z.array(z.string()).min(1) })
+  .strict();
+export type Boundary = z.infer<typeof BoundarySchema>;
+
+/** A chapter of the architecture: ≤5 per model, focus = node ids to reveal. */
+export const GuidedViewSchema = z
+  .object({ id: z.string().min(1), label: z.string().min(1), focus: z.array(z.string()).min(1), note: z.string().nullish() })
+  .strict();
+export type GuidedView = z.infer<typeof GuidedViewSchema>;
+
 export const SystemModelSchema = z
   .object({
     schemaVersion: z.literal('1'),
@@ -161,6 +192,9 @@ export const SystemModelSchema = z
     nodes: z.array(NodeSchema),
     edges: z.array(EdgeSchema),
     views: z.array(ViewSchema),
+    semanticChecks: SemanticChecksSchema.nullish(),
+    boundaries: z.array(BoundarySchema).default([]),
+    guidedViews: z.array(GuidedViewSchema).max(5).default([]),
     privacy: PrivacySchema,
     layout: z.record(z.string(), z.object({ x: z.number(), y: z.number() }).strict()).nullish(),
   })

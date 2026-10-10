@@ -66,5 +66,79 @@ export function validateModel(raw: unknown): ValidationResult {
     errors.push(`parentId ${m.parentId} must equal revision - 1 (${m.revision - 1})`);
   }
 
+  // --- M4 semantic enforcement (only when semanticChecks present) ---
+  const adjacency = new Map<string, string[]>();
+  const incoming = new Map<string, number>();
+  for (const e of m.edges) {
+    if (!adjacency.has(e.from)) adjacency.set(e.from, []);
+    adjacency.get(e.from)!.push(e.to);
+    incoming.set(e.to, (incoming.get(e.to) ?? 0) + 1);
+  }
+  const reachable = (from: string): Set<string> => {
+    const seen = new Set<string>([from]);
+    const queue = [from];
+    while (queue.length > 0) {
+      for (const to of adjacency.get(queue.shift()!) ?? []) {
+        if (!seen.has(to)) { seen.add(to); queue.push(to); }
+      }
+    }
+    return seen;
+  };
+
+  if (m.semanticChecks) {
+    const sc = m.semanticChecks;
+    for (const id of [...sc.allowedRoots, ...sc.allowedTerminals]) {
+      if (!nodeIds.has(id)) errors.push(`semanticChecks reference unknown node: "${id}"`);
+    }
+    for (const re of sc.requiredEdges) {
+      if (!nodeIds.has(re.from) || !nodeIds.has(re.to)) { errors.push(`requiredEdge references unknown node: "${re.from}"→"${re.to}"`); continue; }
+      const hit = m.edges.some((e) => e.from === re.from && e.to === re.to && (re.type == null || e.type === re.type));
+      if (!hit) errors.push(`requiredEdge missing: "${re.from}"→"${re.to}"${re.type ? ` type:${re.type}` : ''}`);
+    }
+    for (const rp of sc.requiredPaths) {
+      if (!nodeIds.has(rp.from) || !nodeIds.has(rp.to)) { errors.push(`requiredPath references unknown node: "${rp.from}"→"${rp.to}"`); continue; }
+      if (!reachable(rp.from).has(rp.to)) errors.push(`requiredPath unreachable: "${rp.from}"→"${rp.to}"`);
+    }
+    // root/terminal discipline is opt-in per list (non-empty): extraction emits
+    // only what it saw — an empty list means "not checked", never "none allowed".
+    if (sc.allowedRoots.length > 0) {
+      for (const n of m.nodes) {
+        if ((incoming.get(n.id) ?? 0) === 0 && !sc.allowedRoots.includes(n.id)) errors.push(`node has no incoming edge but is not in allowedRoots: "${n.id}"`);
+      }
+    }
+    if (sc.allowedTerminals.length > 0) {
+      for (const n of m.nodes) {
+        if (!adjacency.has(n.id) && !sc.allowedTerminals.includes(n.id)) errors.push(`node has no outgoing edge but is not in allowedTerminals: "${n.id}"`);
+      }
+    }
+  }
+
+  const boundaryOf = new Map<string, string>();
+  for (const b of m.boundaries) {
+    for (const id of b.wraps) {
+      if (!nodeIds.has(id)) { errors.push(`boundary "${b.id}" wraps unknown node: "${id}"`); continue; }
+      if (boundaryOf.has(id)) errors.push(`node in two boundaries: "${id}" (${boundaryOf.get(id)}, ${b.id})`);
+      boundaryOf.set(id, b.id);
+    }
+  }
+
+  for (const gv of m.guidedViews) {
+    for (const id of gv.focus) {
+      if (!nodeIds.has(id)) errors.push(`guidedView "${gv.id}" references unknown node: "${id}"`);
+    }
+  }
+
+  for (const v of m.views) {
+    if (!v.mainPath) continue;
+    const viewNodes = new Set(v.nodes);
+    for (const id of v.mainPath) {
+      if (!viewNodes.has(id)) errors.push(`view "${v.id}" mainPath references node outside the view: "${id}"`);
+    }
+    for (let i = 0; i + 1 < v.mainPath.length; i++) {
+      const hasEdge = m.edges.some((e) => e.from === v.mainPath[i] && e.to === v.mainPath[i + 1]);
+      if (!hasEdge) errors.push(`view "${v.id}" mainPath pair without forward edge: "${v.mainPath[i]}"→"${v.mainPath[i + 1]}"`);
+    }
+  }
+
   return errors.length > 0 ? { ok: false, errors } : { ok: true, model: m };
 }

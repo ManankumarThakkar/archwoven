@@ -108,6 +108,16 @@ interface SystemModel {
   privacy: { classification: 'public'|'private'; boundary: 'external-allowed'|'local-only' };
   layout?: Record<string, { x: number; y: number }> }                          // manual layout survives model edits
 
+// M4 additions — all optional; schemaVersion stays '1' (backward compatible)
+interface Edge += { role?: 'main'|'branch'|'async'|'return'|'error' }         // narrative role → playback
+interface View += { mainPath?: string[] }                                       // ordered ids; pairs need forward edges
+interface SystemModel += {
+  semanticChecks?: { allowedRoots: string[]; allowedTerminals: string[];      // discipline opt-in per non-empty list
+    requiredEdges: { from: string; to: string; type?: EdgeType }[];
+    requiredPaths: { from: string; to: string }[] }                            // BFS-enforced at every revision
+  boundaries?: { id: string; label: string; wraps: string[] }[]               // ≤1 boundary per node
+  guidedViews?: { id: string; label: string; focus: string[]; note?: string }[] } // ≤5 chapters
+
 type EditOp = { op: 'add'|'remove'|'update'|'move'; target: string; patch: object;
   baseRevision: number; summary: string }
 ```
