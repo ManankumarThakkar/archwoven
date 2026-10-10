@@ -1,6 +1,6 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, posix } from 'node:path';
-import { gunzipSync } from 'node:zlib';
+import { createGunzip } from 'node:zlib';
 
 /**
  * Safe tar unpack (§14) — an explicit ustar block reader, not a library
@@ -37,6 +37,31 @@ const isVendor = (rel: string): boolean => {
 
 const looksBinary = (body: Uint8Array): boolean => body.subarray(0, Math.min(8192, body.length)).includes(0);
 
+/** streaming inflate with an incremental cap: a gzip bomb is destroyed the
+ *  moment its expansion passes the cap — the full expansion never exists. */
+function inflateCapped(buf: Uint8Array, cap: number): Promise<Uint8Array> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let total = 0;
+    let done = false;
+    const gunzip = createGunzip();
+    gunzip.on('data', (c: Buffer) => {
+      total += c.length;
+      if (total > cap) {
+        if (done) return;
+        done = true;
+        gunzip.destroy();
+        reject(new Error(`oversized: decompressed archive exceeds ${cap} bytes`));
+        return;
+      }
+      chunks.push(c);
+    });
+    gunzip.on('error', (e) => { if (!done) { done = true; reject(e); } });
+    gunzip.on('end', () => { if (!done) { done = true; resolve(Buffer.concat(chunks, total)); } });
+    gunzip.end(buf);
+  });
+}
+
 const octal = (b: Uint8Array): number => {
   const s = new TextDecoder().decode(b).replace(/\0.*$/, '').trim();
   return s ? parseInt(s, 8) : 0;
@@ -50,13 +75,11 @@ export async function unpackTarball(tarball: ArrayBufferView | ArrayBuffer, dest
   let buf = ArrayBuffer.isView(tarball)
     ? new Uint8Array(tarball.buffer, tarball.byteOffset, tarball.byteLength)
     : new Uint8Array(tarball);
-  // codeload serves .tar.gz — inflate before the block reader, then re-apply
-  // the byte cap to the DECOMPRESSED size (a small gzip can hide a big bomb).
+  // codeload serves .tar.gz — inflate before the block reader, capping the
+  // DECOMPRESSED size incrementally (a small gzip can hide a big bomb).
   if (buf[0] === 0x1f && buf[1] === 0x8b) {
-    const inflated = gunzipSync(buf);
     const expandedCap = caps.maxExpandedBytes ?? MAX_EXPANDED_DEFAULT;
-    if (inflated.byteLength > expandedCap) throw new Error(`oversized: decompressed archive exceeds ${expandedCap} bytes`);
-    buf = new Uint8Array(inflated.buffer, inflated.byteOffset, inflated.byteLength);
+    buf = await inflateCapped(buf, expandedCap);
   }
   const files: string[] = [];
   const skipped: { path: string; reason: string }[] = [];

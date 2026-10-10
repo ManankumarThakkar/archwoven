@@ -15,13 +15,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     return Response.json({ status: job.status });
   }
 
+  // only registry-backed (repo) jobs are cancellable: they alone have abort
+  // plumbing. Refunding a generate job whose body cannot abort is a free generation.
   const entry = repoJobRegistry.get(id);
-  if (entry) {
-    if (entry.settled) return Response.json({ status: serverDeps.store.getJob(id)?.status ?? 'cancelled' });
-    entry.settled = true;
-  }
+  if (!entry) return Response.json({ error: 'job is not cancellable' }, { status: 409 });
+  if (entry.settled) return Response.json({ status: serverDeps.store.getJob(id)?.status ?? 'cancelled' });
+  entry.settled = true;
   serverDeps.store.updateJob(id, { status: 'cancelled' });
   refundCredits(serverDeps.store, sessionId, new Date().toISOString().slice(0, 10), WEIGHTS[job.kind as Action]);
-  entry?.controller.abort();
+  entry.controller.abort();
   return Response.json({ status: 'cancelled' });
 }

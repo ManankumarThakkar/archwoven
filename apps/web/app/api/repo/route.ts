@@ -77,10 +77,12 @@ export async function POST(req: Request) {
       return true;
     };
     const fail = (error: string, usage?: { inputTokens: number; cacheWriteTokens: number; cacheReadTokens: number; outputTokens: number }, retries = 0) => {
+      // metering is unconditional — every spent token must reach call_log (stop-loss),
+      // even when cancel owns the settle and the credit refund
+      if (usage) recordUsage(serverDeps.store, { sessionId, tier, action: 'repo', usage, retries, outcome: 'failed' });
       if (!claim()) return; // cancel already settled + refunded this job
       serverDeps.store.updateJob(jobId, { status: 'failed', error });
       refundCredits(serverDeps.store, sessionId, day, WEIGHTS.repo);
-      if (usage) recordUsage(serverDeps.store, { sessionId, tier, action: 'repo', usage, retries, outcome: 'failed' });
     };
     try {
       // cancel may have landed while queued — a cancelled job must never restart

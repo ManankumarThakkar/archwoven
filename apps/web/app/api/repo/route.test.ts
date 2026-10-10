@@ -191,6 +191,26 @@ describe('POST /api/repo', () => {
     expect(serverDeps.store.getJob(bId)!.status).toBe('cancelled');
   });
 
+  it('tokens spent before a cancel are still metered (I1)', async () => {
+    serverDeps.assembleRepoModel = (_f, _m, opts) =>
+      new Promise((res) => {
+        opts?.signal?.addEventListener('abort', () => res({ ok: false as const, errors: ['cancelled'], usage })); // mirrors the loop-top abort return
+      });
+    const res = await POST(req({ url: 'https://github.com/foo/bar' }));
+    const { jobId } = (await res.json()) as { jobId: string };
+    for (let i = 0; i < 200; i++) {
+      if (serverDeps.store.getJob(jobId)?.stage === 'designing') break;
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    await CANCEL(cancelReq(jobId), { params: Promise.resolve({ id: jobId }) });
+    await new Promise((r) => setTimeout(r, 80));
+    expect(serverDeps.store.getJob(jobId)!.status).toBe('cancelled');
+    expect(serverDeps.store.creditsUsed('test-sess', day())).toBe(0);
+    const calls = serverDeps.store.listCalls('test-sess');
+    expect(calls.length).toBe(1); // tokens hit call_log even though the job was cancelled
+    expect(calls[0]!.outputTokens).toBe(usage.outputTokens);
+  });
+
   it('cancel after success is a no-op — no double refund', async () => {
     const res = await POST(req({ url: 'https://github.com/foo/bar' }));
     const { jobId } = (await res.json()) as { jobId: string };

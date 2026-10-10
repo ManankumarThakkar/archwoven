@@ -100,6 +100,17 @@ describe('unpackTarball (§14 tarball safety)', () => {
     await expect(unpackTarball(gz, dest, { ...CAPS, maxExpandedBytes: 64 * 1024 })).rejects.toThrow(/oversized/i);
   });
 
+  it('aborts inflate incrementally — never allocates the full expansion (I2)', async () => {
+    const dest = mkDest();
+    // 1 GB of zeros → ~1 MB gzip; the 32 MB guard must fire long before a
+    // full 1 GB allocation exists (gunzipSync allocates-then-checks: ~300ms+,
+    // streaming aborts at 32 MB: ~20ms)
+    const bomb = gzipSync(Buffer.alloc(1024 * 1024 * 1024));
+    const t0 = Date.now();
+    await expect(unpackTarball(bomb, dest, { ...CAPS, maxExpandedBytes: 32 * 1024 * 1024 })).rejects.toThrow(/oversized/i);
+    expect(Date.now() - t0, 'guard must abort mid-stream, not after full inflate').toBeLessThan(150);
+  }, 30_000);
+
   it('inflates past maxTotalBytes when the expanded size stays under maxExpandedBytes', async () => {
     const dest = mkDest();
     const gz = gzipSync(Buffer.from(tar([
