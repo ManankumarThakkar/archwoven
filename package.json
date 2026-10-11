@@ -4,6 +4,7 @@
   "packageManager": "pnpm@12.9.1",
   "scripts": {
     "dev": "pnpm --filter web dev",
+    "start:local": "ARCHWOVEN_MODE=local pnpm --filter web start",
     "build": "pnpm -r build",
     "test": "vitest run",
     "typecheck": "pnpm -r typecheck",
