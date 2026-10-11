@@ -1,9 +1,18 @@
 import { randomUUID } from 'node:crypto';
 import { openStore, type Store, type Tier } from '@archwoven/jobs';
-import { generateModel, generateRefinement, assembleRepoModel, type GenerateOutcome, type RefineOutcome } from '@archwoven/llm';
+import {
+  generateModel, generateRefinement, assembleRepoModel,
+  generateModelLocal, generateRefinementLocal, assembleRepoModelLocal,
+  makeEgressGuard, LOCAL_EGRESS_ALLOW,
+  type GenerateOutcome, type RefineOutcome,
+} from '@archwoven/llm';
+import { deployMode } from './mode';
 import { ingestRepo, type IngestResult } from '@archwoven/ingest';
 import { extractSpringBoot, extractFastApi, type Fragment } from '@archwoven/extract';
 import type { SystemModel, ViewType } from '@archwoven/model';
+
+/** §9: in local deployments every raw fetch passes the egress guard; hosted uses plain fetch. */
+const egressFetch: typeof fetch = deployMode() === 'local' ? makeEgressGuard(LOCAL_EGRESS_ALLOW) : fetch;
 
 /**
  * Server singletons + injectable seams. Tests replace `serverDeps.store`
@@ -19,12 +28,24 @@ export const serverDeps: {
   assembleRepoModel: (fragment: Fragment, meta: { owner: string; repo: string; sha: string; framework: string }, opts?: { signal?: AbortSignal }) => Promise<GenerateOutcome>;
 } = {
   store: openStore(process.env.ARCHWOVEN_DB ?? 'data/archwoven.db'),
-  generateModel: (prompt, view) => generateModel(prompt, view),
-  generateRefinement: (instruction, model, view) => generateRefinement(instruction, model, view),
+  // §8/§9 routing: fake first (canned, zero network); local mode goes to Ollama
+  // behind the egress guard — a private job can never reach a hosted provider,
+  // not even by accident in a repair or failure path.
+  generateModel: (prompt, view) =>
+    fakeMode() ? generateModel(prompt, view)
+      : deployMode() === 'local' ? generateModelLocal(prompt, view, { fetchImpl: egressFetch })
+        : generateModel(prompt, view),
+  generateRefinement: (instruction, model, view) =>
+    fakeMode() ? generateRefinement(instruction, model, view)
+      : deployMode() === 'local' ? generateRefinementLocal(instruction, model, view, { fetchImpl: egressFetch })
+        : generateRefinement(instruction, model, view),
   // §14: URLs reaching this seam are already parseRepoUrl-validated (github.com only);
   // repo content is untrusted data, never executed — extraction is static analysis only.
-  ingestRepo: (parsed, opts) => ingestRepo(parsed, { fetcher: (url, init) => fetch(url, init), extractSpringBoot, extractFastApi }, opts),
-  assembleRepoModel: (fragment, meta, opts) => assembleRepoModel(fragment, meta, opts),
+  ingestRepo: (parsed, opts) => ingestRepo(parsed, { fetcher: (url, init) => egressFetch(url, init), extractSpringBoot, extractFastApi }, opts),
+  assembleRepoModel: (fragment, meta, opts) =>
+    fakeMode() ? assembleRepoModel(fragment, meta, opts)
+      : deployMode() === 'local' ? assembleRepoModelLocal(fragment, meta, { fetchImpl: egressFetch, signal: opts?.signal })
+        : assembleRepoModel(fragment, meta, opts),
 };
 
 export const PROMPT_TOKEN_LIMIT = 25_000;

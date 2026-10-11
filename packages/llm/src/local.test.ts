@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { validFullModel } from '@archwoven/model';
-import { generateModelLocal, LOCAL_MODEL } from './local';
+import { generateModelLocal, generateRefinementLocal, assembleRepoModelLocal, LOCAL_MODEL } from './local';
+import { makeEgressGuard, LOCAL_EGRESS_ALLOW } from './egress';
 
 const enc = new TextEncoder();
 
@@ -136,5 +137,98 @@ describe('generateModelLocal (Ollama adapter)', () => {
     const format = body.format as { type: string; properties: Record<string, { const?: string }> };
     expect(format.type).toBe('object');
     expect(format.properties.schemaVersion!.const).toBe('1');
+  });
+});
+
+describe('generateRefinementLocal (Ollama EditOps)', () => {
+  it('returns validated EditOps against the current model, via ollama only', async () => {
+    const ops = [{ op: 'add', target: 'svc.cache', patch: { id: 'svc.cache', kind: 'service', label: 'Cache', provenance: 'proposed' }, baseRevision: validFullModel.revision, summary: '+Cache' }];
+    const urls: string[] = [];
+    let body: Record<string, unknown> = {};
+    const fakeFetch = (async (url: unknown, init?: RequestInit) => {
+      urls.push(String(url));
+      body = JSON.parse(String(init?.body));
+      return ndjsonResponse([JSON.stringify(ops)]);
+    }) as unknown as typeof fetch;
+
+    const out = await generateRefinementLocal('add a cache', validFullModel, 'architecture', { fetchImpl: fakeFetch });
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.ops).toHaveLength(1);
+    expect(out.ops[0]!.target).toBe('svc.cache');
+    expect(urls.every((u) => u.includes('localhost:11434'))).toBe(true);
+    expect((body.format as { type: string }).type).toBe('array');
+    expect(JSON.stringify(body.messages)).toContain('add a cache');
+  });
+
+  it('repairs a bad baseRevision within budget', async () => {
+    const bad = [{ op: 'add', target: 'svc.cache', patch: { id: 'svc.cache', kind: 'service', label: 'Cache', provenance: 'proposed' }, baseRevision: 999, summary: '+Cache' }];
+    const good = [{ op: 'add', target: 'svc.cache', patch: { id: 'svc.cache', kind: 'service', label: 'Cache', provenance: 'proposed' }, baseRevision: validFullModel.revision, summary: '+Cache' }];
+    let call = 0;
+    const fakeFetch = (async () => ndjsonResponse([JSON.stringify(++call === 1 ? bad : good)])) as unknown as typeof fetch;
+
+    const out = await generateRefinementLocal('add a cache', validFullModel, 'architecture', { fetchImpl: fakeFetch });
+    expect(out.ok).toBe(true);
+    expect(call).toBe(2);
+  });
+});
+
+describe('assembleRepoModelLocal (Ollama, fenced)', () => {
+  it('assembles with the repo-data fence and pins evidence server-side', async () => {
+    let body: Record<string, unknown> = {};
+    const fakeFetch = (async (_url: unknown, init?: RequestInit) => {
+      body = JSON.parse(String(init?.body));
+      return ndjsonResponse([JSON.stringify(validFullModel)]);
+    }) as unknown as typeof fetch;
+
+    const out = await assembleRepoModelLocal(
+      { nodes: [], edges: [], endpoints: [], gaps: [] } as never,
+      { owner: 'acme', repo: 'shop', sha: 'abc123', framework: 'spring-boot' },
+      { fetchImpl: fakeFetch },
+    );
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    const user = String((body.messages as { role: string; content: string }[])[1]?.content ?? '');
+    expect(user).toContain('<repo-data>');
+    // exactly one closing fence in the user message — nothing inside can close it early
+    expect(user.split('<\\/repo-data>').length - 1).toBe(0);
+    expect(user.split('</repo-data>').length - 1).toBe(1);
+    const ev = out.model.nodes.flatMap((n) => n.evidence);
+    if (ev.length > 0) {
+      expect(ev.every((e) => e.repo === 'acme/shop' && e.commit === 'abc123')).toBe(true);
+    }
+  });
+});
+
+describe('local egress discipline (scenario 9)', () => {
+  it('repair loop: invalid, invalid, valid — 3 ollama calls, zero other hosts', async () => {
+    const broken = JSON.stringify({ ...validFullModel, nodes: validFullModel.nodes.slice(1) });
+    const good = JSON.stringify(validFullModel);
+    const inner: string[] = [];
+    let call = 0;
+    const spy = (async (url: unknown) => {
+      inner.push(String(url));
+      return ndjsonResponse([++call === 3 ? good : broken]);
+    }) as unknown as typeof fetch;
+    const guard = makeEgressGuard(LOCAL_EGRESS_ALLOW, spy);
+
+    const out = await generateModelLocal('shop', 'architecture', { fetchImpl: guard });
+    expect(out.ok, JSON.stringify(out.ok ? out.usage : out.errors)).toBe(true);
+    expect(inner).toHaveLength(3);
+    expect(inner.every((u) => u.includes('localhost:11434'))).toBe(true);
+  });
+
+  it('ollama down: rejects cleanly, no fallback client, single attempt', async () => {
+    const calls: string[] = [];
+    const fakeFetch = (async (url: unknown) => {
+      calls.push(String(url));
+      throw new Error('connect ECONNREFUSED');
+    }) as unknown as typeof fetch;
+
+    const out = await generateModelLocal('shop', 'architecture', { fetchImpl: fakeFetch });
+    expect(out.ok).toBe(false);
+    if (out.ok) return;
+    expect(out.errors.join('')).toContain('ECONNREFUSED');
+    expect(calls).toHaveLength(1);
   });
 });
