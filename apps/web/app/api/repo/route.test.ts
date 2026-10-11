@@ -48,6 +48,7 @@ const day = () => new Date().toISOString().slice(0, 10);
 beforeEach(() => {
   serverDeps.store = openStore(':memory:');
   serverDeps.ingestRepo = async () => okIngest;
+  serverDeps.ingestLocal = async () => okIngest;
   // mirrors the real assembleRepoModel's server-side evidence pinning
   serverDeps.assembleRepoModel = async () => {
     const m = structuredClone(validFullModel);
@@ -247,5 +248,59 @@ describe('POST /api/repo', () => {
     const mine = await CANCEL(cancelReq(jobId), { params: Promise.resolve({ id: jobId }) });
     expect(mine.status).toBe(200);
     expect((await waitJob(jobId)).status).toBe('cancelled');
+  });
+});
+
+describe('POST /api/repo localPath (§8 private import)', () => {
+  it('hosted mode: localPath → 400 before any ingest runs', async () => {
+    delete process.env.ARCHWOVEN_MODE;
+    let localCalled = false;
+    serverDeps.ingestLocal = async () => { localCalled = true; return okIngest; };
+    const res = await POST(req({ localPath: '/home/user/private-shop', idempotencyKey: 'lp-hosted' }));
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toMatch(/local deployments only/i);
+    expect(localCalled).toBe(false);
+  });
+
+  it('local mode: clone path → job succeeds, privacy stamped, evidence pinned to the clone', async () => {
+    process.env.ARCHWOVEN_MODE = 'local';
+    try {
+      let seenDir = '';
+      serverDeps.ingestLocal = async (dir) => { seenDir = dir; return okIngest; };
+      serverDeps.assembleRepoModel = async (_f, meta) => {
+        const m = structuredClone(validFullModel);
+        for (const x of [...m.nodes, ...m.edges]) for (const ev of x.evidence) { ev.commit = meta.sha; ev.repo = `${meta.owner}/${meta.repo}`; }
+        return { ok: true as const, model: m, usage };
+      };
+      const res = await POST(req({ localPath: '/home/user/private-shop', idempotencyKey: 'lp-local' }));
+      expect(res.status, JSON.stringify(await res.clone().json())).toBe(202);
+      const { jobId } = (await res.json()) as { jobId: string };
+      const job = await waitJob(jobId);
+      expect(job.status).toBe('succeeded');
+      expect(seenDir).toContain('private-shop');
+      const model = serverDeps.store.getRevision(jobId)! as { privacy: { classification: string; boundary: string }; nodes: { evidence: { repo?: string }[] }[] };
+      expect(model.privacy).toEqual({ classification: 'private', boundary: 'local-only' });
+      const evs = model.nodes.flatMap((n) => n.evidence);
+      expect(evs.every((e) => e.repo === 'local/private-shop')).toBe(true);
+    } finally {
+      delete process.env.ARCHWOVEN_MODE;
+    }
+  });
+
+  it('local mode: missing directory → job fails with not-a-directory', async () => {
+    process.env.ARCHWOVEN_MODE = 'local';
+    try {
+      serverDeps.ingestLocal = async (dir) => {
+        const { existsSync, statSync } = await import('node:fs');
+        return existsSync(dir) && statSync(dir).isDirectory() ? okIngest : { ok: false as const, reason: 'not-a-directory', message: 'no such directory' };
+      };
+      const res = await POST(req({ localPath: '/nope/ghost', idempotencyKey: 'lp-ghost' }));
+      const { jobId } = (await res.json()) as { jobId: string };
+      const job = await waitJob(jobId);
+      expect(job.status).toBe('failed');
+      expect(job.error).toMatch(/directory/i);
+    } finally {
+      delete process.env.ARCHWOVEN_MODE;
+    }
   });
 });

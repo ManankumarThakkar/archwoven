@@ -1,13 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import { reserve, refundCredits, recordUsage, TIERS, WEIGHTS } from '@archwoven/jobs';
 import { validateModel } from '@archwoven/model';
-import { parseRepoUrl } from '@archwoven/ingest';
+import { parseRepoUrl, type ParsedRepoUrl } from '@archwoven/ingest';
 import {
   serverDeps, readOrCreateSession, sessionCookie, tierOf,
   creditsExhaustedCopy, STOP_LOSS_COPY, BURST_COPY,
 } from '../../lib/server';
 import { withSlot } from '../../lib/llm-limiter';
 import { deployMode, privacyForMode } from '../../lib/mode';
+import { basename, resolve } from 'node:path';
 import { repoJobRegistry } from '../../lib/repo-registry';
 
 export const runtime = 'nodejs';
@@ -20,20 +21,31 @@ export async function POST(req: Request) {
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (minted) headers['set-cookie'] = sessionCookie(sessionId);
 
-  let body: { url?: string; subdir?: string; ref?: string; idempotencyKey?: string };
+  let body: { url?: string; localPath?: string; subdir?: string; ref?: string; idempotencyKey?: string };
   try {
     body = await req.json();
   } catch {
     return Response.json({ error: 'invalid JSON body' }, { status: 400, headers });
   }
 
-  // URL validation BEFORE quota — a malformed/SSRF-shaped URL must not spend credits.
-  const parsed = parseRepoUrl(String(body.url ?? ''));
-  if (!parsed.ok) return Response.json({ error: parsed.error }, { status: 400, headers });
+  // §8: localPath is the private-clone import — accepted ONLY in local mode,
+  // and rejected before any filesystem touch on a hosted deploy.
+  const localPath = body.localPath !== undefined && body.localPath !== null && body.localPath !== '' ? String(body.localPath) : null;
+  let parsed: ParsedRepoUrl | null = null;
+  if (localPath !== null) {
+    if (deployMode() !== 'local') {
+      return Response.json({ error: 'Private repo import from a local path is available in local deployments only.' }, { status: 400, headers });
+    }
+  } else {
+    // URL validation BEFORE quota — a malformed/SSRF-shaped URL must not spend credits.
+    const p = parseRepoUrl(String(body.url ?? ''));
+    if (!p.ok) return Response.json({ error: p.error }, { status: 400, headers });
+    parsed = p;
+  }
 
   const subdir = body.subdir !== undefined && body.subdir !== null && body.subdir !== ''
     ? (safeSubdir(String(body.subdir)) ? String(body.subdir) : null)
-    : parsed.subdir ?? undefined;
+    : parsed?.subdir ?? undefined;
   if (subdir === null) return Response.json({ error: 'subdir must be a simple relative path without ".."' }, { status: 400, headers });
 
   const tier = tierOf(sessionId);
@@ -91,15 +103,19 @@ export async function POST(req: Request) {
       serverDeps.store.updateJob(jobId, { status: 'running', stage: 'fetching' });
       // stage writes are skipped once cancelled, so the poll never shows a stage on a dead job
       const stage = (s: string) => { if (!repoJobRegistry.get(jobId)?.settled) serverDeps.store.updateJob(jobId, { stage: s }); };
-      const ingest = await serverDeps.ingestRepo(
-        { owner: parsed.owner, repo: parsed.repo, ref: parsed.ref ?? (body.ref ? String(body.ref) : undefined), subdir },
-        { signal: controller.signal, onStage: stage },
-      );
+      const cloneDir = localPath !== null ? resolve(localPath) : null;
+      const ingest = cloneDir !== null
+        ? await serverDeps.ingestLocal(cloneDir, { subdir, signal: controller.signal, onStage: stage })
+        : await serverDeps.ingestRepo(
+            { owner: parsed!.owner, repo: parsed!.repo, ref: parsed!.ref ?? (body.ref ? String(body.ref) : undefined), subdir },
+            { signal: controller.signal, onStage: stage },
+          );
       if (!ingest.ok) return fail(ingest.message);
       if (controller.signal.aborted) return;
 
       stage('designing');
-      const out = await serverDeps.assembleRepoModel(ingest.fragment, { owner: parsed.owner, repo: parsed.repo, sha: ingest.sha, framework: ingest.framework }, { signal: controller.signal });
+      const evidenceRepo = cloneDir !== null ? { owner: 'local', repo: basename(cloneDir) } : { owner: parsed!.owner, repo: parsed!.repo };
+      const out = await serverDeps.assembleRepoModel(ingest.fragment, { ...evidenceRepo, sha: ingest.sha, framework: ingest.framework }, { signal: controller.signal });
       stage('validating-output');
       if (!out.ok) return fail(out.errors.join('; '), out.usage, out.usage.repairs);
       const checked = validateModel(out.model);

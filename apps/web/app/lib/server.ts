@@ -7,7 +7,7 @@ import {
   type GenerateOutcome, type RefineOutcome,
 } from '@archwoven/llm';
 import { deployMode } from './mode';
-import { ingestRepo, type IngestResult } from '@archwoven/ingest';
+import { ingestRepo, ingestLocal, gitRevParse, type IngestResult } from '@archwoven/ingest';
 import { extractSpringBoot, extractFastApi, type Fragment } from '@archwoven/extract';
 import type { SystemModel, ViewType } from '@archwoven/model';
 
@@ -25,6 +25,7 @@ export const serverDeps: {
   generateModel: (prompt: string, view: ViewType) => Promise<GenerateOutcome>;
   generateRefinement: (instruction: string, model: SystemModel, view: ViewType) => Promise<RefineOutcome>;
   ingestRepo: (parsed: { owner: string; repo: string; ref?: string; subdir?: string }, opts?: { signal?: AbortSignal; onStage?: (stage: 'fetching' | 'extracting') => void }) => Promise<IngestResult>;
+  ingestLocal: (dir: string, opts?: { subdir?: string; signal?: AbortSignal; onStage?: (stage: 'fetching' | 'extracting') => void }) => Promise<IngestResult>;
   assembleRepoModel: (fragment: Fragment, meta: { owner: string; repo: string; sha: string; framework: string }, opts?: { signal?: AbortSignal }) => Promise<GenerateOutcome>;
 } = {
   store: openStore(process.env.ARCHWOVEN_DB ?? 'data/archwoven.db'),
@@ -42,6 +43,8 @@ export const serverDeps: {
   // §14: URLs reaching this seam are already parseRepoUrl-validated (github.com only);
   // repo content is untrusted data, never executed — extraction is static analysis only.
   ingestRepo: (parsed, opts) => ingestRepo(parsed, { fetcher: (url, init) => egressFetch(url, init), extractSpringBoot, extractFastApi }, opts),
+  // §8: private clone import — reads the user's own directory, no network at all.
+  ingestLocal: (dir, opts) => ingestLocal(dir, { revParse: gitRevParse, extractSpringBoot, extractFastApi }, opts),
   assembleRepoModel: (fragment, meta, opts) =>
     fakeMode() ? assembleRepoModel(fragment, meta, opts)
       : deployMode() === 'local' ? assembleRepoModelLocal(fragment, meta, { fetchImpl: egressFetch, signal: opts?.signal })
