@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import type { EdgeType, NodeKind } from '@archwoven/model';
 import { getParser, walkFiles, parseSource, evidence, visit, childOfType } from './loader';
 import type { Fragment } from './fragment';
+import { deriveSemanticChecks } from './fragment';
 
 const CLASS_KINDS: Record<string, NodeKind> = {
   RestController: 'service',
@@ -41,6 +42,9 @@ export async function extractSpringBoot(dir: string): Promise<Fragment> {
   const frag: Fragment = { nodes: [], edges: [], endpoints: [], gaps: [] };
   const seen = new Set<string>();
   const repositories: string[] = [];
+  const controllerIds = new Set<string>();
+  const requiredKeys = new Set<string>();
+  const requiredEdges: { from: string; to: string; type: 'sync' }[] = [];
 
   const addNode = (id: string, kind: NodeKind, label: string, ev: Fragment['nodes'][0]['evidence'][0]) => {
     if (seen.has(id)) return;
@@ -117,6 +121,7 @@ export async function extractSpringBoot(dir: string): Promise<Fragment> {
               const raw = (stringsIn(annArgs)[0] ?? '').replace(/\/+$/, '');
               const full = classPrefix + (raw.startsWith('/') ? raw : raw ? `/${raw}` : '');
               frag.endpoints.push({ method, path: full === '' ? '/' : full, evidence: evidence(relPath, md) });
+              controllerIds.add(nodeId);
             }
             if ((ann === 'KafkaListener' || ann === 'RabbitListener') && !/class_declaration/.test(md.parent?.type ?? '')) {
               const topic = stringsIn(annArgs)[0];
@@ -158,7 +163,13 @@ export async function extractSpringBoot(dir: string): Promise<Fragment> {
           addNode(depId, 'service', dep, ev);
           if (/Repository$/.test(dep)) repositories.push(depId);
         }
-        if (seen.has(depId)) addEdge(nodeId, depId, 'sync', undefined, ev);
+        if (seen.has(depId)) {
+          addEdge(nodeId, depId, 'sync', undefined, ev);
+          if (controllerIds.has(nodeId) && !requiredKeys.has(`${nodeId}->${depId}`)) {
+            requiredKeys.add(`${nodeId}->${depId}`);
+            requiredEdges.push({ from: nodeId, to: depId, type: 'sync' });
+          }
+        }
       }
 
       // External calls (SPEC §3 matrix): URL literals in service/component/controller bodies + @FeignClient urls
@@ -203,5 +214,6 @@ export async function extractSpringBoot(dir: string): Promise<Fragment> {
     frag.gaps.push(`multiple datasources (${datastores.map((d) => d.name).join(', ')}) — repo→datastore mapping not statically provable`);
   }
 
+  frag.semanticChecks = deriveSemanticChecks(frag, requiredEdges);
   return frag;
 }

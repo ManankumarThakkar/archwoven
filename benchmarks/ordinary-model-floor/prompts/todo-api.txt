@@ -1,0 +1,1 @@
+A todo app: customers call an API gateway; an orders service handles requests and persists to PostgreSQL.

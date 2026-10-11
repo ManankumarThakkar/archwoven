@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import type { NodeKind } from '@archwoven/model';
 import { getParser, walkFiles, parseSource, evidence, visit } from './loader';
 import type { Fragment } from './fragment';
+import { deriveSemanticChecks } from './fragment';
 
 const stringsIn = (text: string): string[] => [...text.matchAll(/["']([^"']*)["']/g)].map((m) => m[1]!);
 
@@ -15,6 +16,8 @@ export async function extractFastApi(dir: string): Promise<Fragment> {
   const parser = await getParser('python');
   const frag: Fragment = { nodes: [], edges: [], endpoints: [], gaps: [] };
   const seen = new Set<string>();
+  const requiredKeys = new Set<string>();
+  const requiredEdges: { from: string; to: string; type: 'sync' }[] = [];
 
   const addNode = (id: string, kind: NodeKind, label: string, ev: Fragment['nodes'][0]['evidence'][0]) => {
     if (seen.has(id)) return;
@@ -155,7 +158,13 @@ export async function extractFastApi(dir: string): Promise<Fragment> {
           const cls = factoryToClass.get(dep[1]!);
           if (cls) {
             const target = frag.nodes.find((n) => n.kind === 'service' && n.label === cls);
-            if (target) addEdge(rid, target.id, 'sync', evidence(m.rel, dd), 'Depends');
+            if (target) {
+              addEdge(rid, target.id, 'sync', evidence(m.rel, dd), 'Depends');
+              if (!requiredKeys.has(`${rid}->${target.id}`)) {
+                requiredKeys.add(`${rid}->${target.id}`);
+                requiredEdges.push({ from: rid, to: target.id, type: 'sync' });
+              }
+            }
           }
         }
       }
@@ -181,6 +190,7 @@ export async function extractFastApi(dir: string): Promise<Fragment> {
     return e;
   });
 
+  frag.semanticChecks = deriveSemanticChecks(frag, requiredEdges);
   return frag;
 }
 

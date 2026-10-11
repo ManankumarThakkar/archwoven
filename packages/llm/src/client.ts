@@ -3,7 +3,7 @@ import { z } from 'zod';
 import {
   SystemModelSchema,
   validateModel,
-  validFullModel,
+  validFullModelExtended,
   type SystemModel,
   type ViewType,
 } from '@archwoven/model';
@@ -104,7 +104,8 @@ Hard rules:
 - sequence views: participants + messages, seq consecutive from 1, kind call|return|async, fragments alt|loop|opt with covers listing message seqs.
 - ER views: entity nodes with fields (name, type, key pk|fk|uk) and relation edges with cardinality 1:1|1:N|N:M.
 - every view lists its member node ids and edge ids; every referenced id exists.
-- labels short (<= 40 chars); no HTML, no markdown, no comments in the JSON.`;
+- labels short (<= 40 chars); no HTML, no markdown, no comments in the JSON.
+- Optional semantic fields — emit when they genuinely hold: semanticChecks (allowedRoots/allowedTerminals = nodes legitimately without incoming/outgoing edges, requiredEdges/requiredPaths = bindings and paths the architecture really has), view mainPath (ordered node ids along real forward edges), edge role (main|branch|async|return|error), boundaries (wraps node ids, a node sits in at most one), guidedViews (<= 5 chapters, focus = node ids, note explains the chapter). Never emit a check your own output would fail.`;
 
 export function usageFrom(usage: RawUsage, effort: Effort, latencyMs: number, repairs: number): TaskUsage {
   return {
@@ -136,7 +137,7 @@ export async function generateModel(
   opts: { client?: StructuredClient; effort?: Effort } = {},
 ): Promise<GenerateOutcome> {
   const effort: Effort = opts.effort ?? 'medium';
-  if (!opts.client && fakeMode()) return { ok: true, model: structuredClone(validFullModel), usage: fakeUsage(effort) };
+  if (!opts.client && fakeMode()) return { ok: true, model: structuredClone(validFullModelExtended), usage: fakeUsage(effort) };
   const client: StructuredClient =
     opts.client ?? (makeAnthropic(resolveApiKey()) as unknown as StructuredClient);
 

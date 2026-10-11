@@ -132,3 +132,11 @@ describe('generateModel (mocked SDK)', () => {
     }
   });
 });
+
+describe('STABLE_SYSTEM — M4 semantic fields', () => {
+  it('documents optional semanticChecks/mainPath/guidedViews', () => {
+    expect(STABLE_SYSTEM).toContain('semanticChecks');
+    expect(STABLE_SYSTEM).toContain('mainPath');
+    expect(STABLE_SYSTEM).toContain('guidedViews');
+  });
+});

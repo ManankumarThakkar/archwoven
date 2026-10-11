@@ -19,3 +19,14 @@
   .workspace-shell > aside { width: 100% !important; border-right: none !important; border-left: none !important; border-bottom: 1px solid #1f2937; }
   .workspace-shell main { min-height: 50vh; }
 }
+
+/* M4 focus/route/chapter highlight — dim is a focus channel, never provenance (§6);
+   provenance border + badge stay visible on dimmed nodes. */
+.aw-dim { opacity: 0.28; filter: saturate(0.35); }
+.aw-dim-edge { opacity: 0.15; }
+.aw-reach { box-shadow: 0 0 0 2px rgba(94, 234, 212, 0.35); }
+.aw-route-past { box-shadow: 0 0 0 2px rgba(148, 163, 184, 0.5); opacity: 0.75; }
+.aw-route-current { box-shadow: 0 0 0 3px #5eead4; }
+.aw-route-future { box-shadow: 0 0 0 2px rgba(94, 234, 212, 0.25); }
+.aw-chapter-focus { box-shadow: 0 0 0 3px #c4b5fd; }
+.react-flow__edge.aw-edge-focus .react-flow__edge-path { stroke-width: 2.5; }

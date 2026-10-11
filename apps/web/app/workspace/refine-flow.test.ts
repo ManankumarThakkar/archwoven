@@ -10,6 +10,7 @@ const rev = (revision: number): SystemModel => ({
   requirements: [], openQuestions: [], nodes: [], edges: [],
   views: [{ id: 'v', type: 'architecture', nodes: [], edges: [] }],
   privacy: { classification: 'public', boundary: 'external-allowed' },
+  boundaries: [], guidedViews: [],
 });
 
 describe('refine flow', () => {

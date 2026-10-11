@@ -1,0 +1,1 @@
+A catalog app: customers call an API gateway; a catalog service serves items from PostgreSQL.

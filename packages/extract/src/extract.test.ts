@@ -144,3 +144,51 @@ describe('extractFastApi (fastapi-mini)', () => {
     expect(asyncEdge).toBe(true);
   });
 });
+
+describe('semanticChecks emission (M4)', () => {
+  it('spring-mini: requiredEdges carry controller→service DI pairs actually seen', async () => {
+    const f = await extractSpringBoot(`${FIXTURES}spring-mini`);
+    expect(f.semanticChecks).toBeDefined();
+    const labelOf = new Map(f.nodes.map((n) => [n.id, n.label]));
+    const pairs = f.semanticChecks!.requiredEdges.map((e) => `${labelOf.get(e.from)}->${labelOf.get(e.to)}`);
+    expect(pairs).toContain('OrderController->OrderService');
+    expect(pairs).toContain('ProductController->ProductService');
+    for (const re of f.semanticChecks!.requiredEdges) {
+      expect(f.edges.some((e) => e.from === re.from && e.to === re.to && e.type === re.type)).toBe(true);
+    }
+  });
+
+  it('spring-mini: roots/terminals list every edge-less node; requiredPaths are fragment-provable', async () => {
+    const f = await extractSpringBoot(`${FIXTURES}spring-mini`);
+    const sc = f.semanticChecks!;
+    const incoming = new Set(f.edges.map((e) => e.to));
+    const outgoing = new Set(f.edges.map((e) => e.from));
+    for (const n of f.nodes) if (!incoming.has(n.id)) expect(sc.allowedRoots).toContain(n.id);
+    for (const n of f.nodes) if (!outgoing.has(n.id)) expect(sc.allowedTerminals).toContain(n.id);
+    const adj = new Map<string, string[]>();
+    for (const e of f.edges) (adj.get(e.from) ?? adj.set(e.from, []).get(e.from)!).push(e.to);
+    const reach = (from: string) => { const s = new Set([from]); const q = [from]; while (q.length) for (const t of adj.get(q.shift()!) ?? []) if (!s.has(t)) { s.add(t); q.push(t); } return s; };
+    for (const rp of sc.requiredPaths) expect(reach(rp.from).has(rp.to), `${rp.from}→${rp.to}`).toBe(true);
+    const labelOf = new Map(f.nodes.map((n) => [n.id, n.label]));
+    expect(sc.requiredPaths.some((p) => labelOf.get(p.from) === 'OrderController' && labelOf.get(p.to) === 'PostgreSQL')).toBe(true);
+  });
+
+  it('fastapi-mini: Depends/router bindings become requiredEdges, endpoints gate emission', async () => {
+    const f = await extractFastApi(`${FIXTURES}fastapi-mini`);
+    expect(f.endpoints.length).toBeGreaterThan(0);
+    expect(f.semanticChecks).toBeDefined();
+    for (const re of f.semanticChecks!.requiredEdges) {
+      expect(f.edges.some((e) => e.from === re.from && e.to === re.to)).toBe(true);
+    }
+  });
+
+  it('fragment with no endpoints emits no semanticChecks (never empty-object noise)', async () => {
+    const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const dir = mkdtempSync(`${tmpdir()}/aw-extract-`);
+    writeFileSync(`${dir}/Plain.java`, 'package a;\npublic class Plain { public void go() {} }\n');
+    const f = await extractSpringBoot(dir);
+    expect(f.semanticChecks).toBeUndefined();
+    rmSync(dir, { recursive: true, force: true });
+  });
+});

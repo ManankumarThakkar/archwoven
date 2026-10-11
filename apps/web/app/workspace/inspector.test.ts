@@ -18,6 +18,7 @@ const model: SystemModel = {
   edges: [{ id: 'e.orders-cache', from: 'svc.orders', to: 'svc.cache', type: 'sync', label: 'cache lookup', provenance: 'inferred', evidence: [] }],
   views: [{ id: 'v.arch', type: 'architecture', nodes: ['svc.orders', 'svc.cache'], edges: ['e.orders-cache'] }],
   privacy: { classification: 'private', boundary: 'local-only' },
+  boundaries: [], guidedViews: [],
 };
 
 describe('inspectorFor', () => {

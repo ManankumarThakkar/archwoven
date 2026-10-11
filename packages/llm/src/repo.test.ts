@@ -137,3 +137,39 @@ describe('assembleRepoModel (injection-hardened, mocked SDK)', () => {
     for (const ev of all) expect(ev.commit).toBe(SHA);
   });
 });
+
+describe('M4 semantic fields in the assembly pipeline', () => {
+  it('REPO_SYSTEM documents the optional semantic fields', () => {
+    expect(REPO_SYSTEM).toContain('semanticChecks');
+    expect(REPO_SYSTEM).toContain('mainPath');
+    expect(REPO_SYSTEM).toContain('guidedViews');
+  });
+
+  it('fake mode emits semantic fields and they pass enforcement', async () => {
+    process.env.ARCHWOVEN_FAKE = '1';
+    let out;
+    try {
+      out = await assembleRepoModel(frag(), META);
+    } finally {
+      delete process.env.ARCHWOVEN_FAKE;
+    }
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.model.semanticChecks).toBeDefined();
+    expect(out.model.guidedViews.length).toBeGreaterThan(0);
+    const { validateModel } = await import('@archwoven/model');
+    expect(validateModel(out.model).ok).toBe(true);
+  });
+
+  it('output violating its own requiredPaths enters the repair loop naming the pair', async () => {
+    const { validFullModelExtended } = await import('@archwoven/model');
+    const broken = structuredClone(validFullModelExtended);
+    broken.semanticChecks!.requiredPaths = [{ from: 'actor.user', to: 'entity.user' }];
+    const fixed = structuredClone(validFullModelExtended);
+    const { client, calls } = fakeClient([broken, fixed]);
+    const out = await assembleRepoModel(frag(), META, { client });
+    expect(out.ok).toBe(true);
+    const repairMsg = (calls[1] as { messages: { content: string }[] }).messages.at(-1)!.content;
+    expect(repairMsg).toContain('requiredPath');
+  });
+});

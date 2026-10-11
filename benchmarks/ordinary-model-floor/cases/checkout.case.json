@@ -1,0 +1,62 @@
+{
+  "id": "checkout",
+  "requirements": {
+    "nodes": [
+      {
+        "key": "user",
+        "labels": [
+          "Customer",
+          "User"
+        ],
+        "type": "actor"
+      },
+      {
+        "key": "gateway",
+        "labels": [
+          "API Gateway",
+          "Gateway"
+        ],
+        "type": "gateway"
+      },
+      {
+        "key": "orders",
+        "labels": [
+          "Order Service",
+          "Orders"
+        ],
+        "type": "service"
+      },
+      {
+        "key": "stripe",
+        "labels": [
+          "Stripe",
+          "Payments"
+        ],
+        "type": "external"
+      }
+    ],
+    "relationships": [
+      {
+        "from": "user",
+        "to": "gateway",
+        "labels": [
+          "requests"
+        ]
+      },
+      {
+        "from": "gateway",
+        "to": "orders",
+        "labels": [
+          "routes"
+        ]
+      },
+      {
+        "from": "orders",
+        "to": "stripe",
+        "labels": [
+          "charges"
+        ]
+      }
+    ]
+  }
+}
