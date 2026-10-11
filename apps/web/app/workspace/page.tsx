@@ -42,6 +42,7 @@ export default function WorkspacePage() {
   const [remaining, setRemaining] = useState<number | null>(null);
   const [pool, setPool] = useState(6);
   const [fake, setFake] = useState(false);
+  const [deploy, setDeploy] = useState<'hosted' | 'local'>('hosted');
   const [queuedPos, setQueuedPos] = useState<number | null>(null);
   const [mode, setMode] = useState<Mode>('describe');
   const modelIdRef = useRef<string | null>(null);
@@ -68,6 +69,8 @@ export default function WorkspacePage() {
     void (async () => {
       const q = await fetch('/api/quota').then((r) => r.json()).catch(() => null);
       if (q) { setRemaining(q.remaining); setPool(q.pool); setFake(q.fake); }
+      const cfg = await fetch('/api/config').then((r) => r.json()).catch(() => null);
+      if (cfg?.mode === 'local' || cfg?.mode === 'hosted') setDeploy(cfg.mode);
       const saved = sessionStorage.getItem('aw_modelId');
       if (saved) void loadModel(saved);
     })();
@@ -229,7 +232,8 @@ export default function WorkspacePage() {
 
   const showCanvas = (state.kind === 'success' || state.kind === 'partial') && model;
   const viewTabs = model?.views ?? [];
-  const privacy = model ? `🔒 ${model.privacy.classification} · ${model.privacy.boundary}` : '🔒 private · external-allowed';
+  // Pre-model chip states the deployment's processing location — never a hardcoded claim.
+  const privacy = model ? `🔒 ${model.privacy.classification} · ${model.privacy.boundary}` : `🔒 ${deploy === 'local' ? 'private · local-only' : 'public · external-allowed'}`;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#070b14', color: '#e5e7eb' }}>

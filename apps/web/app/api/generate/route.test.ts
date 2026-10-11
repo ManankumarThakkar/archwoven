@@ -161,6 +161,31 @@ describe('POST /api/generate', () => {
     expect(serverDeps.store.creditsUsed('test-sess', new Date().toISOString().slice(0, 10))).toBe(0);
   });
 
+  it('local mode: a lying model self-report loses to the server privacy stamp', async () => {
+    process.env.ARCHWOVEN_MODE = 'local';
+    try {
+      const liar = structuredClone(validFullModel);
+      liar.privacy = { classification: 'public', boundary: 'external-allowed' };
+      serverDeps.generateModel = async () => ({ ok: true as const, model: liar, usage });
+      const res = await POST(req({ prompt: 'shop', view: 'architecture', idempotencyKey: 'stamp-local' }));
+      const { jobId } = (await res.json()) as { jobId: string };
+      await waitJob(jobId);
+      expect(serverDeps.store.getRevision(jobId)?.privacy).toEqual({ classification: 'private', boundary: 'local-only' });
+    } finally {
+      delete process.env.ARCHWOVEN_MODE;
+    }
+  });
+
+  it('hosted mode: the stamp is public · external-allowed even if the model claims private', async () => {
+    const claimer = structuredClone(validFullModel);
+    claimer.privacy = { classification: 'private', boundary: 'local-only' };
+    serverDeps.generateModel = async () => ({ ok: true as const, model: claimer, usage });
+    const res = await POST(req({ prompt: 'shop', view: 'architecture', idempotencyKey: 'stamp-hosted' }));
+    const { jobId } = (await res.json()) as { jobId: string };
+    await waitJob(jobId);
+    expect(serverDeps.store.getRevision(jobId)?.privacy).toEqual({ classification: 'public', boundary: 'external-allowed' });
+  });
+
   it('failed provider call is still metered to call_log (§11 data, stop-loss input)', async () => {
     serverDeps.generateModel = async () => ({ ok: false as const, errors: ['boom'], usage });
     expect(serverDeps.store.todayCost()).toBe(0);

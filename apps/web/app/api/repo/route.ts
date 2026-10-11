@@ -7,6 +7,7 @@ import {
   creditsExhaustedCopy, STOP_LOSS_COPY, BURST_COPY,
 } from '../../lib/server';
 import { withSlot } from '../../lib/llm-limiter';
+import { deployMode, privacyForMode } from '../../lib/mode';
 import { repoJobRegistry } from '../../lib/repo-registry';
 
 export const runtime = 'nodejs';
@@ -104,7 +105,9 @@ export async function POST(req: Request) {
       const checked = validateModel(out.model);
       if (!checked.ok) return fail(checked.errors.join('; '), out.usage, out.usage.repairs);
       if (!claim()) return; // cancelled during design — cancel owns the terminal write
-      serverDeps.store.saveRevision(jobId, checked.model, sessionId);
+      // §9: privacy is server-stamped from deploy mode — model self-report never wins.
+      const stamped = { ...checked.model, privacy: privacyForMode(deployMode()) };
+      serverDeps.store.saveRevision(jobId, stamped, sessionId);
       serverDeps.store.updateJob(jobId, { stage: 'laying-out' });
       recordUsage(serverDeps.store, { sessionId, tier, action: 'repo', usage: out.usage, retries: out.usage.repairs, outcome: out.usage.repairs > 0 ? 'repaired' : 'ok' });
       serverDeps.store.updateJob(jobId, { status: 'succeeded', gaps: ingest.gaps });

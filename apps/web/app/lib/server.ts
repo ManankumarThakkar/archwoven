@@ -61,7 +61,7 @@ export function readOrCreateSession(req: Request): { sessionId: string; minted: 
 export const sessionCookie = (sessionId: string) =>
   `aw_sid=${sessionId}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${90 * 24 * 3600}`;
 
-export const tierOf = (_sessionId: string): Tier => 'anonymous'; // GitHub OAuth lands M4
+export const tierOf = (_sessionId: string): Tier => 'anonymous'; // GitHub OAuth deferred to M6 (external GitHub App registration; private repos covered by local mode)
 /** Demo-data mode flag — surfaced to the UI so fake output is never silent. */
 export const fakeMode = () => process.env.ARCHWOVEN_FAKE === '1';
 
