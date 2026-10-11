@@ -66,3 +66,25 @@ describe('buildCardSvg — privacy surface (Review Focus 4)', () => {
     expect(svg).not.toContain('foo/bar');
   });
 });
+
+describe('share-card burst — §15 local mode + separate bucket (I3/I4)', () => {
+  it('local mode: burst compiled out — 7 cards all 200', async () => {
+    process.env.ARCHWOVEN_MODE = 'local';
+    try {
+      for (let i = 0; i < 7; i++) {
+        const r = await POST(req({ modelId: 'm1', kind: 'reach', from: 'gateway.api' }));
+        expect(r.status, `call ${i + 1}`).toBe(200);
+      }
+    } finally {
+      delete process.env.ARCHWOVEN_MODE;
+    }
+  });
+
+  it('exhausted card burst does NOT consume the model-call bucket (generate still 202)', async () => {
+    for (let i = 0; i < 5; i++) expect((await POST(req({ modelId: 'm1', kind: 'reach', from: 'gateway.api' }))).status).toBe(200);
+    expect((await POST(req({ modelId: 'm1', kind: 'reach', from: 'gateway.api' }))).status).toBe(429);
+    // the model-call burst key must be untouched by cards
+    const sessHits = serverDeps.store.bumpBurst(`sess:test-sess`, 60);
+    expect(sessHits, 'cards must not bump the generate bucket').toBe(1);
+  });
+});

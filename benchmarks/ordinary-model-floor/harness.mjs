@@ -74,8 +74,9 @@ function verify(modelPath, caseId) {
 
 function recordVisual(caseId, verdict, reviewer) {
   if (!['pass', 'fail', 'skipped'].includes(verdict)) { console.error('verdict must be pass|fail|skipped'); process.exit(2); }
-  record({ case: caseId, gate: 'visual-review', pass: verdict === 'pass', verdict, reviewer: reviewer ?? 'unnamed' });
-  console.log(`visual ${caseId}: ${verdict}`);
+  if (!reviewer) { console.error('visual review must name a human reviewer'); process.exit(2); }
+  record({ case: caseId, gate: 'visual-review', pass: verdict === 'pass', verdict, reviewer });
+  console.log(`visual ${caseId}: ${verdict} by ${reviewer}`);
 }
 
 function recordFailure(caseId, defect) {
@@ -89,19 +90,24 @@ function recordFailure(caseId, defect) {
 }
 
 function report() {
-  const receipts = readReceipts();
-  const latest = new Map(); // `${case}:${gate}` → receipt (last wins)
-  for (const r of receipts) if (r.case && r.gate) latest.set(`${r.case}:${r.gate}`, r);
+  const receipts = readReceipts().sort((a, b) => String(a.ts).localeCompare(String(b.ts))); // chronological across runners
+  const c2k = (r) => `${r.case}:${r.gate}`;
+  const latest = new Map(); // `${case}:${gate}` → receipt (last by ts wins)
+  for (const r of receipts) if (r.case && r.gate) latest.set(c2k(r), r);
   const clusters = {};
   for (const r of receipts) if (r.gate === 'failure') clusters[r.defect] = (clusters[r.defect] ?? 0) + 1;
 
   let failures = 0, incomplete = 0;
   for (const c of manifest.cases) {
-    const gates = manifest.gates.map((g) => latest.get(`${c}:${g}`));
+    const gateEntries = manifest.gates.map((g) => ({ gate: g, receipt: latest.get(`${c}:${g}`) }));
     // skipped ≠ pass, but ≠ fail either: it keeps the case incomplete (exit 2)
-    const failed = gates.some((g) => g && g.pass === false && !(g.gate === 'visual-review' && g.verdict === 'skipped'));
-    const missingGates = gates.filter((g) => !g || g.pass !== true).map((g, i) => manifest.gates[i]);
-    if (failed) { failures++; console.log(`${c}: FAIL`); }
+    const failed = gateEntries.some(({ gate, receipt }) => receipt && receipt.pass === false && !(gate === 'visual-review' && receipt.verdict === 'skipped'));
+    // a recorded defect blocks eligibility until a LATER visual pass clears it
+    const lastFailure = receipts.filter((r) => r.case === c && r.gate === 'failure').at(-1);
+    const lastVisualPass = receipts.filter((r) => r.case === c && r.gate === 'visual-review' && r.pass === true).at(-1);
+    const openDefect = !!lastFailure && (!lastVisualPass || String(lastFailure.ts) >= String(lastVisualPass.ts));
+    const missingGates = gateEntries.filter(({ receipt }) => !receipt || receipt.pass !== true).map(({ gate }) => gate);
+    if (failed || openDefect) { failures++; console.log(`${c}: FAIL${openDefect ? ` (open defect: ${lastFailure.defect})` : ''}`); }
     else if (missingGates.length) { incomplete++; console.log(`${c}: incomplete (missing: ${missingGates.join(', ')})`); }
     else console.log(`${c}: PASS`);
   }

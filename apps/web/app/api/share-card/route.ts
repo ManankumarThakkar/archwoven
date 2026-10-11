@@ -11,7 +11,7 @@ function publicAsset(rel: string): string {
   for (const c of cands) if (existsSync(c)) return c;
   throw new Error(`asset not found: ${rel}`);
 }
-import { BURST, burstWindow } from '@archwoven/jobs';
+import { BURST, burstWindow, localMode } from '@archwoven/jobs';
 import {
   serverDeps, readOrCreateSession, sessionCookie, BURST_COPY,
 } from '../../lib/server';
@@ -54,13 +54,18 @@ export async function POST(req: Request) {
 
   // §15 burst, applied directly: reserve() skips burst for weight-0 actions,
   // and cards must stay burst-limited (locked numbers, untouched reserve).
+  // Card keys are SEPARATE from the model-call bucket (§15 burst guards
+  // model-calling requests — a free card must never block a generate), and
+  // local mode compiles quota out entirely.
   const burstWindowSec = Number(process.env.ARCHWOVEN_BURST_WINDOW_SEC ?? 60);
   const win = burstWindow(burstWindowSec);
-  const ip = req.headers.get('x-forwarded-for') ?? 'unknown';
-  const sessHits = serverDeps.store.bumpBurst(`sess:${sessionId}`, win);
-  const ipHits = serverDeps.store.bumpBurst(`ip:${ip}`, win);
-  if (sessHits > BURST.session || ipHits > BURST.ip) {
-    return Response.json({ reason: 'burst', message: BURST_COPY, resetAt: Date.now() + win * 1000 }, { status: 429, headers });
+  if (!localMode()) {
+    const ip = req.headers.get('x-forwarded-for') ?? 'unknown';
+    const sessHits = serverDeps.store.bumpBurst(`sess-card:${sessionId}`, win);
+    const ipHits = serverDeps.store.bumpBurst(`ip-card:${ip}`, win);
+    if (sessHits > BURST.session || ipHits > BURST.ip) {
+      return Response.json({ reason: 'burst', message: BURST_COPY, resetAt: Date.now() + win * 1000 }, { status: 429, headers });
+    }
   }
 
   const view = model.views.find((v) => v.id === body.viewId) ?? model.views.find((v) => v.type === 'architecture') ?? model.views[0];

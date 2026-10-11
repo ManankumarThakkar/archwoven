@@ -39,6 +39,7 @@ const writeHash = (patch: Record<string, string | null>) => {
 
 export function Canvas({ model, modelId, viewId, onSelect }: { model: SystemModel; modelId: string; viewId: string; onSelect: (id: string) => void }) {
   const [shareBusy, setShareBusy] = useState(false);
+  const [shareErr, setShareErr] = useState<string | null>(null);
   const [placed, setPlaced] = useState<{ nodes: Node[]; edges: Edge[] }>({ nodes: [], edges: [] });
   const [focusId, setFocusId] = useState<string | null>(null);
   const [probe, setProbe] = useState<{ from: string; to: string; path: string[]; step: number } | null>(null);
@@ -130,13 +131,19 @@ export function Canvas({ model, modelId, viewId, onSelect }: { model: SystemMode
     setProbe({ from, to, path, step: 0 });
     writeHash({ route: `${from}~${to}` });
     timerRef.current = setInterval(() => {
-      setProbe((p) => {
-        if (!p) return p;
-        if (p.step + 1 >= p.path.length) { stopTimer(); return p; }
-        return { ...p, step: p.step + 1 };
-      });
+      setProbe((p) => (p && p.step + 1 < p.path.length ? { ...p, step: p.step + 1 } : p));
     }, 1100);
   };
+
+  // playback completion stops the timer (kept out of the state updater — pure)
+  useEffect(() => {
+    if (probe && probe.step >= probe.path.length - 1) stopTimer();
+  }, [probe]);
+
+  // Still toggled MID-playback: stop the interval and jump to the full highlight.
+  useEffect(() => {
+    if (motion === 'still') { stopTimer(); setProbe((p) => (p ? { ...p, step: p.path.length - 1 } : p)); }
+  }, [motion]);
 
   useEffect(() => () => stopTimer(), []);
 
@@ -209,7 +216,12 @@ export function Canvas({ model, modelId, viewId, onSelect }: { model: SystemMode
                 ? { modelId, kind: 'route', from: probe.from, to: probe.to, viewId }
                 : { modelId, kind: 'reach', from: focusId, viewId };
               const res = await fetch('/api/share-card', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-              if (!res.ok) return;
+              if (!res.ok) {
+                const j = (await res.json().catch(() => null)) as { message?: string } | null;
+                setShareErr(j?.message ?? 'share failed — try again');
+                return;
+              }
+              setShareErr(null);
               const blob = await res.blob();
               const url = URL.createObjectURL(blob);
               const a = document.createElement('a');
@@ -218,6 +230,7 @@ export function Canvas({ model, modelId, viewId, onSelect }: { model: SystemMode
             } finally { setShareBusy(false); }
           }}>⤓ share</button>
         )}
+        {shareErr && <span style={{ fontSize: 11, color: '#fbbf24' }}>{shareErr}</span>}
         <button style={btnCls} aria-pressed={motion === 'still'} onClick={() => { const m = motion === 'still' ? 'motion' : 'still'; setMotion(m); localStorage.setItem(MOTION_KEY, m); }}>
           {motion === 'still' ? '◼ still' : '◉ motion'}
         </button>

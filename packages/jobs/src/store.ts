@@ -1,7 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import type { SystemModel } from '@archwoven/model';
+import { SystemModelSchema, type SystemModel } from '@archwoven/model';
 
 export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
 export type Tier = 'anonymous' | 'github';
@@ -122,7 +122,14 @@ export function openStore(path = 'data/archwoven.db') {
       const row = (revision === undefined
         ? db.prepare('SELECT json FROM revisions WHERE model_id = ? ORDER BY revision DESC LIMIT 1').get(modelId)
         : db.prepare('SELECT json FROM revisions WHERE model_id = ? AND revision = ?').get(modelId, revision)) as { json: string } | undefined;
-      return row ? (JSON.parse(row.json) as SystemModel) : null;
+      if (!row) return null;
+      const raw = JSON.parse(row.json) as SystemModel;
+      // read-boundary normalization: pre-M4 revisions lack the optional-with-default
+      // fields (boundaries/guidedViews) — fill schema defaults so consumers (Canvas)
+      // never see undefined where the schema promises an array. Corrupt JSON passes
+      // through as before; validation is enforced at the write/generate boundary.
+      const parsed = SystemModelSchema.safeParse(raw);
+      return parsed.success ? parsed.data : raw;
     },
 
     createJob(job: { id: string; modelId: string; kind: 'generate' | 'refine' | 'repo'; idempotencyKey?: string; sessionId: string }): void {
