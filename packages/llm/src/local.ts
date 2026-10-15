@@ -10,7 +10,14 @@ import { REFINEMENT_SYSTEM } from './refine';
 import type { RefineOutcome } from './refine';
 
 export const LOCAL_MODEL = 'gpt-oss:120b';
-export const MAX_OUTPUT_TOKENS = 8000; // runaway-generation guard, matches hosted max_tokens
+/**
+ * Local runaway guard. NOT the hosted 8192 lock (§15 is scoped "hosted mode"; its
+ * table says local/private = no quotas, quota code compiled out) — gpt-oss spends
+ * thousands of tokens on hidden reasoning
+ * that `think:false` does not suppress on Ollama, so 8000 truncated the JSON answer.
+ * 16000 leaves headroom for reasoning + a full model; still bounded, never unbounded.
+ */
+export const MAX_OUTPUT_TOKENS = 16000;
 
 export interface LocalTaskUsage extends TaskUsage {
   ttftMs: number;
