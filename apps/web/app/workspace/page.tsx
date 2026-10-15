@@ -8,6 +8,7 @@ import { ControlPanel, type RepoForm } from './ControlPanel';
 import { Canvas } from './Canvas';
 import { Inspector } from './InspectorPanel';
 import { inspectorFor } from './inspector';
+import { passportFor } from './passport';
 import { RefineBar } from './RefineBar';
 import { summarizeOps, pushHistory, undo, idempotencyKeyFor } from './refine-flow';
 import { buildSvg } from '../../lib/export-svg';
@@ -232,6 +233,7 @@ export default function WorkspacePage() {
 
   const showCanvas = (state.kind === 'success' || state.kind === 'partial') && model;
   const viewTabs = model?.views ?? [];
+  const passport = model && selected ? passportFor(model, selected) : null;
   // Pre-model chip states the deployment's processing location — never a hardcoded claim.
   const privacy = model ? `🔒 ${model.privacy.classification} · ${model.privacy.boundary}` : `🔒 ${deploy === 'local' ? 'private · local-only' : 'public · external-allowed'}`;
 
@@ -265,7 +267,7 @@ export default function WorkspacePage() {
                 <button key={v.id} onClick={() => setActiveView(v.id)} style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, border: '1px solid ' + (v.id === activeView ? '#5eead4' : '#1f2937'), background: v.id === activeView ? '#0f2e2b' : '#111a2e', color: '#cbd5e1', cursor: 'pointer' }}>{v.type}</button>
               ))}
             </div>
-            <div style={{ flex: 1, minHeight: 0 }}><Canvas model={model} modelId={modelId ?? ''} viewId={activeView || viewTabs[0]?.id || ''} onSelect={setSelected} /></div>
+            <div style={{ flex: 1, minHeight: 0 }}><Canvas model={model} modelId={modelId ?? ''} viewId={activeView || viewTabs[0]?.id || ''} onSelect={setSelected} onDeselect={() => setSelected(null)} /></div>
             <RefineBar busy={refining} summary={summary} canUndo={history.length > 1} onRefine={refine} onUndo={doUndo} onExport={doExport} />
           </main>
         ) : (
@@ -273,7 +275,7 @@ export default function WorkspacePage() {
             <CanvasPlaceholder state={state} queuedPos={queuedPos} onReset={() => dispatch({ type: 'RESET' })} />
           </main>
         )}
-        {showCanvas && <Inspector payload={selected ? inspectorFor(model, selected) : null} gaps={state.kind === 'partial' ? state.gaps : undefined} />}
+        {showCanvas && <Inspector payload={selected ? inspectorFor(model, selected) : null} gaps={state.kind === 'partial' ? state.gaps : undefined} passport={passport} />}
       </div>
     </div>
   );

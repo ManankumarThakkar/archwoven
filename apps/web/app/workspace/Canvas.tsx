@@ -3,10 +3,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ReactFlow, Background, Controls, MiniMap, type Node, type Edge, type ReactFlowInstance } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import type { SystemModel, Provenance } from '@archwoven/model';
+import type { SystemModel, NodeKind, Provenance } from '@archwoven/model';
 import { layoutModel } from '../../lib/layout';
 import { journey, reachability } from './graph-inspect';
 import { motionMode } from './motion';
+import { lensKindsInView, lensPasses, parseLens, serializeLens, toggleLens } from './lens';
+import { pulseOrder } from './pulses';
+import { NodeFinder } from './NodeFinder';
+import { OutlineRail } from './OutlineRail';
 
 // proposed/inferred are visually distinct from user-specified/source-supported (scenario 6).
 const PROVENANCE_STYLE: Record<Provenance, { border: string; bg: string; badge: string }> = {
@@ -33,15 +37,19 @@ const writeHash = (patch: Record<string, string | null>) => {
   if (typeof window === 'undefined') return;
   const h = readHash();
   for (const [k, v] of Object.entries(patch)) { if (v === null) delete h[k]; else h[k] = v; }
-  const s = new URLSearchParams(h).toString();
+  // keep #lens=service,queue readable (URLSearchParams would %2C the commas)
+  const s = new URLSearchParams(h).toString().replace(/%2C/g, ',');
   history.replaceState(null, '', s ? `#${s}` : window.location.pathname + window.location.search);
 };
 
-export function Canvas({ model, modelId, viewId, onSelect }: { model: SystemModel; modelId: string; viewId: string; onSelect: (id: string) => void }) {
+export function Canvas({ model, modelId, viewId, onSelect, onDeselect }: { model: SystemModel; modelId: string; viewId: string; onSelect: (id: string) => void; onDeselect: () => void }) {
   const [shareBusy, setShareBusy] = useState(false);
   const [shareErr, setShareErr] = useState<string | null>(null);
   const [placed, setPlaced] = useState<{ nodes: Node[]; edges: Edge[] }>({ nodes: [], edges: [] });
   const [focusId, setFocusId] = useState<string | null>(null);
+  const [relationId, setRelationId] = useState<string | null>(null);
+  const [finderOpen, setFinderOpen] = useState(false);
+  const [lens, setLens] = useState<NodeKind[]>([]);
   const [probe, setProbe] = useState<{ from: string; to: string; path: string[]; step: number } | null>(null);
   const [probeNoRoute, setProbeNoRoute] = useState(false);
   const [chapterIdx, setChapterIdx] = useState<number>(-1);
@@ -55,6 +63,19 @@ export function Canvas({ model, modelId, viewId, onSelect }: { model: SystemMode
     const stored = typeof localStorage !== 'undefined' ? localStorage.getItem(MOTION_KEY) : null;
     const osReduced = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     setMotion(motionMode(stored, osReduced ?? false));
+  }, []);
+
+  // `/` opens the node finder — never while typing in another input.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+      e.preventDefault();
+      setFinderOpen(true);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
   }, []);
 
   const view = model.views.find((v) => v.id === viewId);
@@ -107,10 +128,20 @@ export function Canvas({ model, modelId, viewId, onSelect }: { model: SystemMode
       const i = model.guidedViews.findIndex((g) => g.id === h.chapter);
       if (i >= 0) setChapterIdx(i);
     }
+    setLens(parseLens(h.lens));
+    if (h.relation && model.edges.some((e) => e.id === h.relation)) { setRelationId(h.relation!); onSelect(h.relation!); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modelIdKey(model)]);
 
   const reach = useMemo(() => (focusId ? reachability(model, focusId) : null), [model, focusId]);
+  const kindOf = useMemo(() => new Map(model.nodes.map((n) => [n.id, n.kind])), [model]);
+  const viewEdges = useMemo(() => (view?.edges ?? []).flatMap((id) => { const e = model.edges.find((m) => m.id === id); return e ? [e] : []; }), [model, view]);
+  // flow tokens only when the motion governor allows it (§6) — never bypass
+  const pulseDelays = useMemo(() => (motion === 'motion' ? new Map(pulseOrder(viewEdges).map((id, i) => [id, -(i * 0.45)])) : new Map<string, number>()), [motion, viewEdges]);
+  const viewKinds = useMemo(() => lensKindsInView(model, view?.nodes ?? []), [model, view]);
+
+  const focusNode = (id: string) => { onSelect(id); setFocusId(id); setRelationId(null); writeHash({ focus: id, relation: null }); };
+  const setLensKinds = (k: NodeKind[]) => { setLens(k); writeHash({ lens: serializeLens(k) }); };
   const chapter = chapterIdx >= 0 ? model.guidedViews[chapterIdx] ?? null : null;
 
   // chapter camera: fit the focus subset (instant in Still mode)
@@ -159,6 +190,9 @@ export function Canvas({ model, modelId, viewId, onSelect }: { model: SystemMode
 
   const decorate = (n: Node): Node => {
     if (n.type === 'boundary') return n;
+    // semantic lens is a filter channel: non-matching kinds dim before any focus decoration
+    const kind = kindOf.get(n.id);
+    if (lens.length > 0 && kind && !lensPasses(kind, lens)) return { ...n, className: 'aw-dim' };
     let cls = '';
     if (probe) {
       const i = probe.path.indexOf(n.id);
@@ -180,8 +214,12 @@ export function Canvas({ model, modelId, viewId, onSelect }: { model: SystemMode
       const i = probe.path.indexOf(e.source), j = probe.path.indexOf(e.target);
       cls = i >= 0 && j === i + 1 ? 'aw-edge-focus' : 'aw-dim-edge';
     } else if (focusId) cls = e.source === focusId || e.target === focusId ? 'aw-edge-focus' : 'aw-dim-edge';
-    const animated = e.animated === true && motion === 'motion';
-    return { ...e, className: cls, animated };
+    if (relationId && e.id === relationId) cls = 'aw-edge-focus';
+    // pulses subsume React Flow's async dash so one path never carries two dash animations
+    const pulse = pulseDelays.has(e.id);
+    if (pulse) cls = `${cls} aw-pulse`.trim();
+    const animated = e.animated === true && motion === 'motion' && !pulse;
+    return { ...e, className: cls, animated, style: pulse ? { ...e.style, animationDelay: `${pulseDelays.get(e.id)}s` } : e.style };
   });
 
   const selectCls = { fontSize: 11, padding: '2px 6px', borderRadius: 6, border: '1px solid #1f2937', background: '#111a2e', color: '#cbd5e1' } as const;
@@ -234,6 +272,16 @@ export function Canvas({ model, modelId, viewId, onSelect }: { model: SystemMode
         <button style={btnCls} aria-pressed={motion === 'still'} onClick={() => { const m = motion === 'still' ? 'motion' : 'still'; setMotion(m); localStorage.setItem(MOTION_KEY, m); }}>
           {motion === 'still' ? '◼ still' : '◉ motion'}
         </button>
+        {viewKinds.length > 0 && (
+          <>
+            <span style={{ fontSize: 11, color: '#8b98b8' }}>lens</span>
+            {viewKinds.map((k) => (
+              <button key={k} aria-pressed={lens.includes(k)} onClick={() => setLensKinds(toggleLens(lens, k))}
+                style={{ ...btnCls, borderColor: lens.includes(k) ? '#5eead4' : '#334155', background: lens.includes(k) ? '#0f2e2b' : '#111a2e', color: lens.includes(k) ? '#5eead4' : '#e5e7eb' }}>{k}</button>
+            ))}
+          </>
+        )}
+        <span style={{ fontSize: 11, color: '#64748b' }}>/ find</span>
       </div>
       {chapter?.note && (
         <div style={{ position: 'absolute', bottom: 8, left: 8, zIndex: 5, maxWidth: 420, fontSize: 11, color: '#cbd5e1', background: '#111a2ecc', border: '1px solid #c4b5fd44', borderRadius: 8, padding: '6px 10px' }}>
@@ -244,15 +292,17 @@ export function Canvas({ model, modelId, viewId, onSelect }: { model: SystemMode
         nodes={nodes} edges={edges} nodeTypes={nodeTypes}
         fitView fitViewOptions={{ duration: motion === 'still' ? 0 : 600 }}
         onInit={(inst) => { rfRef.current = inst as ReactFlowInstance<Node, Edge>; }}
-        onNodeClick={(_, n) => { if (n.type === 'boundary') return; onSelect(n.id); setFocusId(n.id); writeHash({ focus: n.id }); }}
-        onPaneClick={() => { setFocusId(null); writeHash({ focus: null }); }}
-        onEdgeClick={(_, e) => onSelect(e.id)}
+        onNodeClick={(_, n) => { if (n.type === 'boundary') return; focusNode(n.id); }}
+        onPaneClick={() => { setFocusId(null); setRelationId(null); writeHash({ focus: null, relation: null }); onDeselect(); }}
+        onEdgeClick={(_, e) => { setRelationId(e.id); onSelect(e.id); writeHash({ relation: e.id }); }}
         proOptions={{ hideAttribution: true }}
       >
         <Background gap={16} color="#1a2333" />
         <Controls />
         <MiniMap pannable zoomable />
       </ReactFlow>
+      <OutlineRail model={model} viewNodes={viewNodes} activeId={focusId} onFocusNode={focusNode} />
+      {finderOpen && <NodeFinder model={model} viewNodes={viewNodes} onPick={focusNode} onClose={() => setFinderOpen(false)} />}
     </div>
   );
 }

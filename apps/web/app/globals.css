@@ -30,3 +30,28 @@
 .aw-route-future { box-shadow: 0 0 0 2px rgba(94, 234, 212, 0.25); }
 .aw-chapter-focus { box-shadow: 0 0 0 3px #c4b5fd; }
 .react-flow__edge.aw-edge-focus .react-flow__edge-path { stroke-width: 2.5; }
+
+/* M6 node finder palette (§2) */
+.aw-finder { position: absolute; top: 48px; left: 50%; transform: translateX(-50%); z-index: 10; width: 320px; background: #0b1220; border: 1px solid #334155; border-radius: 10px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5); overflow: hidden; }
+.aw-finder input { width: 100%; box-sizing: border-box; padding: 10px 12px; background: transparent; border: none; border-bottom: 1px solid #1f2937; color: #e5e7eb; font-size: 13px; outline: none; }
+.aw-finder ul { margin: 0; padding: 4px; list-style: none; max-height: 220px; overflow-y: auto; }
+.aw-finder-item { display: block; width: 100%; text-align: left; padding: 6px 8px; border-radius: 6px; border: none; background: transparent; color: #cbd5e1; font-size: 12px; cursor: pointer; }
+.aw-finder-item:hover { background: #111a2e; }
+.aw-finder-active { background: #0f2e2b; color: #e5e7eb; }
+.aw-finder-id { color: #64748b; font-size: 11px; }
+.aw-finder-empty { padding: 8px; font-size: 12px; color: #8b98b8; }
+
+/* M6 outline rail (§2) — collapses at the existing tablet breakpoint */
+.aw-outline-rail { position: absolute; top: 96px; right: 8px; z-index: 4; width: 150px; max-height: calc(100% - 180px); overflow-y: auto; background: #0b1220cc; border: 1px solid #1f2937; border-radius: 8px; padding: 6px; display: flex; flex-direction: column; gap: 2px; }
+.aw-outline-title { font-size: 10px; color: #8b98b8; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 6px 4px; }
+.aw-outline-item { text-align: left; padding: 4px 6px; border-radius: 6px; border: none; background: transparent; color: #cbd5e1; font-size: 11px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.aw-outline-item:hover { background: #111a2e; }
+.aw-outline-active { background: #0f2e2b; color: #5eead4; }
+.aw-outline-empty { font-size: 11px; color: #8b98b8; padding: 4px 6px; }
+@media (max-width: 900px) { .aw-outline-rail { display: none; } }
+
+/* M6 flow-token pulses (§2): dash tokens travel source→target, staggered by kind
+   priority (pulses.ts). The JS governor omits the class in Still mode and the
+   reduced-motion block above kills the animation — pulses are absent, never slowed. */
+.aw-pulse .react-flow__edge-path { stroke-dasharray: 8 48; animation: aw-token-flow 2.6s linear infinite; }
+@keyframes aw-token-flow { to { stroke-dashoffset: -56; } }
