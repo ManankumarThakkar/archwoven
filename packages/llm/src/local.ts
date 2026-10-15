@@ -9,7 +9,9 @@ import { REPO_SYSTEM, fenceEscape, pinEvidence } from './repo';
 import { REFINEMENT_SYSTEM } from './refine';
 import type { RefineOutcome } from './refine';
 
-export const LOCAL_MODEL = 'gpt-oss:120b';
+/** Overridable via OLLAMA_MODEL (.env.local); 20b (~13 GB) keeps a 16 GB-light
+ * footprint vs 120b's 65 GB resident — same family, same constrained-decoding path. */
+export const LOCAL_MODEL = process.env.OLLAMA_MODEL ?? 'gpt-oss:20b';
 /**
  * Local runaway guard. NOT the hosted 8192 lock (§15 is scoped "hosted mode"; its
  * table says local/private = no quotas, quota code compiled out) — gpt-oss spends

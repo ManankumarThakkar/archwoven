@@ -1,6 +1,6 @@
 /**
  * Probe D eval runner — local Ollama model (private path), no external API.
- * Usage: npx tsx probes/local/run-eval.ts [model]   (default gpt-oss:120b)
+ * Usage: npx tsx probes/local/run-eval.ts [model]   (default LOCAL_MODEL — OLLAMA_MODEL or gpt-oss:20b)
  * 5 prompts from probe B's set + one 40-node output stress (Review Focus 5).
  * Prints per-prompt rows + aggregate: schema-valid rate, TTFT, total latency.
  */

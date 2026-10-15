@@ -1,6 +1,7 @@
 # Private-mode deployment (§8): the whole stack runs inside your boundary.
 # One manual step before first run:
-#   docker compose exec ollama ollama pull gpt-oss:120b   (~65 GB, local inference)
+#   docker compose exec ollama ollama pull gpt-oss:20b   (~13 GB, local inference)
+#   Override with OLLAMA_MODEL on the web service (e.g. gpt-oss:120b on ≥64 GB machines).
 services:
   web:
     build: .
