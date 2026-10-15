@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { validFullModel } from '@archwoven/model';
-import { assertSafeRuntime } from './server';
+import { assertSafeRuntime } from './mode';
 
 const enc = new TextEncoder();
 const ollamaOk = (payload: unknown): Response => {

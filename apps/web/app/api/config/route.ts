@@ -1,5 +1,4 @@
-import { deployMode } from '../../lib/mode';
-import { fakeMode } from '../../lib/server';
+import { deployMode, fakeMode } from '../../lib/mode';
 
 export const dynamic = 'force-dynamic';
 
