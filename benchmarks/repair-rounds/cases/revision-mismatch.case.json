@@ -1,0 +1,18 @@
+{
+  "id": "revision-mismatch",
+  "class": "revision-lineage",
+  "base": "valid-full-extended",
+  "mutation": {
+    "subjects": ["parentId"],
+    "note": "parentId 3 on revision 1 — lineage must point at revision - 1.",
+    "ops": [
+      { "op": "add", "path": "/parentId", "value": 3 }
+    ]
+  },
+  "expectedDiagnostics": [
+    { "code": "parent-revision-mismatch", "contains": "parentId 3 must equal revision - 1 (0)" }
+  ],
+  "oracleRepairs": [
+    { "op": "remove", "path": "/parentId" }
+  ]
+}

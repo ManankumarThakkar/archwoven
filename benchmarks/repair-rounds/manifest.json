@@ -1,0 +1,22 @@
+{
+  "suite": "repair-rounds",
+  "version": 1,
+  "base": "valid-full-extended",
+  "cases": [
+    "dangling-edge-ref",
+    "duplicate-node-id",
+    "missing-required-label",
+    "invalid-enum-kind",
+    "revision-mismatch",
+    "required-path-broken",
+    "boundary-overlap",
+    "seq-gap"
+  ],
+  "commands": ["check", "verify", "report"],
+  "metrics": ["rounds-to-pass", "first-disclosure-rate", "first-detection-stage", "actionability"],
+  "repairer": "rules-only-stub",
+  "receipt": {
+    "format": "json",
+    "pins": ["repositoryCommit", "packageSha256", "fingerprint"]
+  }
+}

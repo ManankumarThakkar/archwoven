@@ -1,0 +1,18 @@
+{
+  "id": "boundary-overlap",
+  "class": "boundary-uniqueness",
+  "base": "valid-full-extended",
+  "mutation": {
+    "subjects": ["gateway.api"],
+    "note": "a second boundary wraps gateway.api, which b.core already wraps — a node may sit in at most one boundary.",
+    "ops": [
+      { "op": "add", "path": "/boundaries/-", "value": { "id": "b.data", "label": "Data plane", "wraps": ["gateway.api", "datastore.postgres"] } }
+    ]
+  },
+  "expectedDiagnostics": [
+    { "code": "node-in-two-boundaries", "contains": "node in two boundaries: \"gateway.api\" (b.core, b.data)" }
+  ],
+  "oracleRepairs": [
+    { "op": "remove", "path": "/boundaries/1" }
+  ]
+}

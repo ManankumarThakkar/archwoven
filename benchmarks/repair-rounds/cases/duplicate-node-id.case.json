@@ -1,0 +1,18 @@
+{
+  "id": "duplicate-node-id",
+  "class": "identity-uniqueness",
+  "base": "valid-full-extended",
+  "mutation": {
+    "subjects": ["gateway.api"],
+    "note": "a second node with the same id is appended — Zod passes, the graph pass catches it.",
+    "ops": [
+      { "op": "add", "path": "/nodes/-", "value": { "id": "gateway.api", "kind": "gateway", "label": "API Gateway", "provenance": "inferred" } }
+    ]
+  },
+  "expectedDiagnostics": [
+    { "code": "duplicate-node-id", "contains": "duplicate node id: \"gateway.api\"" }
+  ],
+  "oracleRepairs": [
+    { "op": "remove", "path": "/nodes/10" }
+  ]
+}

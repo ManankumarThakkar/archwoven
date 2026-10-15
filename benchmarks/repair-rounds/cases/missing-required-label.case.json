@@ -1,0 +1,18 @@
+{
+  "id": "missing-required-label",
+  "class": "schema-required-field",
+  "base": "valid-full-extended",
+  "mutation": {
+    "subjects": ["gateway.api"],
+    "note": "Zod reports by path (nodes.1.label), not by node id — first-disclosure honestly records false here.",
+    "ops": [
+      { "op": "remove", "path": "/nodes/1/label" }
+    ]
+  },
+  "expectedDiagnostics": [
+    { "code": "required-string", "contains": "nodes.1.label: Invalid input: expected string, received undefined" }
+  ],
+  "oracleRepairs": [
+    { "op": "add", "path": "/nodes/1/label", "value": "API Gateway" }
+  ]
+}

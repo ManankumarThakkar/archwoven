@@ -1,0 +1,18 @@
+{
+  "id": "seq-gap",
+  "class": "sequence-integrity",
+  "base": "valid-full-extended",
+  "mutation": {
+    "subjects": ["view.sequence"],
+    "note": "message seq 4 bumped to 6 — sequence message numbering must be consecutive from 1.",
+    "ops": [
+      { "op": "replace", "path": "/views/1/sequence/messages/3/seq", "value": 6 }
+    ]
+  },
+  "expectedDiagnostics": [
+    { "code": "seq-not-consecutive", "contains": "view \"view.sequence\" message seq must be consecutive from 1, got 6 at index 3" }
+  ],
+  "oracleRepairs": [
+    { "op": "replace", "path": "/views/1/sequence/messages/3/seq", "value": 4 }
+  ]
+}
