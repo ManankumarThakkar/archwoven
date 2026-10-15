@@ -6,6 +6,9 @@ import { POST } from './route';
 
 const usage = { model: 'claude-opus-5-5', effort: 'low' as const, inputTokens: 2000, cacheWriteTokens: 0, cacheReadTokens: 1800, outputTokens: 120, latencyMs: 400, repairs: 0 };
 
+// §15: quotas compile out in local mode (reserve → Infinity → JSON null); credit assertions are hosted-only.
+const QUOTA = process.env.ARCHWOVEN_MODE !== 'local';
+
 const addCacheOp: EditOp = {
   op: 'add',
   target: 'svc.cache',
@@ -42,8 +45,8 @@ describe('POST /api/refine', () => {
     expect(body.ops).toHaveLength(1);
     expect(body.revision).toBe(validFullModel.revision + 1);
     expect(body.model.revision).toBe(validFullModel.revision + 1);
-    expect(body.remaining).toBeCloseTo(5.75);
-    expect(serverDeps.store.creditsUsed('test-sess', new Date().toISOString().slice(0, 10))).toBeCloseTo(0.25);
+    if (QUOTA) expect(body.remaining).toBeCloseTo(5.75); else expect(body.remaining).toBeNull();
+    expect(serverDeps.store.creditsUsed('test-sess', new Date().toISOString().slice(0, 10))).toBeCloseTo(QUOTA ? 0.25 : 0);
     expect(serverDeps.store.getRevision('m1')?.revision).toBe(validFullModel.revision + 1);
   });
 

@@ -14,6 +14,10 @@ const deferred = () => {
 
 const usage = { model: 'claude-opus-5-5', effort: 'medium' as const, inputTokens: 1000, cacheWriteTokens: 5000, cacheReadTokens: 10000, outputTokens: 1500, latencyMs: 500, repairs: 0 };
 
+// §15: quotas compile out in local mode (reserve → Infinity → JSON null); credit gates are hosted-only.
+const QUOTA = process.env.ARCHWOVEN_MODE !== 'local';
+const hostedOnly = QUOTA ? it : it.skip;
+
 const req = (body: unknown, cookie = 'aw_sid=test-sess') =>
   new Request('http://localhost/api/generate', {
     method: 'POST',
@@ -44,7 +48,7 @@ describe('POST /api/generate', () => {
     const job = await waitJob(jobId);
     expect(job.status).toBe('succeeded');
     expect(serverDeps.store.getRevision(jobId)).not.toBeNull();
-    expect(serverDeps.store.creditsUsed('test-sess', new Date().toISOString().slice(0, 10))).toBe(1);
+    expect(serverDeps.store.creditsUsed('test-sess', new Date().toISOString().slice(0, 10))).toBe(QUOTA ? 1 : 0);
   });
 
   it('duplicate idempotencyKey returns the same job and charges once', async () => {
@@ -54,10 +58,10 @@ describe('POST /api/generate', () => {
     const b = await POST(req({ prompt: 'shop', view: 'architecture', idempotencyKey: 'dup' }));
     const { jobId: id2 } = (await b.json()) as { jobId: string };
     expect(id2).toBe(id1);
-    expect(serverDeps.store.creditsUsed('test-sess', new Date().toISOString().slice(0, 10))).toBe(1);
+    expect(serverDeps.store.creditsUsed('test-sess', new Date().toISOString().slice(0, 10))).toBe(QUOTA ? 1 : 0);
   });
 
-  it('credits exhausted → 429 with friendly reset copy', async () => {
+  hostedOnly('credits exhausted → 429 with friendly reset copy', async () => {
     process.env.ARCHWOVEN_BURST_WINDOW_SEC = '0.05'; // isolate the daily-credit gate from the 5/min burst gate
     try {
       for (let i = 0; i < 6; i++) {
@@ -109,7 +113,7 @@ describe('POST /api/generate', () => {
   it('202 body carries the live remaining credits', async () => {
     const res = await POST(req({ prompt: 'shop', view: 'architecture', idempotencyKey: 'rem1' }));
     const body = (await res.json()) as { jobId: string; remaining: number };
-    expect(body.remaining).toBe(5);
+    expect(body.remaining).toBe(QUOTA ? 5 : null);
   });
 
   it('idempotency dedupe is session-scoped — another session with the same key gets its own job', async () => {
@@ -121,7 +125,7 @@ describe('POST /api/generate', () => {
     const { jobId: id2 } = (await b.json()) as { jobId: string };
     expect(id2).not.toBe(id1);
     await waitJob(id2);
-    expect(serverDeps.store.creditsUsed('other-sess', new Date().toISOString().slice(0, 10))).toBe(1);
+    expect(serverDeps.store.creditsUsed('other-sess', new Date().toISOString().slice(0, 10))).toBe(QUOTA ? 1 : 0);
   });
 
   it('excess parallel generates queue with a visible position (§15 concurrency cap)', async () => {
@@ -145,7 +149,7 @@ describe('POST /api/generate', () => {
     for (const id of ids) await waitJob(id);
   });
 
-  it('credits are reserved at accept and refunded when the job fails', async () => {
+  hostedOnly('credits are reserved at accept and refunded when the job fails', async () => {
     const gate = deferred();
     serverDeps.generateModel = async () => {
       await gate.promise;
@@ -162,6 +166,7 @@ describe('POST /api/generate', () => {
   });
 
   it('local mode: a lying model self-report loses to the server privacy stamp', async () => {
+    const prevMode = process.env.ARCHWOVEN_MODE;
     process.env.ARCHWOVEN_MODE = 'local';
     try {
       const liar = structuredClone(validFullModel);
@@ -172,18 +177,24 @@ describe('POST /api/generate', () => {
       await waitJob(jobId);
       expect(serverDeps.store.getRevision(jobId)?.privacy).toEqual({ classification: 'private', boundary: 'local-only' });
     } finally {
-      delete process.env.ARCHWOVEN_MODE;
+      if (prevMode === undefined) delete process.env.ARCHWOVEN_MODE; else process.env.ARCHWOVEN_MODE = prevMode;
     }
   });
 
   it('hosted mode: the stamp is public · external-allowed even if the model claims private', async () => {
-    const claimer = structuredClone(validFullModel);
-    claimer.privacy = { classification: 'private', boundary: 'local-only' };
-    serverDeps.generateModel = async () => ({ ok: true as const, model: claimer, usage });
-    const res = await POST(req({ prompt: 'shop', view: 'architecture', idempotencyKey: 'stamp-hosted' }));
-    const { jobId } = (await res.json()) as { jobId: string };
-    await waitJob(jobId);
-    expect(serverDeps.store.getRevision(jobId)?.privacy).toEqual({ classification: 'public', boundary: 'external-allowed' });
+    const prevMode = process.env.ARCHWOVEN_MODE;
+    delete process.env.ARCHWOVEN_MODE; // force hosted regardless of suite mode
+    try {
+      const claimer = structuredClone(validFullModel);
+      claimer.privacy = { classification: 'private', boundary: 'local-only' };
+      serverDeps.generateModel = async () => ({ ok: true as const, model: claimer, usage });
+      const res = await POST(req({ prompt: 'shop', view: 'architecture', idempotencyKey: 'stamp-hosted' }));
+      const { jobId } = (await res.json()) as { jobId: string };
+      await waitJob(jobId);
+      expect(serverDeps.store.getRevision(jobId)?.privacy).toEqual({ classification: 'public', boundary: 'external-allowed' });
+    } finally {
+      if (prevMode !== undefined) process.env.ARCHWOVEN_MODE = prevMode;
+    }
   });
 
   it('failed provider call is still metered to call_log (§11 data, stop-loss input)', async () => {
