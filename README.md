@@ -33,6 +33,27 @@ pnpm typecheck         # tsc across workspaces
 pnpm dev               # Next.js dev server (localhost smoke page)
 ```
 
+## Run Archwoven fully offline on your own machine (private mode, §8)
+
+`ARCHWOVEN_MODE=local` compiles all quotas out, routes every inference call to a
+local Ollama, stamps every saved model `private · local-only` server-side, and puts
+every outbound fetch behind an allowlist guard — nothing leaves the machine.
+
+```bash
+docker compose up --build          # web on :3000 + ollama on :11434
+# one manual step, first run only (~13 GB):
+docker compose exec ollama ollama pull gpt-oss:20b
+```
+
+Or without Docker: `brew install ollama && ollama pull gpt-oss:20b`, then
+`ARCHWOVEN_MODE=local pnpm build && ARCHWOVEN_MODE=local ARCHWOVEN_DEMO_ACK=1 pnpm start:local`.
+`OLLAMA_MODEL` overrides the model (e.g. `gpt-oss:120b` on ≥64 GB machines).
+
+The privacy promise is tested, not asserted: egress guard refuses hosted APIs before
+DNS (§9), local jobs route to Ollama only, privacy is server-stamped from deploy
+mode, exports carry no evidence paths, and the same suite runs green in both modes
+(`ARCHWOVEN_MODE=local pnpm test`) — see `docs/M5-CHECKS.md` for the live transcript.
+
 ## Design principles (from the spec)
 
 1. The model emits **typed JSON only** — never HTML/SVG/Mermaid. Rendering is deterministic code.

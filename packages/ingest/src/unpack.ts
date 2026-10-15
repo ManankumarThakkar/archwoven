@@ -30,7 +30,7 @@ const VENDOR_SEGMENTS = new Set(['node_modules', 'target', 'build', '.git', '.gr
 const VENDOR_FILES = /^(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|go\.sum|Gemfile\.lock)$/;
 const VENDOR_EXT = /\.(min\.(js|css)|class|jar|war|ear|woff2?|ttf|eot|so|dylib|dll|exe|lock)$/i;
 
-const isVendor = (rel: string): boolean => {
+export const isVendor = (rel: string): boolean => {
   const parts = rel.split('/');
   return parts.some((p) => VENDOR_SEGMENTS.has(p)) || VENDOR_FILES.test(parts[parts.length - 1]!) || VENDOR_EXT.test(rel);
 };

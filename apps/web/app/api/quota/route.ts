@@ -1,5 +1,6 @@
 import { TIERS } from '@archwoven/jobs';
-import { serverDeps, readOrCreateSession, sessionCookie, tierOf, fakeMode } from '../../lib/server';
+import { serverDeps, readOrCreateSession, sessionCookie, tierOf } from '../../lib/server';
+import { fakeMode } from '../../lib/mode';
 
 export const runtime = 'nodejs';
 

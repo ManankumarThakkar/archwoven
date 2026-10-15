@@ -12,6 +12,10 @@ import { GET } from '../jobs/[id]/route';
 const SHA = '0123456789abcdef0123456789abcdef01234567';
 const usage = { model: 'claude-opus-5-5', effort: 'medium' as const, inputTokens: 1000, cacheWriteTokens: 5000, cacheReadTokens: 10000, outputTokens: 1500, latencyMs: 500, repairs: 0 };
 
+// §15: quotas compile out in local mode (reserve → Infinity → JSON null); credit assertions are hosted-only.
+const QUOTA = process.env.ARCHWOVEN_MODE !== 'local';
+const hostedOnly = QUOTA ? it : it.skip;
+
 const frag: Fragment = {
   nodes: [{ id: 'svc.api', kind: 'service', label: 'API', provenance: 'source-supported', evidence: [{ path: 'main.py', lines: [1, 2], repo: 'foo/bar', commit: SHA }] }],
   edges: [], endpoints: [], gaps: ['no database detected'],
@@ -48,6 +52,7 @@ const day = () => new Date().toISOString().slice(0, 10);
 beforeEach(() => {
   serverDeps.store = openStore(':memory:');
   serverDeps.ingestRepo = async () => okIngest;
+  serverDeps.ingestLocal = async () => okIngest;
   // mirrors the real assembleRepoModel's server-side evidence pinning
   serverDeps.assembleRepoModel = async () => {
     const m = structuredClone(validFullModel);
@@ -62,15 +67,15 @@ describe('POST /api/repo', () => {
     const res = await POST(req({ url: 'https://github.com/foo/bar', idempotencyKey: 'k1' }));
     expect(res.status).toBe(202);
     const { jobId, remaining } = (await res.json()) as { jobId: string; remaining: number };
-    expect(remaining).toBe(4); // pool 6 − weight 2, charged at accept
-    expect(serverDeps.store.creditsUsed('test-sess', day())).toBe(2);
+    expect(remaining).toBe(QUOTA ? 4 : null); // pool 6 − weight 2, charged at accept (hosted)
+    expect(serverDeps.store.creditsUsed('test-sess', day())).toBe(QUOTA ? 2 : 0);
     const job = await waitJob(jobId);
     expect(job.status).toBe('succeeded');
     const rev = serverDeps.store.getRevision(jobId) as { nodes: { evidence: { commit?: string }[] }[] };
     expect(rev.nodes.flatMap((n) => n.evidence).every((e) => e.commit === SHA)).toBe(true);
   });
 
-  it('quota: 4th repo of the day blocked at pool 6 / weight 2 with §15 copy', async () => {
+  hostedOnly('quota: 4th repo of the day blocked at pool 6 / weight 2 with §15 copy', async () => {
     for (let i = 0; i < 3; i++) {
       const r = await POST(req({ url: 'https://github.com/foo/bar' }));
       expect(r.status).toBe(202);
@@ -127,7 +132,7 @@ describe('POST /api/repo', () => {
     const b = await POST(req({ url: 'https://github.com/foo/bar', idempotencyKey: 'dup' }));
     const { jobId: id2 } = (await b.json()) as { jobId: string };
     expect(id2).toBe(id1);
-    expect(serverDeps.store.creditsUsed('test-sess', day())).toBe(2);
+    expect(serverDeps.store.creditsUsed('test-sess', day())).toBe(QUOTA ? 2 : 0);
   });
 
   it('cancel mid-job: status cancelled, credits refunded, assemble aborted', async () => {
@@ -218,7 +223,7 @@ describe('POST /api/repo', () => {
     const c = await CANCEL(cancelReq(jobId), { params: Promise.resolve({ id: jobId }) });
     expect(c.status).toBe(200);
     expect(serverDeps.store.getJob(jobId)!.status).toBe('succeeded');
-    expect(serverDeps.store.creditsUsed('test-sess', day())).toBe(2);
+    expect(serverDeps.store.creditsUsed('test-sess', day())).toBe(QUOTA ? 2 : 0);
   });
 
   it('poll surfaces ingest gaps on the succeeded job', async () => {
@@ -247,5 +252,66 @@ describe('POST /api/repo', () => {
     const mine = await CANCEL(cancelReq(jobId), { params: Promise.resolve({ id: jobId }) });
     expect(mine.status).toBe(200);
     expect((await waitJob(jobId)).status).toBe('cancelled');
+  });
+});
+
+describe('POST /api/repo localPath (§8 private import)', () => {
+  it('hosted mode: localPath → 400 before any ingest runs', async () => {
+    const prevMode = process.env.ARCHWOVEN_MODE;
+    delete process.env.ARCHWOVEN_MODE; // force hosted regardless of suite mode
+    try {
+      let localCalled = false;
+      serverDeps.ingestLocal = async () => { localCalled = true; return okIngest; };
+      const res = await POST(req({ localPath: '/home/user/private-shop', idempotencyKey: 'lp-hosted' }));
+      expect(res.status).toBe(400);
+      expect(((await res.json()) as { error: string }).error).toMatch(/local deployments only/i);
+      expect(localCalled).toBe(false);
+    } finally {
+      if (prevMode !== undefined) process.env.ARCHWOVEN_MODE = prevMode;
+    }
+  });
+
+  it('local mode: clone path → job succeeds, privacy stamped, evidence pinned to the clone', async () => {
+    const prevMode = process.env.ARCHWOVEN_MODE;
+    process.env.ARCHWOVEN_MODE = 'local';
+    try {
+      let seenDir = '';
+      serverDeps.ingestLocal = async (dir) => { seenDir = dir; return okIngest; };
+      serverDeps.assembleRepoModel = async (_f, meta) => {
+        const m = structuredClone(validFullModel);
+        for (const x of [...m.nodes, ...m.edges]) for (const ev of x.evidence) { ev.commit = meta.sha; ev.repo = `${meta.owner}/${meta.repo}`; }
+        return { ok: true as const, model: m, usage };
+      };
+      const res = await POST(req({ localPath: '/home/user/private-shop', idempotencyKey: 'lp-local' }));
+      expect(res.status, JSON.stringify(await res.clone().json())).toBe(202);
+      const { jobId } = (await res.json()) as { jobId: string };
+      const job = await waitJob(jobId);
+      expect(job.status).toBe('succeeded');
+      expect(seenDir).toContain('private-shop');
+      const model = serverDeps.store.getRevision(jobId)! as { privacy: { classification: string; boundary: string }; nodes: { evidence: { repo?: string }[] }[] };
+      expect(model.privacy).toEqual({ classification: 'private', boundary: 'local-only' });
+      const evs = model.nodes.flatMap((n) => n.evidence);
+      expect(evs.every((e) => e.repo === 'local/private-shop')).toBe(true);
+    } finally {
+      if (prevMode === undefined) delete process.env.ARCHWOVEN_MODE; else process.env.ARCHWOVEN_MODE = prevMode;
+    }
+  });
+
+  it('local mode: missing directory → job fails with not-a-directory', async () => {
+    const prevMode = process.env.ARCHWOVEN_MODE;
+    process.env.ARCHWOVEN_MODE = 'local';
+    try {
+      serverDeps.ingestLocal = async (dir) => {
+        const { existsSync, statSync } = await import('node:fs');
+        return existsSync(dir) && statSync(dir).isDirectory() ? okIngest : { ok: false as const, reason: 'not-a-directory', message: 'no such directory' };
+      };
+      const res = await POST(req({ localPath: '/nope/ghost', idempotencyKey: 'lp-ghost' }));
+      const { jobId } = (await res.json()) as { jobId: string };
+      const job = await waitJob(jobId);
+      expect(job.status).toBe('failed');
+      expect(job.error).toMatch(/directory/i);
+    } finally {
+      if (prevMode === undefined) delete process.env.ARCHWOVEN_MODE; else process.env.ARCHWOVEN_MODE = prevMode;
+    }
   });
 });

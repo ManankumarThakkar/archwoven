@@ -1,9 +1,18 @@
 import { randomUUID } from 'node:crypto';
 import { openStore, type Store, type Tier } from '@archwoven/jobs';
-import { generateModel, generateRefinement, assembleRepoModel, type GenerateOutcome, type RefineOutcome } from '@archwoven/llm';
-import { ingestRepo, type IngestResult } from '@archwoven/ingest';
+import {
+  generateModel, generateRefinement, assembleRepoModel,
+  generateModelLocal, generateRefinementLocal, assembleRepoModelLocal,
+  makeEgressGuard, LOCAL_EGRESS_ALLOW,
+  type GenerateOutcome, type RefineOutcome,
+} from '@archwoven/llm';
+import { deployMode, fakeMode } from './mode';
+import { ingestRepo, ingestLocal, gitRevParse, type IngestResult } from '@archwoven/ingest';
 import { extractSpringBoot, extractFastApi, type Fragment } from '@archwoven/extract';
 import type { SystemModel, ViewType } from '@archwoven/model';
+
+/** §9: in local deployments every raw fetch passes the egress guard; hosted uses plain fetch. */
+const egressFetch: typeof fetch = deployMode() === 'local' ? makeEgressGuard(LOCAL_EGRESS_ALLOW) : fetch;
 
 /**
  * Server singletons + injectable seams. Tests replace `serverDeps.store`
@@ -16,40 +25,36 @@ export const serverDeps: {
   generateModel: (prompt: string, view: ViewType) => Promise<GenerateOutcome>;
   generateRefinement: (instruction: string, model: SystemModel, view: ViewType) => Promise<RefineOutcome>;
   ingestRepo: (parsed: { owner: string; repo: string; ref?: string; subdir?: string }, opts?: { signal?: AbortSignal; onStage?: (stage: 'fetching' | 'extracting') => void }) => Promise<IngestResult>;
+  ingestLocal: (dir: string, opts?: { subdir?: string; signal?: AbortSignal; onStage?: (stage: 'fetching' | 'extracting') => void }) => Promise<IngestResult>;
   assembleRepoModel: (fragment: Fragment, meta: { owner: string; repo: string; sha: string; framework: string }, opts?: { signal?: AbortSignal }) => Promise<GenerateOutcome>;
 } = {
   store: openStore(process.env.ARCHWOVEN_DB ?? 'data/archwoven.db'),
-  generateModel: (prompt, view) => generateModel(prompt, view),
-  generateRefinement: (instruction, model, view) => generateRefinement(instruction, model, view),
+  // §8/§9 routing: fake first (canned, zero network); local mode goes to Ollama
+  // behind the egress guard — a private job can never reach a hosted provider,
+  // not even by accident in a repair or failure path.
+  generateModel: (prompt, view) =>
+    fakeMode() ? generateModel(prompt, view)
+      : deployMode() === 'local' ? generateModelLocal(prompt, view, { fetchImpl: egressFetch })
+        : generateModel(prompt, view),
+  generateRefinement: (instruction, model, view) =>
+    fakeMode() ? generateRefinement(instruction, model, view)
+      : deployMode() === 'local' ? generateRefinementLocal(instruction, model, view, { fetchImpl: egressFetch })
+        : generateRefinement(instruction, model, view),
   // §14: URLs reaching this seam are already parseRepoUrl-validated (github.com only);
   // repo content is untrusted data, never executed — extraction is static analysis only.
-  ingestRepo: (parsed, opts) => ingestRepo(parsed, { fetcher: (url, init) => fetch(url, init), extractSpringBoot, extractFastApi }, opts),
-  assembleRepoModel: (fragment, meta, opts) => assembleRepoModel(fragment, meta, opts),
+  ingestRepo: (parsed, opts) => ingestRepo(parsed, { fetcher: (url, init) => egressFetch(url, init), extractSpringBoot, extractFastApi }, opts),
+  // §8: private clone import — reads the user's own directory, no network at all.
+  ingestLocal: (dir, opts) => ingestLocal(dir, { revParse: gitRevParse, extractSpringBoot, extractFastApi }, opts),
+  assembleRepoModel: (fragment, meta, opts) =>
+    fakeMode() ? assembleRepoModel(fragment, meta, opts)
+      : deployMode() === 'local' ? assembleRepoModelLocal(fragment, meta, { fetchImpl: egressFetch, signal: opts?.signal })
+        : assembleRepoModel(fragment, meta, opts),
 };
 
 export const PROMPT_TOKEN_LIMIT = 25_000;
 /** Cheap server-side estimate for the UI chip; the authoritative gate is the
  *  exact count_tokens call inside generateModel (CJK text defeats chars/4). */
 export const estimateTokens = (text: string) => Math.ceil(text.length / 4);
-
-/**
- * Fake/local modes are test-and-demo affordances — they must never ship.
- * Production with ARCHWOVEN_FAKE serves every user the same canned diagram
- * (while still exercising the credit ladder), and ARCHWOVEN_MODE=local compiles
- * all quotas out. Boot fails loudly unless a second explicit ack opts in.
- */
-export function assertSafeRuntime(): void {
-  const prod = process.env.NODE_ENV === 'production';
-  if (!prod) return;
-  const acked = process.env.ARCHWOVEN_DEMO_ACK === '1';
-  if (acked) return;
-  if (process.env.ARCHWOVEN_FAKE === '1') {
-    throw new Error('refusing to boot production with ARCHWOVEN_FAKE=1 (fake model data). Set ARCHWOVEN_DEMO_ACK=1 to run an explicit production demo.');
-  }
-  if (process.env.ARCHWOVEN_MODE === 'local') {
-    throw new Error('refusing to boot production in ARCHWOVEN_MODE=local (quotas disabled). Set ARCHWOVEN_DEMO_ACK=1 to opt in explicitly.');
-  }
-}
 
 export function readOrCreateSession(req: Request): { sessionId: string; minted: boolean } {
   const raw = req.headers.get('cookie') ?? '';
@@ -61,9 +66,7 @@ export function readOrCreateSession(req: Request): { sessionId: string; minted: 
 export const sessionCookie = (sessionId: string) =>
   `aw_sid=${sessionId}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${90 * 24 * 3600}`;
 
-export const tierOf = (_sessionId: string): Tier => 'anonymous'; // GitHub OAuth lands M4
-/** Demo-data mode flag — surfaced to the UI so fake output is never silent. */
-export const fakeMode = () => process.env.ARCHWOVEN_FAKE === '1';
+export const tierOf = (_sessionId: string): Tier => 'anonymous'; // GitHub OAuth deferred to M6 (external GitHub App registration; private repos covered by local mode)
 
 export function creditsExhaustedCopy(resetAt: number): string {
   const mins = Math.max(0, Math.round((resetAt - Date.now()) / 60_000));

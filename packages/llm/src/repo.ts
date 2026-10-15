@@ -26,9 +26,9 @@ Hard rules:
 
 /** JSON.stringify, then escape `</` so a `</repo-data>` inside a string value
  *  cannot close the fence; `\/` is a legal JSON escape and parses back identically. */
-const fenceEscape = (json: string): string => json.replace(/<\//g, '<\\/');
+export const fenceEscape = (json: string): string => json.replace(/<\//g, '<\\/');
 
-const pinEvidence = (model: { nodes: { evidence: Evidence[] }[]; edges: { evidence: Evidence[] }[] }, repo: string, sha: string): void => {
+export const pinEvidence = (model: { nodes: { evidence: Evidence[] }[]; edges: { evidence: Evidence[] }[] }, repo: string, sha: string): void => {
   for (const x of [...model.nodes, ...model.edges]) for (const ev of x.evidence) { ev.repo = repo; ev.commit = sha; }
 };
 

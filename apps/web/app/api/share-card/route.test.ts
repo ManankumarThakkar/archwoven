@@ -6,6 +6,10 @@ import { buildCardSvg } from './card';
 import { POST } from './route';
 
 const SHA = '0123456789abcdef0123456789abcdef01234567';
+
+// §15: burst gates compile out in local mode — the hosted 429 ladders are hosted-only.
+const QUOTA = process.env.ARCHWOVEN_MODE !== 'local';
+const hostedOnly = QUOTA ? it : it.skip;
 const req = (body: unknown, cookie = 'aw_sid=test-sess') =>
   new Request('http://localhost/api/share-card', { method: 'POST', headers: { 'content-type': 'application/json', cookie }, body: JSON.stringify(body) });
 
@@ -35,7 +39,7 @@ describe('POST /api/share-card', () => {
     expect((await POST(req({ modelId: 'ghost', kind: 'reach', from: 'gateway.api' }))).status).toBe(404);
   });
 
-  it('burst ladder: 5 cards then 429 with §15 copy (weight 0 — credits untouched)', async () => {
+  hostedOnly('burst ladder: 5 cards then 429 with §15 copy (weight 0 — credits untouched)', async () => {
     for (let i = 0; i < 5; i++) {
       const r = await POST(req({ modelId: 'm1', kind: 'reach', from: 'gateway.api' }));
       expect(r.status, `call ${i + 1}`).toBe(200);
@@ -69,6 +73,7 @@ describe('buildCardSvg — privacy surface (Review Focus 4)', () => {
 
 describe('share-card burst — §15 local mode + separate bucket (I3/I4)', () => {
   it('local mode: burst compiled out — 7 cards all 200', async () => {
+    const prevMode = process.env.ARCHWOVEN_MODE;
     process.env.ARCHWOVEN_MODE = 'local';
     try {
       for (let i = 0; i < 7; i++) {
@@ -76,11 +81,11 @@ describe('share-card burst — §15 local mode + separate bucket (I3/I4)', () =>
         expect(r.status, `call ${i + 1}`).toBe(200);
       }
     } finally {
-      delete process.env.ARCHWOVEN_MODE;
+      if (prevMode === undefined) delete process.env.ARCHWOVEN_MODE; else process.env.ARCHWOVEN_MODE = prevMode;
     }
   });
 
-  it('exhausted card burst does NOT consume the model-call bucket (generate still 202)', async () => {
+  hostedOnly('exhausted card burst does NOT consume the model-call bucket (generate still 202)', async () => {
     for (let i = 0; i < 5; i++) expect((await POST(req({ modelId: 'm1', kind: 'reach', from: 'gateway.api' }))).status).toBe(200);
     expect((await POST(req({ modelId: 'm1', kind: 'reach', from: 'gateway.api' }))).status).toBe(429);
     // the model-call burst key must be untouched by cards

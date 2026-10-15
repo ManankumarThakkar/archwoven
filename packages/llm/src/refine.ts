@@ -10,7 +10,7 @@ export type RefineOutcome =
   | { ok: true; ops: EditOp[]; usage: ReturnType<typeof usageFrom> }
   | { ok: false; errors: string[]; usage: ReturnType<typeof usageFrom> };
 
-const REFINEMENT_SYSTEM = `You are Archwoven's refinement model. Given the current system model JSON and one user instruction, emit ONLY a JSON array of EditOps that implements the instruction — never the whole model.
+export const REFINEMENT_SYSTEM = `You are Archwoven's refinement model. Given the current system model JSON and one user instruction, emit ONLY a JSON array of EditOps that implements the instruction — never the whole model.
 
 EditOp shape: { op: "add"|"remove"|"update"|"move", target: id, patch: {...}, baseRevision: <current revision>, summary: "<short human summary>" }.
 Hard rules:

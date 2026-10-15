@@ -6,7 +6,11 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const day = () => new Date().toISOString().slice(0, 10);
 const usage = { inputTokens: 1000, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 500 };
 
-describe('quota (§15 weighted credits, reserve-then-refund)', () => {
+// Hosted gates only — in local mode quotas compile out entirely (own test below),
+// so the parity CI run (ARCHWOVEN_MODE=local) skips these by design (§15).
+const hostedOnly = process.env.ARCHWOVEN_MODE === 'local' ? describe.skip : describe;
+
+hostedOnly('quota (§15 weighted credits, reserve-then-refund)', () => {
   it('anonymous gets exactly 6 reserved generations then credits-exhausted with reset countdown', async () => {
     const s = openStore(':memory:');
     // burstWindowSec tiny + spaced so the 5/min burst gate doesn't shadow the daily-credit gate
