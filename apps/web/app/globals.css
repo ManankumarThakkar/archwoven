@@ -140,3 +140,15 @@ textarea::placeholder, input::placeholder { color: #8290aa; opacity: 1; }
    reduced-motion block above kills the animation — pulses are absent, never slowed. */
 .aw-pulse:not(.aw-dim-edge) .react-flow__edge-path { stroke-dasharray: 8 48; animation: aw-token-flow 2.6s linear infinite; }
 @keyframes aw-token-flow { to { stroke-dashoffset: -56; } }
+
+/* The timeline uses one escaped SVG for browser and downloads. */
+.aw-sequence button { border: 1px solid #334155; border-radius: 7px; background: #111a2e; color: #e5e7eb; padding: 5px 10px; cursor: pointer; }
+.aw-sequence button:disabled { opacity: .45; cursor: default; }
+.aw-sequence button[aria-pressed="true"] { box-shadow: 0 0 0 2px #f8fafc; }
+.aw-sequence-participants { display: flex; gap: 6px; padding: 8px 10px; overflow-x: auto; flex-shrink: 0; }
+.aw-sequence-participants button { white-space: nowrap; }
+.aw-sequence-viewport { flex: 1; min-height: 180px; overflow: auto; background: #0d1526; }
+.aw-sequence-svg > svg { display: block; width: 100%; height: auto; }
+.aw-sequence-svg [data-participant] { cursor: pointer; }
+.aw-sequence-transcript { flex-shrink: 0; max-height: 180px; overflow: auto; border-top: 1px solid #334155; padding: 10px 14px; font-size: 13px; line-height: 1.6; }
+.aw-sequence-transcript summary { cursor: pointer; color: #cbd5e1; }

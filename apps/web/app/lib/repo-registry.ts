@@ -3,4 +3,6 @@
  * is the atomic (same-event-loop) claim so cancel and job-failure refund once.
  * Lives in lib/ because Next.js route files reject non-handler exports.
  */
-export const repoJobRegistry = new Map<string, { controller: AbortController; settled: boolean }>();
+// Compatibility name for existing route/test callers; description jobs now use
+// the same controller and one-time settlement boundary.
+export { jobRegistry as repoJobRegistry } from './job-registry';

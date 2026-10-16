@@ -11,6 +11,7 @@ import { withSlot } from '../../lib/llm-limiter';
 import { deployMode, privacyForMode } from '../../lib/mode';
 import { basename, resolve } from 'node:path';
 import { repoJobRegistry } from '../../lib/repo-registry';
+import { startJobDeadline, JOB_TIMEOUT_COPY } from '../../lib/job-registry';
 
 export const runtime = 'nodejs';
 
@@ -99,9 +100,11 @@ export async function POST(req: Request) {
       serverDeps.store.updateJob(jobId, { status: 'failed', error });
       refundCredits(serverDeps.store, sessionId, day, WEIGHTS.repo);
     };
+    const entry = repoJobRegistry.get(jobId)!;
+    const stopDeadline = entry.controller.signal.aborted ? () => undefined : startJobDeadline(entry, () => fail(JOB_TIMEOUT_COPY));
     try {
       // cancel may have landed while queued — a cancelled job must never restart
-      if (controller.signal.aborted) return;
+      controller.signal.throwIfAborted();
       serverDeps.store.updateJob(jobId, { status: 'running', stage: 'fetching' });
       // stage writes are skipped once cancelled, so the poll never shows a stage on a dead job
       const stage = (s: string) => { if (!repoJobRegistry.get(jobId)?.settled) serverDeps.store.updateJob(jobId, { stage: s }); };
@@ -113,7 +116,7 @@ export async function POST(req: Request) {
             { signal: controller.signal, onStage: stage },
           );
       if (!ingest.ok) return fail(ingest.message);
-      if (controller.signal.aborted) return;
+      controller.signal.throwIfAborted();
 
       stage('designing');
       const evidenceRepo = cloneDir !== null ? { owner: 'local', repo: basename(cloneDir) } : { owner: parsed!.owner, repo: parsed!.repo };
@@ -122,7 +125,7 @@ export async function POST(req: Request) {
       if (!out.ok) return fail(out.errors.join('; '), out.usage, out.usage.repairs);
       const checked = validateModel(out.model);
       if (!checked.ok) return fail(checked.errors.join('; '), out.usage, out.usage.repairs);
-      if (!claim()) {
+      if (entry.settled) {
         // A provider can finish successfully despite cancellation. Cancel owns
         // settlement/refund, but spent tokens still belong in the stop-loss meter.
         recordUsage(serverDeps.store, { sessionId, tier, action: 'repo', usage: out.usage, retries: out.usage.repairs, outcome: 'failed' });
@@ -134,10 +137,15 @@ export async function POST(req: Request) {
       serverDeps.store.updateJob(jobId, { stage: 'laying-out' });
       recordUsage(serverDeps.store, { sessionId, tier, action: 'repo', usage: out.usage, retries: out.usage.repairs, outcome: out.usage.repairs > 0 ? 'repaired' : 'ok' });
       serverDeps.store.updateJob(jobId, { status: 'succeeded', gaps: ingest.gaps });
+      // These persistence operations are synchronous: no cancel/deadline can interleave.
+      // Claim only after they finish so a thrown write still follows failure/refund.
+      claim();
     } catch (e) {
+      if (controller.signal.reason?.name === 'TimeoutError') { fail(JOB_TIMEOUT_COPY); return; }
       if ((e as Error)?.name === 'AbortError') return; // cancelled — cancel route owns the settle
       fail(e instanceof Error ? e.message : 'unknown error');
     } finally {
+      stopDeadline();
       repoJobRegistry.delete(jobId);
     }
   });

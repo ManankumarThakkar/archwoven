@@ -22,6 +22,37 @@ export const LOCAL_MODEL = process.env.OLLAMA_MODEL ?? 'gpt-oss:20b';
  */
 export const MAX_OUTPUT_TOKENS = 16000;
 
+export interface LocalInferenceOptions {
+  fetchImpl?: typeof fetch;
+  model?: string;
+  baseUrl?: string;
+  think?: boolean;
+  effort?: TaskUsage['effort'];
+  maxOutputTokens?: number;
+  signal?: AbortSignal;
+  timeoutMs?: number;
+}
+
+function taskSignal(opts: LocalInferenceOptions): AbortSignal {
+  const raw = opts.timeoutMs ?? Number(process.env.ARCHWOVEN_LOCAL_TIMEOUT_MS ?? 180000);
+  const ms = Number.isFinite(raw) && raw > 0 ? Math.min(600000, Math.ceil(raw)) : 180000;
+  return AbortSignal.any([...(opts.signal ? [opts.signal] : []), AbortSignal.timeout(ms)]);
+}
+
+const abortedMessage = (signal: AbortSignal) => signal.reason?.name === 'TimeoutError'
+  ? 'Local generation timed out — try a smaller description or repository scope.'
+  : 'Generation cancelled.';
+
+const addLocalUsage = (total: LocalTaskUsage, part: LocalTaskUsage, repairs: number): LocalTaskUsage => ({
+  ...part, repairs,
+  inputTokens: total.inputTokens + part.inputTokens,
+  outputTokens: total.outputTokens + part.outputTokens,
+  cacheWriteTokens: total.cacheWriteTokens + part.cacheWriteTokens,
+  cacheReadTokens: total.cacheReadTokens + part.cacheReadTokens,
+  latencyMs: total.latencyMs + part.latencyMs,
+  ttftMs: total.ttftMs || part.ttftMs,
+});
+
 export interface LocalTaskUsage extends TaskUsage {
   ttftMs: number;
 }
@@ -50,23 +81,26 @@ const zeroUsage = (model: string, ttftMs = 0): LocalTaskUsage => ({ model, effor
 export async function ollamaChat(
   messages: { role: string; content: string }[],
   format: unknown,
-  opts: { fetchImpl?: typeof fetch; model?: string; baseUrl?: string; think?: boolean; effort?: TaskUsage['effort']; maxOutputTokens?: number } = {},
+  opts: LocalInferenceOptions = {},
 ): Promise<OllamaResult> {
   const doFetch = opts.fetchImpl ?? fetch;
   const model = opts.model ?? LOCAL_MODEL;
   const baseUrl = opts.baseUrl ?? process.env.OLLAMA_URL ?? 'http://localhost:11434';
   const effort = opts.effort ?? 'medium';
+  const signal = taskSignal(opts);
+  if (signal.aborted) return { text: '', usage: zeroUsage(model), error: abortedMessage(signal) };
 
   const t0 = Date.now();
   let res: Response;
   try {
     res = await doFetch(`${baseUrl}/api/chat`, {
       method: 'POST',
+      signal,
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ model, stream: true, think: opts.think ?? false, options: { num_predict: Math.min(MAX_OUTPUT_TOKENS, Math.max(1, Math.floor(opts.maxOutputTokens ?? MAX_OUTPUT_TOKENS))) }, keep_alive: '10m', format, messages }),
     });
   } catch (e) {
-    return { text: '', usage: zeroUsage(model), error: `ollama request failed: ${e instanceof Error ? e.message : String(e)}` };
+    return { text: '', usage: zeroUsage(model), error: signal.aborted ? abortedMessage(signal) : `ollama request failed: ${e instanceof Error ? e.message : String(e)}` };
   }
   if (!res.ok || !res.body) {
     return { text: '', usage: zeroUsage(model), error: `ollama http ${res.status}` };
@@ -94,22 +128,28 @@ export async function ollamaChat(
     text += chunk.message?.content ?? '';
     if (chunk.done) final = chunk;
   };
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (ttftMs === 0) ttftMs = Date.now() - t0;
-    pending += decoder.decode(value, { stream: true });
-    const lines = pending.split('\n');
-    pending = lines.pop() ?? '';
-    for (const line of lines) handleLine(line);
-    if (streamError) break;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (ttftMs === 0) ttftMs = Date.now() - t0;
+      pending += decoder.decode(value, { stream: true });
+      const lines = pending.split('\n');
+      pending = lines.pop() ?? '';
+      for (const line of lines) handleLine(line);
+      if (streamError) break;
+    }
+    pending += decoder.decode();
+    if (pending) handleLine(pending);
+  } catch (e) {
+    streamError = signal.aborted ? abortedMessage(signal) : `ollama stream failed: ${e instanceof Error ? e.message : String(e)}`;
+  } finally {
+    if (streamError || signal.aborted) await reader.cancel().catch(() => undefined);
+    reader.releaseLock();
   }
-  pending += decoder.decode(); // flush multibyte tail
-  if (pending) handleLine(pending);
-  if (streamError) return { text, usage: zeroUsage(model, ttftMs), error: streamError };
-
   return {
     text,
+    ...(streamError || signal.aborted ? { error: streamError ?? abortedMessage(signal) } : {}),
     usage: {
       model,
       effort,
@@ -131,8 +171,9 @@ export async function ollamaChat(
 export async function generateModelLocal(
   prompt: string,
   view: ViewType,
-  opts: { fetchImpl?: typeof fetch; model?: string; baseUrl?: string; think?: boolean } = {},
+  opts: LocalInferenceOptions = {},
 ): Promise<GenerateOutcome> {
+  opts = { ...opts, signal: taskSignal(opts) };
   const messages: { role: string; content: string }[] = [
     { role: 'system', content: LOCAL_MODEL_SYSTEM },
     { role: 'user', content: `View: ${view}\n\n${prompt}` },
@@ -145,7 +186,7 @@ export async function generateModelLocal(
 
   for (let attempt = 0; attempt <= MAX_REPAIRS; attempt++) {
     const r = await ollamaChat(messages, format, opts);
-    usage = { ...r.usage, repairs };
+    usage = addLocalUsage(usage, r.usage, repairs);
     if (r.error) {
       lastErrors = [r.error];
       break; // transport/stream failure — never retry into a different host
@@ -185,8 +226,9 @@ export async function generateRefinementLocal(
   instruction: string,
   model: SystemModel,
   view: ViewType,
-  opts: { fetchImpl?: typeof fetch; model?: string; baseUrl?: string } = {},
+  opts: LocalInferenceOptions = {},
 ): Promise<RefineOutcome> {
+  opts = { ...opts, signal: taskSignal(opts) };
   const messages: { role: string; content: string }[] = [
     { role: 'system', content: LOCAL_REFINEMENT_SYSTEM },
     { role: 'user', content: `View: ${view}\n\nCurrent model JSON (revision ${model.revision}):\n${JSON.stringify(model)}\n\nInstruction: ${instruction}` },
@@ -198,7 +240,7 @@ export async function generateRefinementLocal(
 
   for (let attempt = 0; attempt <= MAX_REPAIRS; attempt++) {
     const r = await ollamaChat(messages, opsSchema, opts);
-    usage = { ...r.usage, repairs };
+    usage = addLocalUsage(usage, r.usage, repairs);
     if (r.error) {
       lastErrors = [r.error];
       break;
@@ -242,8 +284,9 @@ export async function generateRefinementLocal(
 export async function assembleRepoModelLocal(
   fragment: Fragment,
   meta: { owner: string; repo: string; sha: string; framework: string },
-  opts: { fetchImpl?: typeof fetch; model?: string; baseUrl?: string; signal?: AbortSignal } = {},
+  opts: LocalInferenceOptions = {},
 ): Promise<GenerateOutcome> {
+  opts = { ...opts, signal: taskSignal(opts) };
   const repoFull = `${meta.owner}/${meta.repo}`;
   const generic = !!fragment.sourceContext;
   const context = fenceEscape(JSON.stringify({ framework: meta.framework, repo: repoFull, sha: meta.sha, fragment }));
@@ -258,7 +301,7 @@ export async function assembleRepoModelLocal(
 
   for (let attempt = 0; attempt <= MAX_REPAIRS; attempt++) {
     const r = await ollamaChat(messages, generic ? SOURCE_PRESENTATION_SCHEMA : NATIVE_MODEL_JSON_SCHEMA, { ...opts, maxOutputTokens: generic ? 4096 : MAX_OUTPUT_TOKENS });
-    usage = { ...r.usage, repairs };
+    usage = addLocalUsage(usage, r.usage, repairs);
     if (r.error) {
       lastErrors = [r.error];
       break;

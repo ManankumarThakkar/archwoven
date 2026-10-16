@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 
 // Layout is covered separately in Canvas tests and the real-browser pass.
-vi.mock('./Canvas', () => ({ Canvas: () => null }));
+vi.mock('./Canvas', () => ({ Canvas: ({ viewId }: { viewId: string }) => <output aria-label="Rendered view">{viewId}</output> }));
 const rasterizer = vi.hoisted(() => ({ ensureResvg: vi.fn(), renderPng: vi.fn() }));
 vi.mock('../../probes/render/export', () => rasterizer);
 
@@ -67,10 +67,71 @@ async function fill(selector: string, value: string) {
 
 async function click(label: string) {
   const button = [...container.querySelectorAll('button')].find((b) => b.textContent?.includes(label))!;
+  expect(button, `Button containing ${label}`).toBeDefined();
   await act(async () => button.click());
 }
 
 describe('saved diagram restoration', () => {
+  it('opens the requested sequence view after generation and preserves it in the reload link', async () => {
+    transport = (input) => {
+      if (input === '/api/generate') return Response.json({ jobId: 'sequence-job', remaining: 5 }, { status: 202 });
+      if (input === '/api/jobs/sequence-job') return Response.json({ status: 'succeeded', modelId: 'sequence-model', revision: 1 });
+      return undefined;
+    };
+    await mount(); await click('Sequence'); await fill('#system-description', 'User signs in and receives a response'); await click('Generate diagram');
+    expect(container.querySelector('[aria-label="Rendered view"]')?.textContent).toBe('view.sequence');
+    expect(new URLSearchParams(window.location.hash.slice(1)).get('view')).toBe('view.sequence');
+  });
+  it('shows a failed cancellation without abandoning the active job', async () => {
+    vi.useFakeTimers();
+    transport = (input) => {
+      if (input === '/api/generate') return Response.json({ jobId: 'cancel-job', remaining: 5 }, { status: 202 });
+      if (input === '/api/jobs/cancel-job/cancel') return Response.json({ error: 'job is not cancellable' }, { status: 409 });
+      if (input === '/api/jobs/cancel-job') return Response.json({ status: 'running', stage: 'generating' });
+      return undefined;
+    };
+    await mount(); await fill('#system-description', 'Keep this input'); await click('Generate diagram'); await click('Cancel');
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('job is not cancellable');
+    await act(async () => { await vi.advanceTimersByTimeAsync(400); });
+    expect(container.textContent).toContain('Designing the architecture');
+    expect([...container.querySelectorAll('button')].find((b) => b.textContent === 'Cancel')?.disabled).toBe(false);
+  });
+  it('keeps polling a healthy job beyond the obsolete two-minute cutoff using its server deadline', async () => {
+    vi.useFakeTimers(); vi.setSystemTime(1000);
+    let done = false;
+    transport = (input) => {
+      if (input === '/api/generate') return Response.json({ jobId: 'long-job', remaining: 5 }, { status: 202 });
+      if (input === '/api/jobs/long-job') return Response.json(done
+        ? { status: 'succeeded', modelId: 'long-model', revision: 1 }
+        : { status: 'running', stage: 'generating', deadlineAt: 181000 });
+      return undefined;
+    };
+    await mount(); await fill('#system-description', 'A library app'); await click('Generate diagram');
+    await act(async () => { await vi.advanceTimersByTimeAsync(121000); });
+    expect(container.textContent).not.toContain('Something went wrong');
+    expect(container.textContent).toContain('Designing the architecture');
+    done = true;
+    await act(async () => { await vi.advanceTimersByTimeAsync(400); });
+    expect(window.location.hash).toContain('model=long-model');
+    expect(canRefine()).toBe(true);
+  });
+
+  it('allows cancelling a running description while preserving the typed input', async () => {
+    vi.useFakeTimers(); let cancelled = false;
+    transport = (input) => {
+      if (input === '/api/generate') return Response.json({ jobId: 'cancel-job', remaining: 5 }, { status: 202 });
+      if (input === '/api/jobs/cancel-job/cancel') { cancelled = true; return Response.json({ status: 'cancelled' }); }
+      if (input === '/api/jobs/cancel-job') return Response.json({ status: cancelled ? 'cancelled' : 'running', stage: 'generating' });
+      return undefined;
+    };
+    await mount(); await fill('#system-description', 'Keep my library description'); await click('Generate diagram');
+    await click('Cancel');
+    await act(async () => { await vi.advanceTimersByTimeAsync(400); });
+    expect(container.textContent).toContain('Cancelled.');
+    expect((container.querySelector('#system-description') as HTMLTextAreaElement).value).toBe('Keep my library description');
+    expect(requests).toContain('/api/jobs/cancel-job/cancel');
+  });
+
   it('reload restores a usable workspace and model identity without another generation', async () => {
     sessionStorage.setItem('aw_modelId', 'saved-model');
     await mount();

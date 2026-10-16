@@ -38,9 +38,10 @@ export async function generateRefinement(
   instruction: string,
   model: SystemModel,
   view: ViewType,
-  opts: { client?: StructuredClient; effort?: Effort } = {},
+  opts: { client?: StructuredClient; effort?: Effort; signal?: AbortSignal } = {},
 ): Promise<RefineOutcome> {
   const effort: Effort = opts.effort ?? 'low';
+  if (opts.signal?.aborted) return { ok: false, errors: ['Refinement cancelled.'], usage: usageFrom({}, effort, 0, 0) };
   if (!opts.client && fakeMode()) {
     const ops: EditOp[] = [{ op: 'add', target: 'svc.cache', patch: { id: 'svc.cache', kind: 'service', label: 'Cache', provenance: 'proposed' }, baseRevision: model.revision, summary: '+Cache service' }];
     return { ok: true, ops, usage: { model: MODEL, effort, inputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 0, latencyMs: 0, repairs: 0 } };
@@ -56,7 +57,7 @@ export async function generateRefinement(
 
   // §15 per-request gate: exact token count before send; fail closed.
   try {
-    const counted = await client.messages.countTokens({ model: MODEL, system, messages });
+    const counted = await client.messages.countTokens({ model: MODEL, system, messages }, { signal: opts.signal });
     if (counted.input_tokens > CONTEXT_TOKEN_LIMIT) {
       return { ok: false, errors: ['assembled context exceeds the 25k token limit — scope the instruction down'], usage: usageFrom({}, effort, Date.now() - t0, 0) };
     }
@@ -75,6 +76,7 @@ export async function generateRefinement(
   };
 
   for (let attempt = 0; attempt <= MAX_REPAIRS; attempt++) {
+    if (opts.signal?.aborted) { lastErrors = ['Refinement cancelled.']; break; }
     let response: Awaited<ReturnType<StructuredClient['beta']['messages']['create']>>;
     try {
       response = await client.beta.messages.create({
@@ -84,9 +86,10 @@ export async function generateRefinement(
         system,
         messages,
         output_config: { format: { type: 'json_schema', schema: opsSchema }, effort },
-      });
+      }, { signal: opts.signal });
     } catch (e) {
       lastErrors = [`request failed: ${e instanceof Error ? e.message : String(e)}`];
+      if (opts.signal?.aborted) break;
       continue;
     }
     addUsage(response.usage);
