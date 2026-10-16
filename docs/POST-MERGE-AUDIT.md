@@ -45,7 +45,7 @@ These are concrete gaps against SPEC, rather than unchecked historical plan boxe
 
 | Priority | Task / next PR boundary | Evidence and acceptance gate |
 |---|---|---|
-| P1 | Constrain specialized extraction to the approved source inventory | Original audit failure: `packages/extract/src/loader.ts:walkFiles` followed symlinks and framework parsers rediscovered rejected files. Implemented on `fix/extractor-source-inventory`; see the [follow-up verification](#extraction-inventory-follow-up). Pending merge; hosted tar unpack still rejects links before writing. |
+| Done | Constrain specialized extraction to the approved source inventory | Merged in PR #12 at `afdd9e5`; original failure and follow-up evidence remain below. |
 | P1 | Integrate sequence renderer into workspace and exports | `Canvas.tsx` and `export-svg.ts` use generic graph rendering for every view. Promote the existing `probes/render/sequence.ts` renderer; verify lifelines, ordering, returns and fragments with real data in browser/SVG/PNG. |
 | P1 | Render ER fields, keys and cardinalities | Entity-aware sizing exists, but `Canvas.tsx` node labels and `export-svg.ts` omit field rows/relationship cardinality. Verify PK/FK labels and all field rows are visible and exported. |
 | P1 | Clarification answer/skip flow | `states.ts` supports CLARIFY but workspace never dispatches it; the M2 notes explicitly defer the trigger. Wire at most three focused questions and preserve input through answer/skip/error. |
@@ -114,3 +114,21 @@ Verification: 46 test files / 452 tests passed; local mode 437 passed / 15 expec
 An additional real public MCP Observatory browser run **failed**, unlike the preceding clean-download sample. After two repairs the source-evidence guard rejected all 13 rewritten import connections; no invalid model was saved. The browser had already shown its generic taking-longer-than-expected error. This outcome is not counted as a successful public-repository acceptance check. Comparing the preceding and updated ingest implementations against the same real GitHub responses produced identical results at `d66599cceb3a151f64d45eb1cc46afe59c386c1f`: 10 modules / 13 imports, fragment SHA-256 `6f46081891fcf6d778d25e4044fbb6186fbb8d43b54996b0304430a7c6481b0b`. The reproduction isolates a model assembly/repair reliability issue rather than an extraction-payload change. Keep this fix's PR in draft with that limitation disclosed; address assembly reliability and native deadlines/cancellation as separate follow-ups.
 
 Logs and sanitized outputs are `/tmp/archwoven-source-safety-*`; do not publish the session database. Subdirectory scanning order, dirty-worktree evidence, full content secret scanning and the other product/release tasks above remain separate work. These checks do not establish protection against an attacker continuously mutating the host filesystem or replace an operating-system sandbox.
+
+## General repository assembly follow-up
+
+2026-10-16. `fix/repository-assembly-contract` makes the extracted generic graph authoritative. Providers return only a strict title/questions/guided-groups object; shared code constructs the architecture view from the exact extracted nodes/edges/evidence, preserves gaps and rejects unknown group IDs. Runtime connections, node kinds and evidence cannot be rewritten through this response. Specialized Spring/FastAPI generation remains on its existing full-model contract. Ollama runtime output limits now use the documented `options.num_predict`: 4,096 tokens for presentation and 16,000 for full models; hosted presentation has a 2,048-token cap. The earlier failed MCP sample remains failed historical evidence; the previously drafted extraction fix was subsequently merged as PR #12.
+
+Verification: 470 tests passed; local mode 455 passed / 15 expected skips; all typechecks and a production build passed. Sixteen new presentation-contract assertions failed before implementation, then all 18 new cases passed. Independent review found an ignored Ollama cap placement; its request-contract regression failed before correction. Re-review found no scoped blockers.
+
+| Actual real-provider case | Result |
+|---|---|
+| Hosted Python MCP Observatory | 10 modules / 13 imports; 11.8 s; 0 repairs |
+| Hosted JavaScript p-limit | 6 modules / 3 imports; 6.9 s; 0 repairs |
+| Hosted specialized Spring PetClinic (`src/main/java`) | 16 components / 7 connections; 44.1 s; 0 repairs |
+| Native Go afero | 12 modules / 0 resolved imports; unresolved relationships disclosed; 20.1 s; 1 metadata repair |
+| Native Rust fd | 12 modules / 7 imports; 8.4 s; 0 repairs |
+| Native specialized FastAPI clone (`backend`) | 7 components / 5 connections; 31.1 s; 0 repairs |
+| Native MCP browser → provider → saved model → reload | 10 modules / 13 imports restored; 0 repairs |
+
+Both isolated instances reported fake disabled; native used real Ollama gpt-oss:20b and hosted used the existing configured key loaded only into process memory. Saved API results were schema-validated and generic edges checked as relation/imports. These are acceptance samples, not a statistical success-rate claim or exhaustive extraction accuracy measurement. The local repair usage table still reports only the last attempt, tracked under the separate accounting task. Initial versus restored warning summaries still need unification under the local/UI task. Logs, models, usage summaries and screenshot `/tmp/archwoven-completion-repo-restored.png` live under `/tmp/archwoven-completion-*`; databases/session state must not be published. The full completion queue is [RELEASE-PROGRESS.md](RELEASE-PROGRESS.md).
