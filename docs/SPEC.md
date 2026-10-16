@@ -2,7 +2,7 @@
 
 **Status:** Draft for user review. Derived from `Archwoven_Master_Project_Prompt.md` (rev 2) + decisions locked on 2026-10-06. Items marked **[REC]** are recommendations pending probe evidence; **[LOCKED]** are user-approved; **[OPEN]** need a user decision before the owning milestone.
 
-**Goal:** Turn plain-English requirements or GitHub repos (Spring Boot / FastAPI) into clear, interactive, editable architecture diagrams from ONE typed system model — with provenance, controlled edits, enforceable processing boundaries, and measured quality/cost.
+**Goal:** Turn plain-English requirements or GitHub repos across languages into clear, interactive, editable architecture diagrams from ONE typed system model — with provenance, controlled edits, enforceable processing boundaries, and measured quality/cost.
 
 ---
 
@@ -43,9 +43,9 @@
 
 ## 2. First-release scope
 
-**In:** Describe-system mode; Import-repository mode (public + private, Spring Boot + FastAPI defined constructs); Architecture / Sequence / ER views + bounded component-detail drill-down; orientation toggle (↕/↔) inside Architecture (orientation ≠ semantic type); conversational refinement via patches; direct visual edits (move/rename); PNG/SVG/model-JSON export; evidence inspector; provenance badges; clarification questions; hosted + local deployment with same core; eval suite + published results.
+**In:** Describe-system mode; Import-repository mode (public hosted repositories + private local clones; Spring Boot/FastAPI defined constructs and bounded general source maps); Architecture / Sequence / ER views + bounded component-detail drill-down; orientation toggle (↕/↔) inside Architecture (orientation ≠ semantic type); conversational refinement via patches; direct visual edits (move/rename); PNG/SVG/model-JSON export; evidence inspector; provenance badges; clarification questions; hosted + local deployment with same core; eval suite + published results.
 
-**Out (unless separately approved):** billing, SSO, compliance claims, collab editing, code generation/deploy, live topology discovery, other languages, multi-repo analysis, webhooks/auto-reanalysis, plugin marketplace.
+**Out (unless separately approved):** billing, SSO, compliance claims, collab editing, code generation/deploy, live topology discovery, comprehensive framework semantics beyond the supported matrix, multi-repo analysis, webhooks/auto-reanalysis, plugin marketplace.
 
 ## 3. Supported-construct matrix (draft — probes finalize)
 
@@ -60,6 +60,8 @@
 
 Anything outside the matrix renders as an explicit **analysis gap**, never silence.
 
+Approved scope expansion (2026-10-15): other and mixed repositories use a bounded static source fallback. It maps sampled source modules and resolved imports; it does not promote files or documentation claims into proven deployed services or runtime connections. Sampling is capped at 20 files, 2,400 characters per file, 24,000 characters total, 160 inventory paths and 30 extracted edges. Hidden/sensitive, vendor/generated/build, binary and test/fixture files are excluded. Omitted/truncated coverage and unresolved relationships remain explicit questions. Hosted and local assembly enforce sampled file/line evidence, module identities and import-only source bindings; evidence pins the selected commit. Specialized Spring Boot/FastAPI extraction remains available. Current live coverage and limits: [LIVE-CHECKS.md](LIVE-CHECKS.md).
+
 ## 4. Architecture & data flow
 
 ```
@@ -67,7 +69,7 @@ apps/web (Next.js)
   ├─ UI: workspace, canvas (React Flow), inspector, refinement bar
   └─ /api/* routes ── same code in hosted & local mode
 packages/model      Zod system-model schema, revision/patch logic, validators
-packages/extract    tree-sitter Spring Boot + FastAPI extractors → model fragments
+packages/extract    specialized extractors + bounded source modules/imports → fragments
 packages/llm        Claude client: prompts, structured output, caching, budgets,
                     metering; local-model adapter (OpenAI-compatible/Ollama) behind
                     the SAME interface; egress policy enforced at this boundary

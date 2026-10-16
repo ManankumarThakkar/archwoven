@@ -65,7 +65,7 @@ describe('ingestRepo (pin → fetch → unpack → detect → extract)', () => {
     expect(r.gaps).toContain('no ORM detected');
   });
 
-  it('mixed repo → error asking for a subdir, no extraction', async () => {
+  it('mixed repo uses general source analysis with both languages in scope', async () => {
     const deps: IngestDeps = {
       fetcher: cannedFetcher([
         tarEntry('m-main/pom.xml', '<project><groupId>org.springframework.boot</groupId></project>'),
@@ -77,14 +77,13 @@ describe('ingestRepo (pin → fetch → unpack → detect → extract)', () => {
       tmpRoot: tmp(),
     };
     const r = await ingestRepo({ owner: 'foo', repo: 'm' }, deps);
-    expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.reason).toBe('mixed-frameworks');
-      expect(r.message).toMatch(/subdir/i);
-    }
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.framework).toBe('generic');
+    expect(r.fragment.sourceContext!.samples.map((sample) => sample.path)).toEqual(expect.arrayContaining(['src/main/java/A.java', 'main.py']));
   });
 
-  it('unsupported repo → explicit reason', async () => {
+  it('docs-only repo gets bounded source context and explicit implementation unknowns', async () => {
     const deps: IngestDeps = {
       fetcher: cannedFetcher([tarEntry('x-main/README.md', '# docs only')]),
       extractSpringBoot: async () => { throw new Error('no'); },
@@ -92,8 +91,38 @@ describe('ingestRepo (pin → fetch → unpack → detect → extract)', () => {
       tmpRoot: tmp(),
     };
     const r = await ingestRepo({ owner: 'foo', repo: 'x' }, deps);
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.reason).toBe('unsupported-framework');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.framework).toBe('generic');
+    expect(r.fragment.nodes[0]).toMatchObject({ label: 'README.md', kind: 'component' });
+    expect(r.gaps.join(' ')).toMatch(/no implementation source/i);
+  });
+
+  it('generic subdirectory evidence retains real repository-relative paths', async () => {
+    const r = await ingestRepo({ owner: 'foo', repo: 'tools', subdir: 'tools/cli' }, {
+      fetcher: cannedFetcher([tarEntry('r-main/tools/cli/main.py', 'from worker import run'), tarEntry('r-main/tools/cli/worker.py', 'def run(): pass'), tarEntry('r-main/outside.py', 'print(1)')]),
+      extractSpringBoot: async () => { throw new Error('must not run'); },
+      extractFastApi: async () => { throw new Error('must not run'); },
+      tmpRoot: tmp(),
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.filesScanned).toBe(2);
+    expect(r.fragment.edges[0]!.evidence[0]).toMatchObject({ path: 'tools/cli/main.py', lines: [1, 1] });
+    expect(JSON.stringify(r.fragment)).not.toContain('outside.py');
+  });
+
+  it('uses general analysis for a FastAPI and TypeScript monorepo', async () => {
+    const r = await ingestRepo({ owner: 'foo', repo: 'fullstack' }, {
+      fetcher: cannedFetcher([tarEntry('r-main/backend/main.py', 'from fastapi import FastAPI\napp = FastAPI()'), tarEntry('r-main/frontend/main.ts', 'export const app = true;')]),
+      extractSpringBoot: async () => { throw new Error('must not run'); },
+      extractFastApi: async () => { throw new Error('must not run'); },
+      tmpRoot: tmp(),
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.framework).toBe('generic');
+    expect(r.fragment.nodes.map((node) => node.label)).toEqual(expect.arrayContaining(['backend/main.py', 'frontend/main.ts']));
   });
 
   it('.gitmodules and LFS attributes become explicit gaps', async () => {

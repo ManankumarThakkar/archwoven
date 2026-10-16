@@ -26,7 +26,7 @@ const ROLE: Record<NodeKind, string> = {
   queue: 'An async transport between producers and consumers',
   external: 'A third-party system outside your boundary',
   entity: 'A domain entity / table',
-  component: 'An internal component within a service',
+  component: 'A component or source module',
 };
 
 const evidenceLink = (ev: Evidence): EvidenceLink => {

@@ -1,7 +1,7 @@
 /**
  * Framework detection (§5): Spring Boot vs FastAPI by build-file + source
- * markers, reading only candidate files (bounded). Mixed monorepos are
- * refused with a subdir prompt — one framework per analysis, no guessing.
+ * markers, reading only candidate files (bounded). Detection chooses specialized
+ * extraction where possible; mixed or other languages use bounded general analysis.
  */
 export type Framework = 'spring-boot' | 'fastapi' | 'mixed' | 'unsupported';
 
@@ -33,4 +33,13 @@ export function detectFramework(files: string[], read: (rel: string) => string):
   if (spring) return 'spring-boot';
   if (fastapi) return 'fastapi';
   return 'unsupported';
+}
+
+/** A recognized backend cannot represent a mixed-language repository by itself. */
+export function useGenericAnalysis(files: string[], framework: Framework): boolean {
+  if (framework === 'mixed' || framework === 'unsupported') return true;
+  const otherSources = framework === 'spring-boot'
+    ? /\.(?:[cm]?[jt]sx?|py|go|rs|rb|php|cs|cpp|swift|kt)$/i
+    : /\.(?:[cm]?[jt]sx?|java|kt|go|rs|rb|php|cs|cpp|swift)$/i;
+  return files.some((path) => otherSources.test(path));
 }

@@ -6,6 +6,19 @@ export interface FragmentEndpoint {
   evidence: Evidence;
 }
 
+/** Bounded untrusted context for repositories outside specialized parsers. */
+export interface SourceContext {
+  kind: 'bounded-source-analysis';
+  inventory: string[];
+  eligibleFiles: number;
+  sampledFiles: number;
+  omittedFiles: number;
+  truncatedFiles: number;
+  samples: { path: string; lines: [number, number]; text: string; truncated: boolean }[];
+  limits: { maxFiles: number; maxFileChars: number; maxTotalChars: number; maxInventory: number; maxEdges: number };
+  limitations: string[];
+}
+
 /** A piece of a SystemModel extracted from source: everything source-supported, plus explicit gaps. */
 export interface Fragment {
   nodes: Node[];
@@ -14,6 +27,7 @@ export interface Fragment {
   gaps: string[];
   /** emitted ONLY when endpoints + required bindings were actually seen (never empty-object noise) */
   semanticChecks?: SemanticChecks;
+  sourceContext?: SourceContext;
 }
 
 /**

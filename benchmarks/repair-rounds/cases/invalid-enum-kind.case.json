@@ -1,0 +1,18 @@
+{
+  "id": "invalid-enum-kind",
+  "class": "schema-enum-domain",
+  "base": "valid-full-extended",
+  "mutation": {
+    "subjects": ["datastore.postgres"],
+    "note": "'database' is not a NodeKind — Zod enum rejects before the graph pass runs.",
+    "ops": [
+      { "op": "replace", "path": "/nodes/4/kind", "value": "database" }
+    ]
+  },
+  "expectedDiagnostics": [
+    { "code": "invalid-enum", "contains": "nodes.4.kind: Invalid option: expected one of \"actor\"|\"service\"|\"gateway\"|\"datastore\"|\"queue\"|\"external\"|\"entity\"|\"component\"" }
+  ],
+  "oracleRepairs": [
+    { "op": "replace", "path": "/nodes/4/kind", "value": "datastore" }
+  ]
+}

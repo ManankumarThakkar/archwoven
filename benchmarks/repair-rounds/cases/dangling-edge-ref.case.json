@@ -1,0 +1,18 @@
+{
+  "id": "dangling-edge-ref",
+  "class": "referential-integrity",
+  "base": "valid-full-extended",
+  "mutation": {
+    "subjects": ["e.catalog-pg"],
+    "note": "edge.to points at a 40-hex commit string instead of a node id — the shape of 'unbound evidence commit' damage this validator actually catches (EvidenceSchema.commit itself is free-form and NOT validated).",
+    "ops": [
+      { "op": "replace", "path": "/edges/4/to", "value": "59922917c56d2b6a8e1a4d83a0f6f0e6c1d9b2f4a7e8c5d3b6a9f2e1c8d7b4a5" }
+    ]
+  },
+  "expectedDiagnostics": [
+    { "code": "edge-to-unknown-node", "contains": "edge \"e.catalog-pg\" to unknown node: \"59922917c56d2b6a8e1a4d83a0f6f0e6c1d9b2f4a7e8c5d3b6a9f2e1c8d7b4a5\"" }
+  ],
+  "oracleRepairs": [
+    { "op": "replace", "path": "/edges/4/to", "value": "datastore.postgres" }
+  ]
+}

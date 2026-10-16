@@ -7,6 +7,19 @@ import { validateRepoUrlInput } from './repo-form';
 import type { Mode } from './states';
 
 const VIEWS: ViewType[] = ['architecture', 'sequence', 'er', 'component-detail'];
+const VIEW_LABELS: Record<ViewType, string> = {
+  architecture: 'Architecture',
+  sequence: 'Sequence',
+  er: 'ER · data model',
+  'component-detail': 'Component detail',
+};
+// Helpful placeholder per type (reference UX): the example matches what you're about to draw.
+const PLACEHOLDERS: Record<ViewType, string> = {
+  architecture: 'e.g. A real-time chat app with message history, user authentication, and push notifications…',
+  sequence: 'e.g. User login with OAuth and JWT; or place order → payment → inventory check…',
+  er: 'e.g. E-commerce database with orders, products, users, and payments…',
+  'component-detail': 'e.g. Inside the API gateway: routing, rate limiting, auth, logging…',
+};
 const tokenEstimate = (s: string) => Math.ceil(s.length / 4);
 const PROMPT_TOKEN_LIMIT = 25_000;
 
@@ -60,62 +73,84 @@ export function ControlPanel({ running, remaining, mode, prefill, onMode, onGene
   };
 
   const seg = (active: boolean) => ({
-    flex: 1, padding: '6px 10px', borderRadius: 8, border: '1px solid ' + (active ? '#5eead4' : '#334155'),
+    flex: 1, padding: '10px 8px', borderRadius: 8, border: '1px solid ' + (active ? '#5eead4' : '#334155'),
     background: active ? '#0f2e2b' : 'transparent', color: '#e5e7eb', cursor: 'pointer', fontSize: 13,
   } as const);
   const input = { width: '100%', boxSizing: 'border-box' as const, padding: 8, borderRadius: 8, background: '#0b1220', color: '#e5e7eb', border: '1px solid #334155' };
 
   return (
-    <aside style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 16, width: 340, borderRight: '1px solid #1f2937' }}>
+    <aside className="aw-create-panel" aria-label="Create a diagram">
+      <div className="aw-panel-intro">
+        <span className="aw-eyebrow">YOUR NEXT SYSTEM, MAPPED</span>
+        <h1>Make the complex<br /> <span>clear.</span></h1>
+        <p>Start with an idea or a repository. Explore how the pieces connect.</p>
+      </div>
       <div style={{ display: 'flex', gap: 6 }}>
-        <button onClick={() => onMode('describe')} disabled={running} style={seg(mode === 'describe')}>Describe</button>
-        <button onClick={() => onMode('repo')} disabled={running} style={seg(mode === 'repo')}>Import repo</button>
+        <button aria-pressed={mode === 'describe'} onClick={() => onMode('describe')} disabled={running} style={seg(mode === 'describe')}>Describe a system</button>
+        <button aria-pressed={mode === 'repo'} onClick={() => onMode('repo')} disabled={running} style={seg(mode === 'repo')}>Import repository</button>
       </div>
 
       {mode === 'describe' ? (
         <>
-          <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} disabled={running} rows={6}
-            placeholder="Describe a system or flow…"
-            style={{ resize: 'vertical', ...input }} />
+          <div>
+            <div style={{ fontSize: 12, color: '#8b98b8', marginBottom: 6 }}>Diagram type</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+              {VIEWS.map((v) => (
+                <button key={v} aria-pressed={view === v} onClick={() => setView(v)} disabled={running}
+                  style={{ ...seg(view === v), fontSize: 12 }}>
+                  {VIEW_LABELS[v]}
+                </button>
+              ))}
+            </div>
+          </div>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: overBudget ? '#f87171' : '#8b98b8' }}>
+          <label className="aw-field-label" htmlFor="system-description">Describe your system</label>
+          <textarea id="system-description" aria-describedby="description-help description-budget" value={prompt} onChange={(e) => setPrompt(e.target.value)} disabled={running} rows={6}
+            placeholder={PLACEHOLDERS[view]}
+            style={{ resize: 'vertical', ...input, padding: 12, lineHeight: 1.65, minHeight: 150 }} />
+
+          <p id="description-help" className="aw-field-help">Include the main components, who uses them, and what happens next.</p>
+          <div id="description-budget" style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: overBudget ? '#f87171' : '#8b98b8' }}>
             <span>≈{tokens.toLocaleString()} tokens</span>
             <span>{remaining} credits left</span>
           </div>
 
           <div>
-            <div style={{ fontSize: 12, color: '#8b98b8', marginBottom: 6 }}>Examples</div>
+            <div style={{ fontSize: 12, color: '#8b98b8', marginBottom: 6 }}>Try an example · {VIEW_LABELS[view]}</div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {EXAMPLES[view].map((ex) => (
                 <button key={ex.label} onClick={() => applyExample(ex.prompt)} disabled={running}
-                  style={{ padding: '4px 8px', fontSize: 12, borderRadius: 6, border: '1px solid #1f2937', background: '#111a2e', color: '#cbd5e1', cursor: 'pointer' }}>
+                  style={{ padding: '8px 10px', fontSize: 12, borderRadius: 6, border: '1px solid #1f2937', background: '#111a2e', color: '#cbd5e1', cursor: 'pointer' }}>
                   {ex.label}
                 </button>
               ))}
             </div>
           </div>
 
-          <button onClick={() => onGenerate(prompt, view)} disabled={running || !prompt.trim() || overBudget}
+          <button className="aw-primary" onClick={() => onGenerate(prompt, view)} disabled={running || !prompt.trim() || overBudget}
             style={{ padding: '10px 14px', borderRadius: 8, border: 'none', background: '#5eead4', color: '#04211f', fontWeight: 600, cursor: 'pointer', opacity: running || !prompt.trim() || overBudget ? 0.5 : 1 }}>
-            {running ? 'Generating…' : 'Generate'}
+            {running ? 'Creating your diagram…' : 'Generate diagram  →'}
           </button>
         </>
       ) : (
         <>
-          <input value={url} onChange={(e) => setUrl(e.target.value)} disabled={running} placeholder="https://github.com/owner/repo" style={input} />
-          {url && urlError && <div style={{ fontSize: 12, color: '#f87171' }}>{urlError}</div>}
+          <label className="aw-field-label" htmlFor="repository-url">Public GitHub repository</label>
+          <input id="repository-url" type="url" aria-describedby={url && urlError ? "repository-help repository-error" : "repository-help"} aria-invalid={!!url && !!urlError} value={url} onChange={(e) => setUrl(e.target.value)} disabled={running} placeholder="https://github.com/owner/repo" style={input} />
+          {url && urlError && <div id="repository-error" role="alert" style={{ fontSize: 12, color: '#f87171' }}>{urlError}</div>}
           <div style={{ display: 'flex', gap: 6 }}>
-            <input value={subdir} onChange={(e) => setSubdir(e.target.value)} disabled={running} placeholder="subdir (optional)" style={{ ...input, flex: 1 }} />
-            <input value={ref} onChange={(e) => setRef(e.target.value)} disabled={running} placeholder="branch / commit (optional)" style={{ ...input, flex: 1 }} />
+            <label className="aw-repo-option">Subdirectory
+            <input aria-label="Repository subdirectory" value={subdir} onChange={(e) => setSubdir(e.target.value)} disabled={running} placeholder="Optional" style={input} /></label>
+            <label className="aw-repo-option">Branch or commit
+            <input aria-label="Repository branch or commit" value={ref} onChange={(e) => setRef(e.target.value)} disabled={running} placeholder="Default branch" style={input} /></label>
           </div>
-          <div style={{ fontSize: 12, color: '#8b98b8' }}>Costs 2 credits ({remaining} left). Public repos only; the commit is pinned when the job starts.</div>
+          <div id="repository-help" style={{ fontSize: 12, color: '#8b98b8', lineHeight: 1.6 }}>Map public repositories across languages. Spring Boot and FastAPI include deeper framework-specific extraction; other repositories use a general code map with gaps called out.<br />Costs 2 credits ({remaining} left). The commit is pinned when the job starts.</div>
 
           <div>
             <div style={{ fontSize: 12, color: '#8b98b8', marginBottom: 6 }}>Examples</div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {REPO_EXAMPLES.map((ex) => (
                 <button key={ex.label} onClick={() => applyRepoExample(ex.url, ex.ref)} disabled={running}
-                  style={{ padding: '4px 8px', fontSize: 12, borderRadius: 6, border: '1px solid #1f2937', background: '#111a2e', color: '#cbd5e1', cursor: 'pointer' }}>
+                  style={{ padding: '8px 10px', fontSize: 12, borderRadius: 6, border: '1px solid #1f2937', background: '#111a2e', color: '#cbd5e1', cursor: 'pointer' }}>
                   {ex.label}
                 </button>
               ))}
@@ -128,7 +163,7 @@ export function ControlPanel({ running, remaining, mode, prefill, onMode, onGene
               Cancel
             </button>
           ) : (
-            <button onClick={() => onGenerateRepo({ url: url.trim(), subdir: subdir.trim() || undefined, ref: ref.trim() || undefined })}
+            <button className="aw-primary" onClick={() => onGenerateRepo({ url: url.trim(), subdir: subdir.trim() || undefined, ref: ref.trim() || undefined })}
               disabled={!!urlError}
               style={{ padding: '10px 14px', borderRadius: 8, border: 'none', background: '#5eead4', color: '#04211f', fontWeight: 600, cursor: 'pointer', opacity: urlError ? 0.5 : 1 }}>
               Analyze repository
@@ -136,6 +171,7 @@ export function ControlPanel({ running, remaining, mode, prefill, onMode, onGene
           )}
         </>
       )}
+      <div className="aw-panel-footer"><span aria-hidden="true">◇</span> Inspect connections. Refine in words. Export your map.</div>
     </aside>
   );
 }

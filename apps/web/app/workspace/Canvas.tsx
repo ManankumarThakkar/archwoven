@@ -1,12 +1,16 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { ReactFlow, Background, Controls, MiniMap, type Node, type Edge, type ReactFlowInstance } from '@xyflow/react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ReactFlow, Background, Controls, MiniMap, Position, type Node, type Edge, type ReactFlowInstance } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import type { SystemModel, Provenance } from '@archwoven/model';
+import type { SystemModel, NodeKind, Provenance } from '@archwoven/model';
 import { layoutModel } from '../../lib/layout';
 import { journey, reachability } from './graph-inspect';
 import { motionMode } from './motion';
+import { lensKindsInView, lensPasses, parseLens, serializeLens, toggleLens } from './lens';
+import { pulseOrder } from './pulses';
+import { NodeFinder } from './NodeFinder';
+import { OutlineRail } from './OutlineRail';
 
 // proposed/inferred are visually distinct from user-specified/source-supported (scenario 6).
 const PROVENANCE_STYLE: Record<Provenance, { border: string; bg: string; badge: string }> = {
@@ -33,15 +37,19 @@ const writeHash = (patch: Record<string, string | null>) => {
   if (typeof window === 'undefined') return;
   const h = readHash();
   for (const [k, v] of Object.entries(patch)) { if (v === null) delete h[k]; else h[k] = v; }
-  const s = new URLSearchParams(h).toString();
+  // keep #lens=service,queue readable (URLSearchParams would %2C the commas)
+  const s = new URLSearchParams(h).toString().replace(/(^|&)lens=([^&]*)/, (_, prefix: string, value: string) => `${prefix}lens=${value.replace(/%2C/g, ',')}`);
   history.replaceState(null, '', s ? `#${s}` : window.location.pathname + window.location.search);
 };
 
-export function Canvas({ model, modelId, viewId, onSelect }: { model: SystemModel; modelId: string; viewId: string; onSelect: (id: string) => void }) {
+export function Canvas({ model, modelId, viewId, onSelect, onDeselect }: { model: SystemModel; modelId: string; viewId: string; onSelect: (id: string) => void; onDeselect: () => void }) {
   const [shareBusy, setShareBusy] = useState(false);
   const [shareErr, setShareErr] = useState<string | null>(null);
-  const [placed, setPlaced] = useState<{ nodes: Node[]; edges: Edge[] }>({ nodes: [], edges: [] });
+  const [placed, setPlaced] = useState<{ key: string; nodes: Node[]; edges: Edge[] }>({ key: '', nodes: [], edges: [] });
   const [focusId, setFocusId] = useState<string | null>(null);
+  const [relationId, setRelationId] = useState<string | null>(null);
+  const [finderOpen, setFinderOpen] = useState(false);
+  const [lens, setLens] = useState<NodeKind[]>([]);
   const [probe, setProbe] = useState<{ from: string; to: string; path: string[]; step: number } | null>(null);
   const [probeNoRoute, setProbeNoRoute] = useState(false);
   const [chapterIdx, setChapterIdx] = useState<number>(-1);
@@ -50,11 +58,27 @@ export function Canvas({ model, modelId, viewId, onSelect }: { model: SystemMode
   const [motion, setMotion] = useState<'still' | 'motion'>('motion');
   const rfRef = useRef<ReactFlowInstance<Node, Edge> | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const previousViewRef = useRef(viewId);
+  const fittedCameraRef = useRef<string | null>(null);
+  const layoutKey = JSON.stringify([modelId, model.revision, viewId]);
 
   useEffect(() => {
     const stored = typeof localStorage !== 'undefined' ? localStorage.getItem(MOTION_KEY) : null;
     const osReduced = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     setMotion(motionMode(stored, osReduced ?? false));
+  }, []);
+
+  // `/` opens the node finder — never while typing in another input.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+      e.preventDefault();
+      setFinderOpen(true);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
   }, []);
 
   const view = model.views.find((v) => v.id === viewId);
@@ -69,6 +93,8 @@ export function Canvas({ model, modelId, viewId, onSelect }: { model: SystemMode
         return {
           id: n.id,
           position: { x: n.x, y: n.y },
+          sourcePosition: view?.orientation === 'LR' ? Position.Right : Position.Bottom,
+          targetPosition: view?.orientation === 'LR' ? Position.Left : Position.Top,
           data: { label: `${s.badge} · ${node.label}` },
           style: { width: n.width, height: n.height, border: `2px solid ${s.border}`, background: s.bg, color: '#e5e7eb', borderRadius: 10, display: 'grid', placeItems: 'center', fontSize: 13 },
         };
@@ -90,15 +116,18 @@ export function Canvas({ model, modelId, viewId, onSelect }: { model: SystemMode
         if (!Number.isFinite(min.x) || !Number.isFinite(w) || w <= 0 || h <= 0) return [];
         return [{ id: `bnd:${b.id}`, type: 'boundary', position: min, data: { label: b.label }, style: { width: w, height: h }, draggable: false, selectable: false, zIndex: -1 }];
       });
-      setPlaced({ nodes: [...hulls, ...nodes], edges });
+      setPlaced({ key: layoutKey, nodes: [...hulls, ...nodes], edges });
     });
     return () => { alive = false; };
-  }, [model, viewId, motion]);
+  }, [model, viewId, motion, layoutKey]);
 
   // permalinks: read once on mount, write on every interaction
   useEffect(() => {
     const h = readHash();
-    if (h.focus && model.nodes.some((n) => n.id === h.focus)) setFocusId(h.focus!);
+    const focusedNode = model.nodes.find((n) => n.id === h.focus);
+    const restoredLens = parseLens(h.lens);
+    const clearLens = focusedNode !== undefined && !lensPasses(focusedNode.kind, restoredLens);
+    if (focusedNode) setFocusId(focusedNode.id);
     if (h.route) {
       const [a, b] = h.route!.split('~');
       if (a && b) { setProbeFrom(a); setProbeTo(b); }
@@ -107,29 +136,93 @@ export function Canvas({ model, modelId, viewId, onSelect }: { model: SystemMode
       const i = model.guidedViews.findIndex((g) => g.id === h.chapter);
       if (i >= 0) setChapterIdx(i);
     }
+    setLens(clearLens ? [] : restoredLens);
+    if (clearLens) writeHash({ lens: null });
+    if (h.relation && model.edges.some((e) => e.id === h.relation)) { setRelationId(h.relation!); onSelect(h.relation!); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modelIdKey(model)]);
 
   const reach = useMemo(() => (focusId ? reachability(model, focusId) : null), [model, focusId]);
+  const kindOf = useMemo(() => new Map(model.nodes.map((n) => [n.id, n.kind])), [model]);
+  const viewEdges = useMemo(() => (view?.edges ?? []).flatMap((id) => { const e = model.edges.find((m) => m.id === id); return e ? [e] : []; }), [model, view]);
+  // flow tokens only when the motion governor allows it (§6) — never bypass
+  const pulseDelays = useMemo(() => (motion === 'motion' ? new Map(pulseOrder(viewEdges).map((id, i) => [id, -(i * 0.45)])) : new Map<string, number>()), [motion, viewEdges]);
+  const viewKinds = useMemo(() => lensKindsInView(model, view?.nodes ?? []), [model, view]);
+
+  const focusNode = (id: string) => {
+    const kind = kindOf.get(id);
+    const clearLens = kind !== undefined && !lensPasses(kind, lens);
+    if (clearLens) setLens([]);
+    stopTimer();
+    setProbe(null);
+    setProbeNoRoute(false);
+    onSelect(id);
+    setFocusId(id);
+    setRelationId(null);
+    writeHash({ focus: id, relation: null, route: null, ...(clearLens ? { lens: null } : {}) });
+  };
+  const setLensKinds = (k: NodeKind[]) => { setLens(k); writeHash({ lens: serializeLens(k) }); };
   const chapter = chapterIdx >= 0 ? model.guidedViews[chapterIdx] ?? null : null;
 
-  // chapter camera: fit the focus subset (instant in Still mode)
-  useEffect(() => {
-    if (!chapter || !rfRef.current) return;
-    const ids = chapter.focus.filter((id) => view?.nodes.includes(id));
-    if (ids.length) rfRef.current.fitView({ nodes: ids.map((id) => ({ id })), duration: motion === 'still' ? 0 : 600, padding: 0.25 });
-  }, [chapter, motion, view]);
+  // Fit after the replacement layout reaches React Flow, never against the old
+  // view's nodes. React Flow queues fitView until node measurement completes.
+  const fitCamera = useCallback(() => {
+    if (!rfRef.current || placed.key !== layoutKey || !placed.nodes.length) return;
+    const cameraKey = JSON.stringify([placed.key, chapter?.id ?? null]);
+    if (fittedCameraRef.current === cameraKey) return;
+    const ids = chapter?.focus.filter((id) => placed.nodes.some((node) => node.id === id)) ?? [];
+    fittedCameraRef.current = cameraKey;
+    void rfRef.current.fitView({
+      duration: motion === 'still' ? 0 : 600,
+      ...(ids.length ? { nodes: ids.map((id) => ({ id })), padding: 0.25 } : {}),
+    });
+  }, [placed, layoutKey, chapter, motion]);
+  useEffect(() => { fitCamera(); }, [fitCamera]);
 
   const stopTimer = () => { if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; } };
+
+  // An explicit view change keeps only interaction channels the new view can show.
+  // Mount is deliberately excluded so a complete permalink can restore first.
+  useEffect(() => {
+    if (previousViewRef.current === viewId) return;
+    previousViewRef.current = viewId;
+    const nodeIds = new Set(view?.nodes ?? []);
+    const edgeIds = new Set(view?.edges ?? []);
+    const patch: Record<string, string | null> = {};
+    const clearFocus = focusId !== null && !nodeIds.has(focusId);
+    const clearRelation = relationId !== null && !edgeIds.has(relationId);
+    if (clearFocus) { setFocusId(null); patch.focus = null; }
+    if (clearRelation) { setRelationId(null); patch.relation = null; }
+    if (relationId ? clearRelation : clearFocus) onDeselect();
+    if (probeFrom && !nodeIds.has(probeFrom)) setProbeFrom('');
+    if (probeTo && !nodeIds.has(probeTo)) setProbeTo('');
+    const nextLens = lens.filter((kind) => viewKinds.includes(kind));
+    if (nextLens.length !== lens.length) { setLens(nextLens); patch.lens = serializeLens(nextLens); }
+    if (chapter && !chapter.focus.some((id) => nodeIds.has(id))) { setChapterIdx(-1); patch.chapter = null; }
+    const savedRoute = readHash().route?.split('~');
+    const path = probe?.path ?? (savedRoute?.[0] && savedRoute[1] ? journey(model, savedRoute[0], savedRoute[1]) : null);
+    if (path && (!path.every((id) => nodeIds.has(id)) || path.slice(1).some((id, i) =>
+      !viewEdges.some((edge) => edge.from === path[i] && edge.to === id)))) {
+      stopTimer();
+      setProbe(null);
+      patch.route = null;
+    }
+    setProbeNoRoute(false);
+    if (Object.keys(patch).length) writeHash(patch);
+    // Reconcile only a view transition, using the interaction state at that time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewId]);
 
   const playProbe = (from: string, to: string) => {
     stopTimer();
     const path = journey(model, from, to);
     if (!path || path.length < 2) { setProbe(null); setProbeNoRoute(true); writeHash({ route: null }); return; }
     setProbeNoRoute(false);
-    if (motion === 'still') { setProbe({ from, to, path, step: path.length - 1 }); writeHash({ route: `${from}~${to}` }); return; }
+    setRelationId(null);
+    onDeselect();
+    writeHash({ route: `${from}~${to}`, relation: null });
+    if (motion === 'still') { setProbe({ from, to, path, step: path.length - 1 }); return; }
     setProbe({ from, to, path, step: 0 });
-    writeHash({ route: `${from}~${to}` });
     timerRef.current = setInterval(() => {
       setProbe((p) => (p && p.step + 1 < p.path.length ? { ...p, step: p.step + 1 } : p));
     }, 1100);
@@ -159,6 +252,9 @@ export function Canvas({ model, modelId, viewId, onSelect }: { model: SystemMode
 
   const decorate = (n: Node): Node => {
     if (n.type === 'boundary') return n;
+    // semantic lens is a filter channel: non-matching kinds dim before any focus decoration
+    const kind = kindOf.get(n.id);
+    if (lens.length > 0 && kind && !lensPasses(kind, lens)) return { ...n, className: 'aw-dim' };
     let cls = '';
     if (probe) {
       const i = probe.path.indexOf(n.id);
@@ -180,8 +276,19 @@ export function Canvas({ model, modelId, viewId, onSelect }: { model: SystemMode
       const i = probe.path.indexOf(e.source), j = probe.path.indexOf(e.target);
       cls = i >= 0 && j === i + 1 ? 'aw-edge-focus' : 'aw-dim-edge';
     } else if (focusId) cls = e.source === focusId || e.target === focusId ? 'aw-edge-focus' : 'aw-dim-edge';
-    const animated = e.animated === true && motion === 'motion';
-    return { ...e, className: cls, animated };
+    if (relationId && e.id === relationId) cls = 'aw-edge-focus';
+    // A lens dims relationships with a filtered endpoint, just as it dims nodes.
+    if (lens.length > 0 && [e.source, e.target].some((id) => {
+      const kind = kindOf.get(id);
+      return kind !== undefined && !lensPasses(kind, lens);
+    })) cls = 'aw-dim-edge';
+    // Dimmed edges never animate. Pulses subsume React Flow's async dash so
+    // one visible path never carries two dash animations.
+    const dimmed = cls === 'aw-dim-edge';
+    const pulse = !dimmed && pulseDelays.has(e.id);
+    if (pulse) cls = `${cls} aw-pulse`.trim();
+    const animated = e.animated === true && motion === 'motion' && !dimmed && !pulse;
+    return { ...e, className: cls, animated, style: pulse ? { ...e.style, animationDelay: `${pulseDelays.get(e.id)}s` } : e.style };
   });
 
   const selectCls = { fontSize: 11, padding: '2px 6px', borderRadius: 6, border: '1px solid #1f2937', background: '#111a2e', color: '#cbd5e1' } as const;
@@ -189,8 +296,8 @@ export function Canvas({ model, modelId, viewId, onSelect }: { model: SystemMode
   const viewNodes = view?.nodes ?? [];
 
   return (
-    <div style={{ width: '100%', height: '100%', position: 'relative' }}>
-      <div style={{ position: 'absolute', top: 36, left: 8, zIndex: 5, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+    <div className="aw-canvas" style={{ width: '100%', height: '100%', position: 'relative' }}>
+      <div className="aw-canvas-toolbar" style={{ position: 'absolute', top: 36, left: 8, zIndex: 5, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
         <select aria-label="route from" value={probeFrom} onChange={(e) => setProbeFrom(e.target.value)} style={selectCls} disabled={!!probe}>
           <option value="">from…</option>{viewNodes.map((id) => <option key={id} value={id}>{model.nodes.find((n) => n.id === id)?.label ?? id}</option>)}
         </select>
@@ -231,28 +338,42 @@ export function Canvas({ model, modelId, viewId, onSelect }: { model: SystemMode
           }}>⤓ share</button>
         )}
         {shareErr && <span style={{ fontSize: 11, color: '#fbbf24' }}>{shareErr}</span>}
-        <button style={btnCls} aria-pressed={motion === 'still'} onClick={() => { const m = motion === 'still' ? 'motion' : 'still'; setMotion(m); localStorage.setItem(MOTION_KEY, m); }}>
-          {motion === 'still' ? '◼ still' : '◉ motion'}
-        </button>
+        <div className="aw-canvas-tools" style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button style={btnCls} aria-pressed={motion === 'still'} onClick={() => { const m = motion === 'still' ? 'motion' : 'still'; setMotion(m); localStorage.setItem(MOTION_KEY, m); }}>
+            {motion === 'still' ? '◼ still' : '◉ motion'}
+          </button>
+          {viewKinds.length > 0 && (
+            <>
+              <span style={{ fontSize: 11, color: '#8b98b8' }}>lens</span>
+              {viewKinds.map((k) => (
+                <button key={k} aria-pressed={lens.includes(k)} onClick={() => setLensKinds(toggleLens(lens, k))}
+                  style={{ ...btnCls, borderColor: lens.includes(k) ? '#5eead4' : '#334155', background: lens.includes(k) ? '#0f2e2b' : '#111a2e', color: lens.includes(k) ? '#5eead4' : '#e5e7eb' }}>{k}</button>
+              ))}
+            </>
+          )}
+          <button type="button" style={btnCls} onClick={() => setFinderOpen(true)}>Find node /</button>
+        </div>
       </div>
       {chapter?.note && (
         <div style={{ position: 'absolute', bottom: 8, left: 8, zIndex: 5, maxWidth: 420, fontSize: 11, color: '#cbd5e1', background: '#111a2ecc', border: '1px solid #c4b5fd44', borderRadius: 8, padding: '6px 10px' }}>
           <strong style={{ color: '#c4b5fd' }}>{chapter.label}</strong> — {chapter.note}
         </div>
       )}
-      <ReactFlow
+      <div className="aw-flow-area"><ReactFlow
         nodes={nodes} edges={edges} nodeTypes={nodeTypes}
-        fitView fitViewOptions={{ duration: motion === 'still' ? 0 : 600 }}
-        onInit={(inst) => { rfRef.current = inst as ReactFlowInstance<Node, Edge>; }}
-        onNodeClick={(_, n) => { if (n.type === 'boundary') return; onSelect(n.id); setFocusId(n.id); writeHash({ focus: n.id }); }}
-        onPaneClick={() => { setFocusId(null); writeHash({ focus: null }); }}
-        onEdgeClick={(_, e) => onSelect(e.id)}
+        colorMode="dark"
+        onInit={(inst) => { rfRef.current = inst as ReactFlowInstance<Node, Edge>; fitCamera(); }}
+        onNodeClick={(_, n) => { if (n.type === 'boundary') return; focusNode(n.id); }}
+        onPaneClick={() => { setFocusId(null); setRelationId(null); writeHash({ focus: null, relation: null }); onDeselect(); }}
+        onEdgeClick={(_, e) => { setRelationId(e.id); onSelect(e.id); writeHash({ relation: e.id }); }}
         proOptions={{ hideAttribution: true }}
       >
         <Background gap={16} color="#1a2333" />
         <Controls />
-        <MiniMap pannable zoomable />
-      </ReactFlow>
+        {viewNodes.length > 12 && <MiniMap pannable zoomable />}
+      </ReactFlow></div>
+      <OutlineRail model={model} viewNodes={viewNodes} activeId={focusId} onFocusNode={focusNode} />
+      {finderOpen && <NodeFinder model={model} viewNodes={viewNodes} onPick={focusNode} onClose={() => setFinderOpen(false)} />}
     </div>
   );
 }

@@ -96,19 +96,27 @@ export function openStore(path = 'data/archwoven.db') {
   // dev-scratch DBs created before the gaps column: add it in place
   try { db.exec('ALTER TABLE jobs ADD COLUMN gaps TEXT'); } catch { /* column exists */ }
 
-  // Orphan sweep: an in-process job died with its process — settle it honestly
-  // and give back the credits it reserved.
-  const orphans = db.prepare("SELECT id, session_id, kind FROM jobs WHERE status IN ('running','queued')").all() as { id: string; session_id: string | null; kind: string }[];
-  db.prepare("UPDATE jobs SET status = 'failed', error = 'server restarted before completion' WHERE status IN ('running','queued')").run();
-  const refund = db.prepare('UPDATE credits SET used = MAX(0, used - ?) WHERE session_id = ? AND day = ?');
-  const today = new Date().toISOString().slice(0, 10);
-  for (const o of orphans) {
-    if (!o.session_id) continue;
-    const w = o.kind === 'refine' ? 0.25 : o.kind === 'repo' ? 2 : 1;
-    refund.run(w, o.session_id, today);
-  }
+  // NOTE: the orphan sweep does NOT live here. openStore is re-evaluated per
+  // route bundle in dev (Next compiles each route separately, separate realms —
+  // globalThis guards do not cross them), which would sweep live jobs.
+  // Boot-time sweep lives in apps/web/instrumentation.ts register() via sweepOrphans().
 
   return {
+    /** Orphan sweep: a job whose process died mid-flight is settled honestly and
+     *  its reserved credits returned. Called once at boot (instrumentation register),
+     *  never from openStore — dev re-evaluates openStore per route bundle. */
+    sweepOrphans(): number {
+      const orphans = db.prepare("SELECT id, session_id, kind FROM jobs WHERE status IN ('running','queued')").all() as { id: string; session_id: string | null; kind: string }[];
+      db.prepare("UPDATE jobs SET status = 'failed', error = 'server restarted before completion' WHERE status IN ('running','queued')").run();
+      const refund = db.prepare('UPDATE credits SET used = MAX(0, used - ?) WHERE session_id = ? AND day = ?');
+      const today = new Date().toISOString().slice(0, 10);
+      for (const o of orphans) {
+        if (!o.session_id) continue;
+        const w = o.kind === 'refine' ? 0.25 : o.kind === 'repo' ? 2 : 1;
+        refund.run(w, o.session_id, today);
+      }
+      return orphans.length;
+    },
     saveRevision(modelId: string, model: SystemModel, sessionId?: string): void {
       db.prepare('INSERT INTO revisions (model_id, revision, parent_id, json, session_id) VALUES (?, ?, ?, ?, ?)').run(
         modelId, model.revision, model.parentId ?? null, JSON.stringify(model), sessionId ?? null,
@@ -133,12 +141,23 @@ export function openStore(path = 'data/archwoven.db') {
     },
 
     createJob(job: { id: string; modelId: string; kind: 'generate' | 'refine' | 'repo'; idempotencyKey?: string; sessionId: string }): void {
-      db.prepare('INSERT INTO jobs (id, model_id, kind, idempotency_key, session_id) VALUES (?, ?, ?, ?, ?)').run(
-        job.id, job.modelId, job.kind, job.idempotencyKey ?? null, job.sessionId,
-      );
+      // A failed/cancelled attempt stays in history but must not permanently
+      // occupy the input key. Release and replace atomically so concurrent
+      // retries still converge on one active attempt within the same session.
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        if (job.idempotencyKey) db.prepare("UPDATE jobs SET idempotency_key = NULL WHERE session_id = ? AND idempotency_key = ? AND status IN ('failed', 'cancelled')").run(job.sessionId, job.idempotencyKey);
+        db.prepare('INSERT INTO jobs (id, model_id, kind, idempotency_key, session_id) VALUES (?, ?, ?, ?, ?)').run(
+          job.id, job.modelId, job.kind, job.idempotencyKey ?? null, job.sessionId,
+        );
+        db.exec('COMMIT');
+      } catch (error) {
+        db.exec('ROLLBACK');
+        throw error;
+      }
     },
     findJobByIdempotencyKey(key: string, sessionId: string): Job | null {
-      const r = db.prepare('SELECT * FROM jobs WHERE idempotency_key = ? AND session_id = ?').get(key, sessionId) as SqlRow | undefined;
+      const r = db.prepare("SELECT * FROM jobs WHERE idempotency_key = ? AND session_id = ? AND status NOT IN ('failed', 'cancelled')").get(key, sessionId) as SqlRow | undefined;
       return r ? rowToJob(r) : null;
     },
     updateJob(id: string, patch: { status?: JobStatus; stage?: string; error?: string; gaps?: string[] }): void {

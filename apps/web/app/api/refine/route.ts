@@ -3,6 +3,7 @@ import { applyEditOps, type ViewType } from '@archwoven/model';
 import {
   serverDeps, readOrCreateSession, sessionCookie, tierOf,
   creditsExhaustedCopy, STOP_LOSS_COPY, BURST_COPY,
+  llmNotConfigured, LLM_NOT_CONFIGURED_COPY,
 } from '../../lib/server';
 import { withSlot } from '../../lib/llm-limiter';
 
@@ -37,6 +38,8 @@ export async function POST(req: Request) {
   // Optimistic concurrency: the client must refine the revision it is looking at.
   if (baseRevision !== latest.revision)
     return Response.json({ reason: 'stale-revision', message: 'The diagram changed since you loaded it — here is the latest.', model: latest, revision: latest.revision }, { status: 409, headers });
+
+  if (llmNotConfigured()) return Response.json({ reason: 'llm-not-configured', message: LLM_NOT_CONFIGURED_COPY }, { status: 503, headers });
 
   const tier = tierOf(sessionId);
   const day = new Date().toISOString().slice(0, 10);

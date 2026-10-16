@@ -4,6 +4,7 @@ import { validateModel, type ViewType } from '@archwoven/model';
 import {
   serverDeps, estimateTokens, PROMPT_TOKEN_LIMIT, readOrCreateSession, sessionCookie, tierOf,
   creditsExhaustedCopy, STOP_LOSS_COPY, OVERSIZED_COPY, BURST_COPY,
+  llmNotConfigured, LLM_NOT_CONFIGURED_COPY,
 } from '../../lib/server';
 import { withSlot, slotPosition } from '../../lib/llm-limiter';
 import { deployMode, privacyForMode } from '../../lib/mode';
@@ -28,6 +29,7 @@ export async function POST(req: Request) {
   const view = VALID_VIEWS.includes(body.view as ViewType) ? (body.view as ViewType) : null;
   if (!prompt.trim() || !view) return Response.json({ error: 'prompt and view are required' }, { status: 400, headers });
   if (estimateTokens(prompt) > PROMPT_TOKEN_LIMIT) return Response.json({ reason: 'oversized', message: OVERSIZED_COPY }, { status: 413, headers });
+  if (llmNotConfigured()) return Response.json({ reason: 'llm-not-configured', message: LLM_NOT_CONFIGURED_COPY }, { status: 503, headers });
 
   const tier = tierOf(sessionId);
   const key = body.idempotencyKey ? String(body.idempotencyKey) : undefined;

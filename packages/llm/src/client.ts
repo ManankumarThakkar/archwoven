@@ -79,25 +79,171 @@ export interface StructuredClient {
 }
 
 /**
+ * Convert a zod JSON schema into Anthropic's strict structured-outputs grammar
+ * (verified live + platform docs):
+ * - strips unsupported constraints (minimum/maximum/multipleOf, minItems>1/
+ *   maxItems/uniqueItems, minLength/maxLength/pattern/format) — validateModel
+ *   still enforces every one of them server-side on the response;
+ * - every object gets additionalProperties:false (the API demands it);
+ * - record/map nodes (object without properties — z.record) become JSON-encoded
+ *   string fields, the only shape the grammar can express for dynamic keys;
+ *   callers parse them back at their response boundary;
+ * - dropProperties removes top-level properties entirely (layout is computed
+ *   server-side — the model must not spend tokens guessing coordinates).
+ * enum/const/required/properties/items survive — that is the grammar that
+ * keeps output shaped.
+ */
+const UNSUPPORTED_KEYWORDS = new Set([
+  'minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum', 'multipleOf',
+  'maxItems', 'uniqueItems', 'contains',
+  'minLength', 'maxLength', 'pattern', 'format',
+  'contentEncoding', 'contentMediaType',
+]);
+
+const isNullable = (s: unknown): boolean => {
+  if (!s || typeof s !== 'object') return false;
+  const o = s as Record<string, unknown>;
+  if (o.type === 'null') return true;
+  if (Array.isArray(o.type) && o.type.includes('null')) return true;
+  if (Array.isArray(o.anyOf) && o.anyOf.some(isNullable)) return true;
+  return false;
+};
+const asNullable = (s: unknown): unknown => (isNullable(s) ? s : { anyOf: [s, { type: 'null' }] });
+
+export function wireSchema(
+  node: unknown,
+  opts: { dropTopLevel?: readonly string[]; stringify?: Readonly<Record<string, string>>; atTop?: boolean; requireAllProperties?: boolean } = {},
+): unknown {
+  if (Array.isArray(node)) return node.map((n) => wireSchema(n, { ...opts, atTop: false }));
+  if (!node || typeof node !== 'object') return node;
+  const o = node as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(o)) {
+    if (UNSUPPORTED_KEYWORDS.has(k)) continue;
+    // minItems: only 0 or 1 are supported
+    if (k === 'minItems' && v !== 0 && v !== 1) continue;
+    // record subschema — the {type:'object'}-without-properties node replaces it below
+    if (k === 'additionalProperties' && typeof v === 'object') continue;
+    if (k === 'properties') {
+      const props: Record<string, unknown> = {};
+      for (const [pk, pv] of Object.entries(v as Record<string, unknown>)) {
+        if (opts.atTop && opts.dropTopLevel?.includes(pk)) continue;
+        // deep nested shapes exceed the grammar's union cap as objects —
+        // they travel as JSON-encoded strings, decoded by decodeWireModel
+        const wireName = opts.stringify?.[pk];
+        if (wireName) {
+          props[wireName] = { type: 'string', description: `JSON-encoded ${pk} (compact JSON, no commentary)` };
+          continue;
+        }
+        props[pk] = wireSchema(pv, { ...opts, atTop: false });
+      }
+      out[k] = props;
+      continue;
+    }
+    if (k === 'required' && opts.atTop && opts.dropTopLevel?.length) {
+      out[k] = (v as string[]).filter((r) => !opts.dropTopLevel!.includes(r));
+      continue;
+    }
+    out[k] = wireSchema(v, { ...opts, atTop: false });
+  }
+  if (out.type === 'object' && out.properties === undefined) {
+    // record/map → JSON-encoded object string (strict grammar cannot hold dynamic keys)
+    const d = typeof out.description === 'string' ? `${out.description} ` : '';
+    return { type: 'string', description: `${d}JSON-encoded object` };
+  }
+  if (out.type === 'object' && out.properties) {
+    if (opts.requireAllProperties === false) {
+      // Text prompts keep the model's optional/default semantics. The API-only
+      // all-required/null workaround otherwise asks for invalid default arrays
+      // (e.g. openQuestions:null) and parentId:null on a new model.
+      out.required = ((out.required as string[]) ?? []).map((key) => opts.stringify?.[key] ?? key);
+      out.additionalProperties = false;
+      return out;
+    }
+    // strict grammar caps optional params (≤24, schema had 27): every property
+    // becomes required; zod-optional ones carry null in their type instead.
+    // Safe because the model schema uses .nullish() (null-accepting) throughout.
+    const props = out.properties as Record<string, unknown>;
+    const origRequired = new Set((out.required as string[]) ?? []);
+    for (const pk of Object.keys(props)) {
+      if (!origRequired.has(pk)) props[pk] = asNullable(props[pk]);
+    }
+    out.required = Object.keys(props);
+    out.additionalProperties = false;
+  }
+  return out;
+}
+
+/**
  * Faithful JSON schema sent to the API. We deliberately do NOT use the SDK's
  * zodOutputFormat(): its transformJSONSchema strips `enum`/`minLength`/`default`
  * into the description string, so the grammar stops constraining kind/type/
  * provenance and the model drifts to a generic source/target/kind shape.
  * `reused:'inline'` avoids $defs/$ref so the grammar is fully explicit.
+ * Numeric bounds are stripped for API compatibility (stripNumericBounds).
  */
-export const faithfulSchema = z.toJSONSchema(SystemModelSchema, {
+// evidence/fields/sequence travel as JSON strings: as objects their nested
+// nullables blow the grammar's ≤16-union cap (verified live: 27 unions).
+export const WIRE_STRINGIFIED: Readonly<Record<string, string>> = {
+  evidence: 'evidenceJson',
+  fields: 'fieldsJson',
+  sequence: 'sequenceJson',
+};
+
+export const faithfulSchema = wireSchema(z.toJSONSchema(SystemModelSchema, {
   reused: 'inline',
   target: 'draft-2020-12',
+}), { dropTopLevel: ['layout'], stringify: WIRE_STRINGIFIED, atTop: true }) as Record<string, unknown>;
+
+/** Hosted calls cannot use the API grammar. Derive its textual contract from
+ * the model schema with the same wire keys, keeping optional/default semantics
+ * instead of the strict grammar's API-only all-required/null workaround. */
+const promptSchema = wireSchema(z.toJSONSchema(SystemModelSchema, {
+  reused: 'inline', target: 'draft-2020-12',
+}), { dropTopLevel: ['layout'], stringify: WIRE_STRINGIFIED, atTop: true, requireAllProperties: false });
+
+export const MODEL_JSON_CONTRACT = `Output must conform to this JSON schema. Use the exact property names and enum values; additional properties are forbidden. evidenceJson and fieldsJson contain JSON-encoded arrays; sequenceJson contains a JSON-encoded object with participants and messages. Omit absent optional fields. On a new model omit parentId. layout is computed by the server and must be omitted.
+<model-json-schema>
+${JSON.stringify(promptSchema)}
+</model-json-schema>`;
+
+/** Ollama supports the native schema directly: no Anthropic grammar workarounds,
+ * encoded JSON strings or forced nullable defaults. New models have no parent
+ * and layout is computed by the server. The same schema is sent as `format`. */
+export const NATIVE_MODEL_JSON_SCHEMA = z.toJSONSchema(SystemModelSchema.omit({ layout: true, parentId: true }), {
+  reused: 'inline', target: 'draft-2020-12', io: 'input',
 });
+export const NATIVE_MODEL_JSON_CONTRACT = `Output must conform to this JSON schema. Use native JSON values: evidence and fields are arrays, sequence is an object with participants and messages. Omit absent optional fields; never replace default arrays with null. New models omit parentId and layout is computed by the server.
+<model-json-schema>
+${JSON.stringify(NATIVE_MODEL_JSON_SCHEMA)}
+</model-json-schema>`;
+
+/** Decode wire-encoded JSON-string fields back to their schema shapes, at any depth. */
+export function decodeWireModel(node: unknown): unknown {
+  if (Array.isArray(node)) return node.map(decodeWireModel);
+  if (!node || typeof node !== 'object') return node;
+  const o = node as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(o)) {
+    const wireKey = Object.entries(WIRE_STRINGIFIED).find(([, w]) => w === k)?.[0];
+    if (wireKey && typeof v === 'string') {
+      try { out[wireKey] = JSON.parse(v); } catch { out[wireKey] = v; /* leave — validation reports it */ }
+      continue;
+    }
+    out[k] = decodeWireModel(v);
+  }
+  return out;
+}
 
 /**
  * Stable system prefix — frozen bytes so prompt caching hits across every call.
  * Volatile content (the user prompt) goes in the message, never here.
  */
-export const STABLE_SYSTEM = `You are Archwoven's architecture design model. Emit ONLY a valid Archwoven system model JSON (schemaVersion "1").
+const modelSystem = (contract: string, privacy: 'public' | 'private'): string => `You are Archwoven's architecture design model. Emit ONLY a valid Archwoven system model JSON (schemaVersion "1").
 
 Hard rules:
 - revision is always 1 for a new model; parentId omitted.
+- privacy is exactly ${JSON.stringify(privacy === 'private' ? { classification: 'private', boundary: 'local-only' } : { classification: 'public', boundary: 'external-allowed' })} — no other keys, no other values (the server re-stamps it from the deployment mode).
 - ids are stable, lowercase, dotted: svc.orders, entity.user, e.api-orders.
 - every node and edge carries provenance: user-specified (stated by the user), source-supported (seen in code), inferred (reasonable deduction), proposed (your recommendation, not the user's).
 - never invent business-critical components as user-specified; when unsure use inferred or proposed.
@@ -105,7 +251,12 @@ Hard rules:
 - ER views: entity nodes with fields (name, type, key pk|fk|uk) and relation edges with cardinality 1:1|1:N|N:M.
 - every view lists its member node ids and edge ids; every referenced id exists.
 - labels short (<= 40 chars); no HTML, no markdown, no comments in the JSON.
-- Optional semantic fields — emit when they genuinely hold: semanticChecks (allowedRoots/allowedTerminals = nodes legitimately without incoming/outgoing edges, requiredEdges/requiredPaths = bindings and paths the architecture really has), view mainPath (ordered node ids along real forward edges), edge role (main|branch|async|return|error), boundaries (wraps node ids, a node sits in at most one), guidedViews (<= 5 chapters, focus = node ids, note explains the chapter). Never emit a check your own output would fail.`;
+- Optional semantic fields — emit when they genuinely hold: semanticChecks (allowedRoots/allowedTerminals = nodes legitimately without incoming/outgoing edges, requiredEdges/requiredPaths = bindings and paths the architecture really has), view mainPath (ordered node ids along real forward edges), edge role (main|branch|async|return|error), boundaries (wraps node ids, a node sits in at most one), guidedViews (<= 5 chapters, focus = node ids, note explains the chapter). Never emit a check your own output would fail.
+
+${contract}`;
+
+export const STABLE_SYSTEM = modelSystem(MODEL_JSON_CONTRACT, 'public');
+export const LOCAL_MODEL_SYSTEM = modelSystem(NATIVE_MODEL_JSON_CONTRACT, 'private');
 
 export function usageFrom(usage: RawUsage, effort: Effort, latencyMs: number, repairs: number): TaskUsage {
   return {
@@ -125,8 +276,8 @@ const textOf = (content: { type: string; text?: string }[]) =>
 
 /**
  * Generate (or repair) a system model for one view.
- * Structured output is constrained to a faithful SystemModelSchema via the beta
- * endpoint; graph validation runs client-side and validator errors are fed back
+ * The prompt carries the schema; hosted calls do not send an API grammar.
+ * Shape and graph validation run server-side and validator errors are fed back
  * for up to MAX_REPAIRS rounds. We use .create() + our own parse so that a
  * truncated or invalid response still yields the raw text we can quote back to
  * the model — .parse() throws and discards it, so repairs never converge.
@@ -171,13 +322,16 @@ export async function generateModel(
   for (let attempt = 0; attempt <= MAX_REPAIRS; attempt++) {
     let response: Awaited<ReturnType<StructuredClient['beta']['messages']['create']>>;
     try {
+      // No structured-output grammar on hosted generate: the full
+      // SystemModelSchema exceeds the API's grammar limits (verified live:
+      // >16 unions, then "compiled grammar is too large"). Shape is enforced
+      // by the repair loop + validateModel server-side; the prompt carries
+      // the grammar (STABLE_SYSTEM).
       response = await client.beta.messages.create({
         model: MODEL,
         max_tokens: MAX_TOKENS,
-        betas: [STRUCTURED_OUTPUTS_BETA],
         system,
         messages,
-        output_config: { format: { type: 'json_schema', schema: faithfulSchema, name: 'system_model' }, effort },
       });
     } catch (e) {
       lastErrors = [`request failed: ${e instanceof Error ? e.message : String(e)}`];
@@ -188,7 +342,7 @@ export async function generateModel(
     const text = textOf(response.content);
     let parsed: unknown;
     try {
-      parsed = JSON.parse(text);
+      parsed = decodeWireModel(JSON.parse(text));
     } catch (e) {
       lastErrors = [`output was not valid JSON (${response.stop_reason ?? 'unknown'}): ${e instanceof Error ? e.message : String(e)}`];
       if (attempt < MAX_REPAIRS) {

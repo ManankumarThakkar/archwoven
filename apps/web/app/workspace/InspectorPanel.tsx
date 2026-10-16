@@ -1,8 +1,9 @@
 'use client';
 
 import type { InspectorPayload } from './inspector';
+import type { Passport } from './passport';
 
-export function Inspector({ payload, gaps }: { payload: InspectorPayload | null; gaps?: string[] }) {
+export function Inspector({ payload, gaps, passport }: { payload: InspectorPayload | null; gaps?: string[]; passport?: Passport | null }) {
   if (!payload) {
     if (gaps && gaps.length > 0) {
       return (
@@ -25,6 +26,14 @@ export function Inspector({ payload, gaps }: { payload: InspectorPayload | null;
       </div>
       {payload.kind === 'edge' && payload.endpoints && (
         <div style={{ fontSize: 13, color: '#93c5fd' }}>{payload.endpoints.from} → {payload.endpoints.to} · {payload.type}</div>
+      )}
+      {payload.kind === 'edge' && passport && (
+        <div style={{ border: '1px solid #5eead444', background: '#0f2e2b66', borderRadius: 8, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div style={{ fontSize: 11, color: '#5eead4', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Relationship passport</div>
+          <div style={{ fontSize: 13, color: '#e5e7eb' }}>{passport.fromLabel} → {passport.toLabel}</div>
+          <div style={{ fontSize: 12, color: '#93c5fd' }}>{passport.edgeLabel} · {passport.edgeKind}</div>
+          <div style={{ fontSize: 11, color: '#8b98b8' }}>{passport.provenance} · {passport.evidenceCount} evidence {passport.evidenceCount === 1 ? 'item' : 'items'}</div>
+        </div>
       )}
       {payload.role && <p style={{ fontSize: 13, color: '#8b98b8' }}>{payload.role}</p>}
 

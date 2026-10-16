@@ -125,6 +125,9 @@ export async function unpackTarball(tarball: ArrayBufferView | ArrayBuffer, dest
     if (raw.startsWith('/') || /^[A-Za-z]:[\\/]/.test(raw)) { skipped.push({ path: gapPath, reason: 'absolute-path' }); continue; }
     if (typeflag === '2') { skipped.push({ path: gapPath, reason: 'symlink' }); continue; }
     if (typeflag === '1') { skipped.push({ path: gapPath, reason: 'hardlink' }); continue; }
+    // Directories carry no source content; files create their own parents.
+    // Validate raw paths above, then ignore these normal archive records.
+    if (typeflag === '5') continue;
     if (typeflag !== '0' && typeflag !== '7') { skipped.push({ path: gapPath, reason: `type:${typeflag}` }); continue; }
 
     if (!rel) continue; // the stripped root prefix itself

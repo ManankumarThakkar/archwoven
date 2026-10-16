@@ -36,6 +36,28 @@ function fakeClient(canned: (unknown | null)[], opts: { countedTokens?: number; 
 }
 
 describe('generateModel (mocked SDK)', () => {
+  it('decodes hosted wire evidence, ER fields and complete sequence metadata before validation', async () => {
+    const wire = {
+      schemaVersion: '1', revision: 1, title: 'Hosted sequence',
+      nodes: [
+        { id: 'actor.user', kind: 'actor', label: 'User', provenance: 'inferred', evidenceJson: '[{"note":"request actor"}]' },
+        { id: 'svc.api', kind: 'service', label: 'API', provenance: 'source-supported', evidenceJson: '[{"path":"main.py"}]' },
+        { id: 'entity.user', kind: 'entity', label: 'User record', provenance: 'source-supported', fieldsJson: '[{"name":"id","type":"uuid","key":"pk"}]' },
+      ],
+      edges: [],
+      views: [{ id: 'view.sequence', type: 'sequence', nodes: ['actor.user', 'svc.api'], edges: [], sequenceJson: '{"participants":["actor.user","svc.api"],"messages":[{"seq":1,"from":"actor.user","to":"svc.api","label":"GET /users","kind":"call"}]}' }],
+      privacy: { classification: 'public', boundary: 'external-allowed' },
+    };
+    const { client } = fakeClient([wire]);
+    const out = await generateModel('read users', 'sequence', { client });
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.usage.repairs).toBe(0);
+    expect(out.model.nodes[1]!.evidence).toEqual([{ path: 'main.py' }]);
+    expect(out.model.nodes[2]!.fields).toEqual([{ name: 'id', type: 'uuid', key: 'pk' }]);
+    expect(out.model.views[0]!.sequence).toEqual({ participants: ['actor.user', 'svc.api'], messages: [{ seq: 1, from: 'actor.user', to: 'svc.api', label: 'GET /users', kind: 'call' }] });
+  });
+
   it('returns the model on first valid pass, zero repairs, meters usage', async () => {
     const { client, calls } = fakeClient([validFull]);
     const r = await generateModel('an e-commerce site', 'architecture', { client });
@@ -75,17 +97,45 @@ describe('generateModel (mocked SDK)', () => {
     expect(JSON.stringify(calls[1])).toContain('not complete valid JSON');
   });
 
-  it('sends the beta header and a faithful schema that keeps enum constraints', async () => {
+  it('sends no grammar on hosted generate — prompt carries the shape, validateModel enforces it', async () => {
     const { client, calls } = fakeClient([validFull]);
     await generateModel('x', 'architecture', { client });
-    const first = calls[0] as { betas: string[]; system: { text: string; cache_control?: { type: string } }[]; output_config: { format: { schema: any }; effort: string } };
-    expect(first.betas).toContain('structured-outputs-2025-12-15');
+    const first = calls[0] as { betas?: string[]; system: { text: string; cache_control?: { type: string } }[]; output_config?: unknown };
+    // SystemModelSchema exceeds the API's grammar limits (verified live) —
+    // the grammar must NOT be on the wire; the prompt + repair loop enforce it.
+    expect(first.output_config).toBeUndefined();
+    expect(first.betas).toBeUndefined();
     expect(first.system[0]!.cache_control).toEqual({ type: 'ephemeral' });
     expect(first.system[0]!.text).toBe(STABLE_SYSTEM);
-    expect(first.output_config.effort).toBe('medium');
-    // enum survives on the wire — the SDK's zodOutputFormat would have stripped it
-    expect(first.output_config.format.schema.properties.edges.items.properties.type.enum).toEqual(['sync', 'async', 'data', 'relation', 'control']);
-    expect('$defs' in faithfulSchema).toBe(false);
+    const contractText = first.system[0]!.text.split('<model-json-schema>')[1]?.split('</model-json-schema>')[0];
+    expect(contractText, 'hosted generation must receive its output contract in the prompt').toBeDefined();
+    const contract = JSON.parse(contractText!);
+    expect(contract.properties.views.items.properties.type.enum).toEqual(['architecture', 'sequence', 'er', 'component-detail']);
+    expect(contract.properties.nodes.items.properties).toHaveProperty('evidenceJson');
+    expect(contract.properties.views.items.properties).toHaveProperty('sequenceJson');
+  });
+
+  it('wire schema carries no unsupported constraint keywords — Anthropic structured outputs 400s on them', () => {
+    const UNSUPPORTED = ['minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum', 'multipleOf',
+      'maxItems', 'uniqueItems', 'contains', 'minLength', 'maxLength', 'pattern', 'format',
+      'contentEncoding', 'contentMediaType'];
+    const walk = (n: unknown): void => {
+      if (Array.isArray(n)) return n.forEach(walk);
+      if (n && typeof n === 'object') {
+        const o = n as Record<string, unknown>;
+        for (const k of UNSUPPORTED) expect(o).not.toHaveProperty(k);
+        if ('minItems' in o) expect([0, 1]).toContain(o.minItems); // only 0|1 supported
+        if (o.type === 'object' && o.properties) expect(o.additionalProperties).toBe(false); // strict required
+        if (o.type === 'object' && !o.properties) expect(typeof o.additionalProperties).not.toBe('object'); // records → strings
+        Object.values(o).forEach(walk);
+      }
+    };
+    walk(faithfulSchema);
+    // the grammar that must survive:
+    expect((faithfulSchema.properties as Record<string, unknown>).revision).toEqual({ type: 'integer' });
+    expect(((faithfulSchema.properties as any).edges.items.properties.type as { enum: string[] }).enum).toEqual(['sync', 'async', 'data', 'relation', 'control']);
+    // layout is server-computed — the model never emits it
+    expect(faithfulSchema.properties).not.toHaveProperty('layout');
   });
 
   it('sends max_tokens at the §15-locked ceiling, never above', async () => {

@@ -31,6 +31,19 @@ describe('unpackTarball (§14 tarball safety)', () => {
     expect(r.skipped.find((s) => s.path === '/etc/passwd')?.reason).toMatch(/absolute/i);
   });
 
+  it('ignores ordinary directory headers without hiding unsafe directory paths', async () => {
+    const dest = mkDest();
+    const buf = tar([
+      tarEntry('repo-a/', '', '5'), tarEntry('repo-a/src/', '', '5'),
+      tarEntry('repo-a/../../escape/', '', '5'), tarEntry('/outside/', '', '5'),
+      tarEntry('repo-a/src/main.py', 'app = 1'),
+    ]);
+    const r = await unpackTarball(buf, dest, CAPS);
+    expect(r.files).toEqual(['src/main.py']);
+    expect(r.skipped.map((s) => s.reason)).toEqual(['traversal', 'absolute-path']);
+    expect(existsSync(join(dest, 'src/main.py'))).toBe(true);
+  });
+
   it('rejects symlinks and hardlinks, gap-lists them, never follows', async () => {
     const dest = mkDest();
     const buf = tar([tarEntry('repo-a/escape', '', '2', '/'), tarEntry('repo-a/hard', '', '1', '/etc/passwd'), tarEntry('repo-a/main.py', 'app = 1')]);

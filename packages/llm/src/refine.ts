@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { EditOpSchema, applyEditOps, type EditOp, type SystemModel, type ViewType } from '@archwoven/model';
 import {
-  CONTEXT_TOKEN_LIMIT, MAX_REPAIRS, MODEL, STRUCTURED_OUTPUTS_BETA, fakeMode, makeAnthropic, resolveApiKey, usageFrom,
+  CONTEXT_TOKEN_LIMIT, MAX_REPAIRS, MODEL, STRUCTURED_OUTPUTS_BETA, fakeMode, makeAnthropic, resolveApiKey, usageFrom, wireSchema,
   type Effort, type StructuredClient,
 } from './client';
 import type { RawUsage } from './client';
@@ -10,9 +10,9 @@ export type RefineOutcome =
   | { ok: true; ops: EditOp[]; usage: ReturnType<typeof usageFrom> }
   | { ok: false; errors: string[]; usage: ReturnType<typeof usageFrom> };
 
-export const REFINEMENT_SYSTEM = `You are Archwoven's refinement model. Given the current system model JSON and one user instruction, emit ONLY a JSON array of EditOps that implements the instruction — never the whole model.
+const refinementSystem = (wire: boolean): string => `You are Archwoven's refinement model. Given the current system model JSON and one user instruction, emit ONLY a JSON array of EditOps that implements the instruction — never the whole model.
 
-EditOp shape: { op: "add"|"remove"|"update"|"move", target: id, patch: {...}, baseRevision: <current revision>, summary: "<short human summary>" }.
+EditOp shape: { op: "add"|"remove"|"update"|"move", target: id, patch: ${wire ? '"<JSON-encoded object>"' : '{<native JSON properties>}'}, baseRevision: <current revision>, summary: "<short human summary>" }. The patch field is ${wire ? 'a STRING containing the JSON object' : 'an OBJECT containing native JSON properties'}. Example patch encoding: ${JSON.stringify({ patch: wire ? JSON.stringify({ id: 'svc.cache', kind: 'service' }) : { id: 'svc.cache', kind: 'service' } })}.
 Hard rules:
 - baseRevision must equal the current model revision exactly.
 - add patch for a node: full node {id, kind, label, provenance}; for an edge: full edge {id, from, to, type, provenance}. Edge endpoints must already exist in the model.
@@ -21,7 +21,10 @@ Hard rules:
 - never invent business-critical components as user-specified; use "proposed" unless the instruction states it.
 - fewest ops that satisfy the instruction; no comments, no markdown.`;
 
-const opsSchema = z.toJSONSchema(z.array(EditOpSchema), { reused: 'inline', target: 'draft-2020-12' });
+export const REFINEMENT_SYSTEM = refinementSystem(true);
+export const LOCAL_REFINEMENT_SYSTEM = refinementSystem(false);
+
+const opsSchema = wireSchema(z.toJSONSchema(z.array(EditOpSchema), { reused: 'inline', target: 'draft-2020-12' }));
 
 const textOf = (content: { type: string; text?: string }[]) =>
   content.filter((b) => b.type === 'text').map((b) => b.text ?? '').join('');
@@ -80,7 +83,7 @@ export async function generateRefinement(
         betas: [STRUCTURED_OUTPUTS_BETA],
         system,
         messages,
-        output_config: { format: { type: 'json_schema', schema: opsSchema, name: 'edit_ops' }, effort },
+        output_config: { format: { type: 'json_schema', schema: opsSchema }, effort },
       });
     } catch (e) {
       lastErrors = [`request failed: ${e instanceof Error ? e.message : String(e)}`];
@@ -92,6 +95,14 @@ export async function generateRefinement(
     let ops: unknown;
     try {
       ops = JSON.parse(text);
+      // wire grammar encodes patch (a z.record) as a JSON string — decode back to object
+      if (Array.isArray(ops)) {
+        for (const op of ops) {
+          if (op && typeof op === 'object' && typeof (op as { patch?: unknown }).patch === 'string') {
+            try { (op as { patch: unknown }).patch = JSON.parse((op as { patch: string }).patch); } catch { /* leave — schema error surfaces */ }
+          }
+        }
+      }
     } catch (e) {
       lastErrors = [`ops were not valid JSON: ${e instanceof Error ? e.message : String(e)}`];
       if (attempt < MAX_REPAIRS) {

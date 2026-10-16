@@ -1,4 +1,68 @@
 :root { color-scheme: dark; }
+*, *::before, *::after { box-sizing: border-box; }
+body { min-width: 0; }
+button, input, textarea, select { font: inherit; }
+button { transition: border-color 160ms, background-color 160ms, box-shadow 160ms; }
+button:not(:disabled):hover { filter: brightness(1.12); }
+button:disabled { cursor: not-allowed !important; }
+textarea::placeholder, input::placeholder { color: #8290aa; opacity: 1; }
+
+.aw-workspace { display: flex; flex-direction: column; height: 100dvh; min-height: 600px; background: #080d17; color: #e5e7eb; }
+.aw-header { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 15px 24px; border-bottom: 1px solid #253044; background: #0b1220; }
+.aw-brand { display: inline-flex; align-items: center; color: #f0f5ff; text-decoration: none; font-weight: 750; font-size: 20px; letter-spacing: -0.7px; }
+.aw-brand > span:last-child { color: #5eead4; }
+.aw-brand-mark { display: grid; place-items: center; width: 30px; height: 30px; margin-right: 10px; border: 1px solid #28615d; border-radius: 9px; background: #143633; color: #8bf3df; font-size: 22px; }
+.aw-header-caption { color: #8796af; font-size: 12px; padding-left: 14px; border-left: 1px solid #334155; }
+.aw-header-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-left: auto; min-width: 0; max-width: 100%; }
+.aw-header-status > span { overflow-wrap: anywhere; line-height: 1.6; }
+.workspace-shell { min-width: 0; }
+.workspace-shell > aside { flex-shrink: 0; overflow-wrap: anywhere; }
+.aw-create-panel { display: flex; flex-direction: column; gap: 14px; padding: 26px 24px; width: 380px; min-width: 0; overflow-y: auto; border-right: 1px solid #253044; background: linear-gradient(160deg, #111c2c, #0b1322 70%); }
+.aw-eyebrow { font: 600 10px/1.6 ui-monospace, SFMono-Regular, monospace; letter-spacing: 1.5px; color: #83b6b4; }
+.aw-panel-intro { padding: 0 0 12px; }
+.aw-panel-intro h1 { font-size: 34px; line-height: 1.1; font-weight: 650; letter-spacing: -1.2px; margin: 14px 0 12px; }
+.aw-panel-intro h1 span { color: #68e1d0; }
+.aw-panel-intro p { font-size: 13px; line-height: 1.7; color: #a3b0c5; margin: 0; max-width: 290px; }
+.aw-create-panel button { min-height: 36px; }
+.aw-create-panel .aw-primary { min-height: 46px; margin-top: 4px; background: linear-gradient(110deg, #66e4ce, #80cce8) !important; box-shadow: 0 5px 24px #43b6a614; font-size: 14px; }
+.aw-field-label { font-size: 12px; font-weight: 600; color: #c9d5e6; margin-bottom: -7px; }
+.aw-field-help { font-size: 12px; line-height: 1.6; color: #93a4bd; margin: -6px 0 0; }
+.aw-repo-option { display: flex; flex-direction: column; gap: 7px; flex: 1; min-width: 0; font-size: 11px; color: #a3b0c5; }
+.aw-panel-footer { margin-top: auto; padding-top: 22px; border-top: 1px solid #253044; color: #8194af; font-size: 11px; line-height: 1.7; }
+.aw-panel-footer span { color: #68e1d0; }
+.aw-empty-main { flex: 1; min-width: 0; display: grid; place-items: center; padding: 40px 32px; color: #a3b0c5; overflow: auto; background-image: radial-gradient(#40537432 1px, transparent 1px), radial-gradient(ellipse at 50% 30%, #102b333b, transparent 65%); background-size: 22px 22px, 100% 100%; }
+.aw-welcome { width: 100%; max-width: 790px; text-align: center; }
+.aw-welcome h2 { margin: 20px 0 16px; color: #edf2fa; font-size: clamp(30px, 3.2vw, 50px); font-weight: 550; letter-spacing: -1.7px; line-height: 1.15; }
+.aw-welcome h2 span { color: #70d7ca; }
+.aw-welcome > p { font-size: 14px; line-height: 1.8; max-width: 440px; margin: 0 auto; color: #96a7c1; }
+.aw-map-preview { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 50px 0 38px; }
+.aw-preview-node { text-align: left; padding: 18px; border: 1px solid #4f84b35e; border-top: 2px solid #76b7f1; border-radius: 10px; background: linear-gradient(140deg, #16273b, #0d1727); box-shadow: 0 14px 35px #0003; min-width: 0; flex: 1; max-width: 190px; }
+.aw-preview-node > span { color: #8bb4df; font: 9px ui-monospace, monospace; letter-spacing: 0.5px; }
+.aw-preview-node strong { display: block; margin-top: 13px; font-size: 16px; color: #e5efff; font-weight: 550; }
+.aw-preview-node small { display: block; color: #8398b3; font-size: 10px; margin-top: 7px; }
+.aw-preview-service { border-color: #4d9c8c5e; border-top-color: #69debf; background: linear-gradient(140deg, #142c2c, #0d1c24); }
+.aw-preview-service > span { color: #7cc9b6; }
+.aw-preview-data { border-color: #9575d05e; border-top-color: #b7a0ea; background: linear-gradient(140deg, #25243d, #151627); }
+.aw-preview-data > span { color: #b3a1d9; }
+.aw-preview-link { color: #58788b; font-size: 24px; }
+.aw-welcome-steps { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid #263344; padding-top: 25px; margin: 0 12px 28px; gap: 24px; text-align: left; }
+.aw-welcome-steps > div > span { display: inline-grid; place-items: center; width: 21px; height: 21px; margin-right: 7px; color: #83c6bb; background: #16302f; border-radius: 50%; font-size: 10px; }
+.aw-welcome-steps strong { color: #c8d6e6; font-size: 12px; font-weight: 550; }
+.aw-welcome-steps p { font-size: 11px; line-height: 1.7; color: #8e9eb6; margin: 10px 0 0; }
+.aw-welcome > .aw-welcome-note { font-size: 10px; color: #71849e; }
+.aw-diagram-main { flex: 1; min-width: 0; display: flex; flex-direction: column; position: relative; }
+.aw-view-tabs { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px; border-bottom: 1px solid #253044; background: #0b1320; }
+.aw-view-tabs button { font-size: 11px; text-transform: capitalize; padding: 7px 12px; border-radius: 7px; border: 1px solid #29374d; background: #111c2e; color: #aebdd1; cursor: pointer; }
+.aw-view-tabs button[aria-pressed=true] { border-color: #5eac9f; background: #11312f; color: #93f1dc; }
+.aw-canvas { display: flex; flex-direction: column; }
+.aw-canvas-toolbar { position: relative !important; top: auto !important; left: auto !important; padding: 8px 10px; flex-shrink: 0; width: 100%; border-bottom: 1px solid #1d2a3d; background: #0c1523; }
+.aw-canvas-toolbar select { min-width: 0; max-width: 160px; min-height: 32px; }
+.aw-canvas-toolbar button { min-height: 32px; }
+.aw-canvas-tools { min-width: 0; max-width: 100%; }
+.aw-flow-area { flex: 1; min-height: 180px; min-width: 0; }
+.aw-refine-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 12px; border-top: 1px solid #253044; background: #0c1523; }
+.aw-refine-bar input { min-width: 140px; }
+.aw-finder { max-width: calc(100% - 24px); }
 
 /* Visible focus for keyboard users on every interactive element. */
 :focus-visible {
@@ -15,9 +79,30 @@
 
 /* Tablet / narrow: stack the workspace columns instead of a fixed three-pane row. */
 @media (max-width: 900px) {
+  .aw-workspace { height: auto; min-height: 100dvh; }
+  .aw-header { padding: 14px 18px; }
+  .aw-header-status { margin-left: 0; }
   .workspace-shell { flex-direction: column !important; }
   .workspace-shell > aside { width: 100% !important; border-right: none !important; border-left: none !important; border-bottom: 1px solid #1f2937; }
-  .workspace-shell main { min-height: 50vh; }
+  .workspace-shell main { min-height: 60vh; }
+  .aw-create-panel { overflow: visible; padding: 24px; }
+  .aw-panel-intro h1 br { display: none; }
+  .aw-panel-intro p { max-width: none; }
+  .aw-panel-footer { padding-top: 14px; }
+  .aw-empty-main { padding: 48px 24px; }
+  .aw-diagram-main > div:has(> .aw-canvas) { flex: auto !important; height: 65vh; min-height: 480px !important; }
+  .aw-canvas-toolbar select { max-width: 135px; }
+  .aw-canvas-tools { flex-basis: 100%; }
+  .aw-map-preview { gap: 6px; margin: 34px 0; }
+  .aw-preview-node { padding: 13px 10px; }
+  .aw-preview-node strong { font-size: 13px; }
+  .aw-preview-node small { display: none; }
+  .aw-preview-node > span { font-size: 7px; }
+  .aw-preview-link { font-size: 17px; }
+  .aw-welcome-steps { gap: 15px; margin-left: 0; margin-right: 0; }
+  .aw-welcome-steps > div > span { display: grid; margin-bottom: 8px; }
+  .aw-refine-bar input { flex-basis: 70% !important; }
+  .aw-flow-area .react-flow__minimap { display: none; }
 }
 
 /* M4 focus/route/chapter highlight — dim is a focus channel, never provenance (§6);
@@ -30,3 +115,28 @@
 .aw-route-future { box-shadow: 0 0 0 2px rgba(94, 234, 212, 0.25); }
 .aw-chapter-focus { box-shadow: 0 0 0 3px #c4b5fd; }
 .react-flow__edge.aw-edge-focus .react-flow__edge-path { stroke-width: 2.5; }
+
+/* M6 node finder palette (§2) */
+.aw-finder { position: absolute; top: 48px; left: 50%; transform: translateX(-50%); z-index: 10; width: 320px; background: #0b1220; border: 1px solid #334155; border-radius: 10px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5); overflow: hidden; }
+.aw-finder input { width: 100%; box-sizing: border-box; padding: 10px 12px; background: transparent; border: none; border-bottom: 1px solid #1f2937; color: #e5e7eb; font-size: 13px; outline: none; }
+.aw-finder ul { margin: 0; padding: 4px; list-style: none; max-height: 220px; overflow-y: auto; }
+.aw-finder-item { display: block; width: 100%; text-align: left; padding: 6px 8px; border-radius: 6px; border: none; background: transparent; color: #cbd5e1; font-size: 12px; cursor: pointer; }
+.aw-finder-item:hover { background: #111a2e; }
+.aw-finder-active { background: #0f2e2b; color: #e5e7eb; }
+.aw-finder-id { color: #64748b; font-size: 11px; }
+.aw-finder-empty { padding: 8px; font-size: 12px; color: #8b98b8; }
+
+/* M6 outline rail (§2) — collapses at the existing tablet breakpoint */
+.aw-outline-rail { position: absolute; top: 96px; right: 8px; z-index: 4; width: 150px; max-height: calc(100% - 180px); overflow-y: auto; background: #0b1220cc; border: 1px solid #1f2937; border-radius: 8px; padding: 6px; display: flex; flex-direction: column; gap: 2px; }
+.aw-outline-title { font-size: 10px; color: #8b98b8; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 6px 4px; }
+.aw-outline-item { text-align: left; padding: 4px 6px; border-radius: 6px; border: none; background: transparent; color: #cbd5e1; font-size: 11px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.aw-outline-item:hover { background: #111a2e; }
+.aw-outline-active { background: #0f2e2b; color: #5eead4; }
+.aw-outline-empty { font-size: 11px; color: #8b98b8; padding: 4px 6px; }
+@media (max-width: 900px) { .aw-outline-rail { display: none; } }
+
+/* M6 flow-token pulses (§2): dash tokens travel source→target, staggered by kind
+   priority (pulses.ts). The JS governor omits the class in Still mode and the
+   reduced-motion block above kills the animation — pulses are absent, never slowed. */
+.aw-pulse:not(.aw-dim-edge) .react-flow__edge-path { stroke-dasharray: 8 48; animation: aw-token-flow 2.6s linear infinite; }
+@keyframes aw-token-flow { to { stroke-dashoffset: -56; } }

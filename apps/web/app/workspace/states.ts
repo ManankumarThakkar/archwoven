@@ -20,6 +20,8 @@ export type WorkspaceState =
 
 export type Event =
   | { type: 'GENERATE' }
+  | { type: 'RESTORED'; modelId: string; revision: number; gaps: string[] }
+  | { type: 'RESTORE_FAILED'; message: string }
   | { type: 'CLARIFY'; questions: string[] }
   | { type: 'STAGE'; stage: Stage }
   | { type: 'SUCCESS'; modelId: string; revision: number }
@@ -47,6 +49,12 @@ const running = (stage: Stage): WorkspaceState => ({ kind: 'running', stage });
  */
 export function next(state: WorkspaceState, event: Event): WorkspaceState {
   switch (event.type) {
+    case 'RESTORED':
+      return event.gaps.length
+        ? { kind: 'partial', modelId: event.modelId, revision: event.revision, gaps: event.gaps }
+        : { kind: 'success', modelId: event.modelId, revision: event.revision };
+    case 'RESTORE_FAILED':
+      return { kind: 'error', message: event.message };
     case 'GENERATE':
       return running('validating');
     case 'CLARIFY':
