@@ -75,6 +75,7 @@ textarea::placeholder, input::placeholder { color: #8290aa; opacity: 1; }
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
   .react-flow__edge-path { animation: none !important; }
+  .aw-flow-token { display: none !important; }
 }
 
 /* Tablet / narrow: stack the workspace columns instead of a fixed three-pane row. */
@@ -138,7 +139,8 @@ textarea::placeholder, input::placeholder { color: #8290aa; opacity: 1; }
 /* M6 flow-token pulses (§2): dash tokens travel source→target, staggered by kind
    priority (pulses.ts). The JS governor omits the class in Still mode and the
    reduced-motion block above kills the animation — pulses are absent, never slowed. */
-.aw-pulse:not(.aw-dim-edge) .react-flow__edge-path { stroke-dasharray: 8 48; animation: aw-token-flow 2.6s linear infinite; }
+.aw-flow-token { display: none; pointer-events: none; }
+.aw-pulse:not(.aw-dim-edge) .aw-flow-token { display: inline; stroke-dasharray: 8 48; animation: aw-token-flow 2.6s linear infinite; }
 @keyframes aw-token-flow { to { stroke-dashoffset: -56; } }
 
 /* The timeline uses one escaped SVG for browser and downloads. */

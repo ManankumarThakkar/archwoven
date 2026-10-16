@@ -7,10 +7,10 @@ Completed foundation: PR #11 clean-download instructions; PR #12 authoritative e
 | Order | Deliverable | Status |
 |---|---|---|
 | 1 | Reliable generic repository assembly | Merged to main as PR #13; verified |
-| 2 | Native deadlines, cancellation and coherent recovery | Verified; main integration via PR #16 |
-| 3 | Sequence renderer in workspace and exports | Verified; main integration via PR #16 |
-| 4 | ER fields, keys and cardinalities | Verified; main-based PR publication |
-| 5 | SVG/PNG routing, self-relations and label readability | Pending |
+| 2 | Native deadlines, cancellation and coherent recovery | Merged to main as PR #16; verified |
+| 3 | Sequence renderer in workspace and exports | Merged to main as PR #16; verified |
+| 4 | ER fields, keys and cardinalities | Merged to main as PR #17; verified |
+| 5 | SVG/PNG routing, self-relations and label readability | Verified; focused PR pending |
 | 6 | Direct rename/drag and persistent manual positions | Pending |
 | 7 | Clarification answer/skip flow | Pending |
 | 8 | Architecture orientation control | Pending |

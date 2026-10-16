@@ -7,14 +7,15 @@ import { validFullModel, type SystemModel } from '@archwoven/model';
 import { Canvas } from './Canvas';
 import { NodeFinder } from './NodeFinder';
 
-const camera = vi.hoisted(() => ({ requests: [] as { options: { nodes?: { id: string }[]; duration?: number }; ids: string[] }[], ids: [] as string[] }));
+const camera = vi.hoisted(() => ({ requests: [] as { bounds?: { x: number; y: number; width: number; height: number }; options: { nodes?: { id: string }[]; duration?: number }; ids: string[] }[], ids: [] as string[] }));
 
 // Layout and React Flow own geometry, which is unavailable in a DOM simulator.
 // Keep Canvas, finder, outline, selection state, effects and DOM events real.
 vi.mock('../../lib/layout', () => ({
   layoutModel: async (model: SystemModel, viewId: string) => ({
+    width: 800, height: 600,
     nodes: model.nodes.filter((n) => model.views.find((v) => v.id === viewId)?.nodes.includes(n.id)).map((n, i) => ({ id: n.id, x: i * 200, y: 0, width: 150, height: 80 })),
-    edges: [],
+    edges: model.edges.filter(e => model.views.find(v => v.id === viewId)?.edges.includes(e.id)).map(e => ({ id: e.id, points: [{ x: 1, y: 2 }, { x: 3, y: 4 }] })),
   }),
 }));
 vi.mock('@xyflow/react', async (importOriginal) => ({
@@ -25,17 +26,19 @@ vi.mock('@xyflow/react', async (importOriginal) => ({
     onInit: (instance: unknown) => void; colorMode?: string; children: React.ReactNode;
   }) => {
     camera.ids = nodes.map((n) => n.id);
-    React.useEffect(() => { onInit({ fitView: (options: { nodes?: { id: string }[]; duration?: number }) => {
+    React.useEffect(() => { onInit({ fitBounds: (bounds: { x: number; y: number; width: number; height: number }, options: { duration?: number }) => {
+      camera.requests.push({ bounds, options, ids: [...camera.ids] }); return Promise.resolve(true);
+    }, fitView: (options: { nodes?: { id: string }[]; duration?: number }) => {
       camera.requests.push({ options, ids: [...camera.ids] });
       return Promise.resolve(true);
     } }); }, []);
     return <div data-flow-theme={colorMode}>
     {nodes.map((n) => <button key={n.id} data-node={n.id} data-node-type={n.type} data-inline-shadow={n.style?.boxShadow} data-source-position={n.sourcePosition} data-target-position={n.targetPosition} className={n.className} onClick={() => onNodeClick(null, n)}>{n.id}</button>)}
-    {edges.map((e) => <button key={e.id} data-edge={e.id} title={String(e.label ?? '')} data-start={typeof e.markerStart === 'string' ? e.markerStart : ''} data-end={typeof e.markerEnd === 'string' ? e.markerEnd : ''} className={e.className} data-animated={String(e.animated)} onClick={() => onEdgeClick(null, e)}>{e.id}</button>)}
+    {edges.map((e) => <button key={e.id} data-edge={e.id} data-edge-type={e.type} data-route={JSON.stringify(e.data?.route)} title={String(e.label ?? '')} data-start={typeof e.markerStart === 'string' ? e.markerStart : ''} data-end={typeof e.markerEnd === 'string' ? e.markerEnd : ''} className={e.className} data-animated={String(e.animated)} onClick={() => onEdgeClick(null, e)}>{e.id}</button>)}
     {children}
   </div>;
   },
-  Background: () => null, Controls: () => null, MiniMap: () => null,
+  Background: () => null, Controls: ({ children }: { children: React.ReactNode }) => <div>{children}</div>, ControlButton: ({ onClick }: { onClick: () => void }) => <button onClick={onClick}>Fit View</button>, MiniMap: () => null,
 }));
 
 const model: SystemModel = {
@@ -138,6 +141,15 @@ describe('Canvas view transitions', () => {
     expect(camera.requests).toHaveLength(2);
     expect(camera.requests[1]?.ids).toEqual(['a', 'b', 'c']);
     expect(host.querySelector('[data-flow-theme]')?.getAttribute('data-flow-theme')).toBe('dark');
+  });
+
+  it('fits the complete routed scene initially and when Fit View is pressed', async () => {
+    await renderView('v');
+    expect(camera.requests.at(-1)?.bounds).toMatchObject({ x: -8, y: -8, width: 808, height: 608 });
+    camera.requests = [];
+    await click(button('Fit View'));
+    expect(camera.requests).toHaveLength(1);
+    expect(camera.requests[0]?.bounds).toMatchObject({ x: -8, y: -8, width: 808, height: 608 });
   });
 
   it('fits a replacement revision without refitting for focus, route steps or motion toggles', async () => {
@@ -473,5 +485,16 @@ describe('ER workspace dispatch', () => {
     await click(host.querySelector('[data-node="entity.user"]'));
     expect(host.querySelector('[data-node="entity.user"]')?.className).toBe('aw-route-current');
     expect(host.querySelector('[data-node="entity.user"]')?.getAttribute('data-inline-shadow')).toBeNull();
+  });
+});
+
+describe('shared routed graph scene', () => {
+  it('uses shared system nodes and sends the canonical routed section to the edge renderer', async () => {
+    await renderCanvas();
+    expect(host.querySelector('[data-node="a"]')?.getAttribute('data-node-type')).toBe('system');
+    const edge = host.querySelector('[data-edge="ab"]')!;
+    expect(edge.getAttribute('data-edge-type')).toBe('routed');
+    expect(JSON.parse(edge.getAttribute('data-route')!).points).toEqual([{ x: 1, y: 2 }, { x: 3, y: 4 }]);
+    expect(edge.getAttribute('data-end')).toContain('graph-arrow');
   });
 });

@@ -14,13 +14,42 @@ const require = createRequire(import.meta.url);
 const here = new URL('.', import.meta.url).pathname;
 
 describe('renderPng (resvg-wasm)', () => {
+  it('contains a long boundary title inside the actual exported scene', async () => {
+    await ensureResvg(readFileSync(require.resolve('@resvg/resvg-wasm/index_bg.wasm')));
+    const model = structuredClone(validFullModel), view = model.views.find(view => view.type === 'architecture')!;
+    view.nodes = [view.nodes[0]!]; view.edges = [];
+    model.boundaries = [{ id: 'boundary', label: 'External payment settlement and reconciliation infrastructure boundary', wraps: view.nodes }];
+    const svg = await buildSvg(model, view.id);
+    const [x, y, width, height] = svg.match(/viewBox="([^"]+)"/)![1]!.split(' ').map(Number) as [number, number, number, number];
+    const title = svg.match(/<g[^>]*><rect[^>]*stroke-dasharray="6 4"[\s\S]*?<\/g>/)![0];
+    const renderer = new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" width="2000" height="2000" font-family="Inter">${title}</svg>`, { font: { fontBuffers: [readFileSync(`${here}../../public/fonts/inter-400.woff2`)], defaultFontFamily: 'Inter' } });
+    try {
+      const box = renderer.getBBox()!;
+      expect(box.x).toBeGreaterThanOrEqual(x); expect(box.y).toBeGreaterThanOrEqual(y);
+      expect(box.x + box.width).toBeLessThanOrEqual(x + width);
+      expect(box.y + box.height).toBeLessThanOrEqual(y + height);
+    } finally { renderer.free(); }
+  });
+  it.each(['architecture', 'er'] as const)('paints a routed self-relation and its endpoint in %s PNG export', async type => {
+    await ensureResvg(readFileSync(require.resolve('@resvg/resvg-wasm/index_bg.wasm')));
+    const model = structuredClone(validFullModel), view = model.views.find(view => view.type === type)!;
+    const node = view.nodes[0]!, edge = model.edges.find(edge => edge.id === view.edges[0])!;
+    edge.from = node; edge.to = node; edge.label = 'scheduled retry';
+    if (type === 'er') edge.cardinality = '1:N';
+    view.nodes = [node]; view.edges = [edge.id];
+    const svg = await buildSvg(model, view.id), fonts = [readFileSync(`${here}../../public/fonts/inter-400.woff2`)];
+    const png = await renderPng(svg, fonts);
+    const path = svg.match(/<path data-edge="[^\"]+"[^>]+\/>/)![0];
+    expect(png).not.toEqual(await renderPng(svg.replace(path, ''), fonts));
+    expect(png).not.toEqual(await renderPng(svg.replace(path, path.replace(/ marker-end="[^"]+"/, '')), fonts));
+  });
   it('keeps an ER relationship caption outside both entity boxes', async () => {
     await ensureResvg(readFileSync(require.resolve('@resvg/resvg-wasm/index_bg.wasm')));
     const m = structuredClone(validFullModel), view = m.views.find(v => v.id === 'view.er')!;
     view.orientation = 'LR'; view.nodes = ['entity.user', 'entity.order']; view.edges = ['er.user-order'];
     m.edges.find(e => e.id === 'er.user-order')!.label = 'has a reader profile';
     const svg = await buildSvg(m, view.id), placed = await layoutModel(m, view.id);
-    const caption = svg.match(/<text[^>]*>has a reader profile · 1:N<\/text>/)![0];
+    const caption = svg.match(/<g data-edge-label="er.user-order">[\s\S]+?<\/g>/)![0];
     const renderer = new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" width="2000" height="2000" font-family="Inter">${caption}</svg>`, { font: { fontBuffers: [readFileSync(`${here}../../public/fonts/inter-400.woff2`)], defaultFontFamily: 'Inter' } });
     try {
       const label = renderer.getBBox()!;

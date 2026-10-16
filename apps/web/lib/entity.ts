@@ -1,16 +1,15 @@
 import type { SystemModel, Edge } from '@archwoven/model';
-import { linesOf, escapeXml } from './svg-text';
+import { wrapText, escapeXml } from './svg-text';
 import { PROVENANCE_STYLE } from './provenance';
 
 type Entity = SystemModel['nodes'][number];
 /** Identical rows and box dimensions for React Flow, ELK and standalone SVG. */
 export function entityLayout(node: Entity) {
-  // Conservative 1.2em per UTF-16 unit bounds wide glyphs in the bundled Inter
-  // fonts; both renderers use these same line breaks and 13px/12px sizes.
-  const label = linesOf(node.label, Math.floor((360 - 28) / (13 * 1.2)));
+  // Font-aware line breaks are shared by workspace, layout and export.
+  const label = wrapText(node.label, 360 - 28, 13);
   const headerHeight = label.length * 18 + 36;
   const rows = (node.fields ?? []).map(field => {
-    const name = linesOf(field.name, Math.floor(160 / (12 * 1.2))), type = linesOf(field.type ?? 'unspecified', Math.floor(124 / (12 * 1.2)));
+    const name = wrapText(field.name, 160, 12), type = wrapText(field.type ?? 'unspecified', 124, 12);
     return { field, name, type, height: Math.max(name.length, type.length) * 18 + 12 };
   });
   return { width: 360, height: headerHeight + 24 + (rows.length ? rows.reduce((sum, row) => sum + row.height, 0) : 36), headerHeight, label, rows };
