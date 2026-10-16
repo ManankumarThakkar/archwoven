@@ -14,8 +14,8 @@ export function RefineBar({
 }) {
   const [instruction, setInstruction] = useState('');
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderTop: '1px solid #1f2937', background: '#0a0f1c' }}>
-      <input value={instruction} onChange={(e) => setInstruction(e.target.value)} disabled={busy}
+    <div className="aw-refine-bar" aria-label="Refine and export">
+      <input aria-label="Refinement instruction" value={instruction} onChange={(e) => setInstruction(e.target.value)} disabled={busy}
         placeholder="Refine: add a cache, split orders, remove the queue…"
         onKeyDown={(e) => { if (e.key === 'Enter' && instruction.trim() && !busy) { onRefine(instruction.trim()); setInstruction(''); } }}
         style={{ flex: 1, padding: '8px 12px', borderRadius: 8, background: '#0b1220', color: '#e5e7eb', border: '1px solid #334155' }} />

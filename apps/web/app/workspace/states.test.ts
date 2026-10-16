@@ -5,6 +5,21 @@ import type { Event, WorkspaceState } from './states';
 const run = (events: Event[]): WorkspaceState => events.reduce(next, initial);
 
 describe('workspace state machine', () => {
+  it('restores a saved revision from idle so the canvas can mount without generating', () => {
+    expect(next(initial, { type: 'RESTORED', modelId: 'saved', revision: 3, gaps: [] }))
+      .toEqual({ kind: 'success', modelId: 'saved', revision: 3 });
+  });
+
+  it('restores open questions as a partial workspace', () => {
+    expect(next(initial, { type: 'RESTORED', modelId: 'saved', revision: 2, gaps: ['Missing source'] }))
+      .toEqual({ kind: 'partial', modelId: 'saved', revision: 2, gaps: ['Missing source'] });
+  });
+
+  it('surfaces inaccessible saved models from idle', () => {
+    expect(next(initial, { type: 'RESTORE_FAILED', message: 'Diagram unavailable' }))
+      .toEqual({ kind: 'error', message: 'Diagram unavailable' });
+  });
+
   it('generate walks every stage in order then succeeds', () => {
     let s = next(initial, { type: 'GENERATE' });
     expect(s).toEqual({ kind: 'running', stage: 'validating' });

@@ -2,6 +2,7 @@
 
 import { useEffect, useReducer, useRef, useState } from 'react';
 import type { EditOp, SystemModel, ViewType } from '@archwoven/model';
+import { SystemModelSchema } from '@archwoven/model';
 import { initial, next } from './states';
 import type { Mode, Stage } from './states';
 import { ControlPanel, type RepoForm } from './ControlPanel';
@@ -31,6 +32,22 @@ const QUOTA_TITLE: Record<string, string> = {
   'stop-loss': 'Generations paused for today',
 };
 
+async function responseMessage(res: Response, fallback: string): Promise<string> {
+  const text = await res.text();
+  try {
+    const body = JSON.parse(text) as { message?: unknown; error?: unknown; errors?: unknown };
+    if (typeof body.message === 'string' && body.message) return body.message;
+    if (typeof body.error === 'string' && body.error) return body.error;
+    if (Array.isArray(body.errors)) {
+      const messages = body.errors.filter((error): error is string => typeof error === 'string');
+      if (messages.length) return messages.join('; ');
+    }
+    return fallback;
+  } catch {
+    return text && !text.trimStart().startsWith('<') ? text : fallback;
+  }
+}
+
 export default function WorkspacePage() {
   const [state, dispatch] = useReducer(next, initial);
   const [model, setModel] = useState<SystemModel | null>(null);
@@ -44,37 +61,68 @@ export default function WorkspacePage() {
   const [pool, setPool] = useState(6);
   const [fake, setFake] = useState(false);
   const [deploy, setDeploy] = useState<'hosted' | 'local'>('hosted');
+  const [llmReady, setLlmReady] = useState(true);
   const [queuedPos, setQueuedPos] = useState<number | null>(null);
   const [mode, setMode] = useState<Mode>('describe');
-  const modelIdRef = useRef<string | null>(null);
+  const [restoring, setRestoring] = useState(true);
+  const loadSequence = useRef(0);
   const jobIdRef = useRef<string | null>(null);
 
   const rememberModel = (id: string) => {
-    modelIdRef.current = id;
-    if (typeof window !== 'undefined') sessionStorage.setItem('aw_modelId', id);
+    try { sessionStorage.setItem('aw_modelId', id); } catch { /* storage can be disabled */ }
+    const hash = new URLSearchParams(window.location.hash.slice(1));
+    if (hash.has('model') && hash.get('model') !== id) {
+      for (const key of ['focus', 'lens', 'route', 'chapter', 'relation', 'view']) hash.delete(key);
+    }
+    hash.set('model', id);
+    window.history.replaceState(null, '', `#${hash}`);
   };
 
-  const loadModel = async (id: string) => {
-    const res = await fetch(`/api/models/${id}`);
-    if (res.ok) {
-      const m = (await res.json()).model as SystemModel;
+  const loadModel = async (id: string, gaps?: string[]) => {
+    const sequence = ++loadSequence.current;
+    try {
+      const res = await fetch(`/api/models/${encodeURIComponent(id)}`);
+      if (!res.ok) throw new Error(res.status === 404
+        ? 'This saved diagram is unavailable in this browser session. Open it in the browser that created it, or create a new diagram.'
+        : 'Could not open the saved diagram. Check your connection and reload.');
+      const m = SystemModelSchema.parse((await res.json()).model);
+      if (sequence !== loadSequence.current) return;
+      const hashView = new URLSearchParams(window.location.hash.slice(1)).get('view');
       setModel(m);
+      setModelId(id);
       setHistory([m]);
-      setActiveView((v) => v || m.views[0]?.id || '');
+      setSelected(null);
+      setActiveView(m.views.find((v) => v.id === hashView)?.id ?? m.views[0]?.id ?? '');
       rememberModel(id);
+      dispatch({ type: 'RESTORED', modelId: id, revision: m.revision, gaps: gaps ?? m.openQuestions.map((q) => q.text) });
+    } catch (err) {
+      if (sequence !== loadSequence.current) return;
+      dispatch({ type: 'RESTORE_FAILED', message: err instanceof Error ? err.message : 'Could not open the saved diagram. Reload to try again.' });
     }
   };
 
   // Restore the last model after a reload without spending a fresh credit.
   useEffect(() => {
+    let cancelled = false;
     void (async () => {
       const q = await fetch('/api/quota').then((r) => r.json()).catch(() => null);
       if (q) { setRemaining(q.remaining); setPool(q.pool); setFake(q.fake); }
       const cfg = await fetch('/api/config').then((r) => r.json()).catch(() => null);
       if (cfg?.mode === 'local' || cfg?.mode === 'hosted') setDeploy(cfg.mode);
-      const saved = sessionStorage.getItem('aw_modelId');
-      if (saved) void loadModel(saved);
+      if (typeof cfg?.fake === 'boolean') setFake(cfg.fake);
+      if (cfg?.llmReady === false) setLlmReady(false);
+      if (cancelled) return;
+      const hash = new URLSearchParams(window.location.hash.slice(1));
+      let saved: string | null = null;
+      try { saved = sessionStorage.getItem('aw_modelId'); } catch { /* permalink still works */ }
+      const id = hash.get('model') || saved;
+      if (id) await loadModel(id);
+      else if (['focus', 'lens', 'route', 'chapter', 'relation'].some((key) => hash.has(key))) {
+        dispatch({ type: 'RESTORE_FAILED', message: 'This link does not include a saved diagram. Open the original diagram and copy its full address, or create a new diagram.' });
+      }
+      setRestoring(false);
     })();
+    return () => { cancelled = true; ++loadSequence.current; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -84,16 +132,20 @@ export default function WorkspacePage() {
     for (;;) {
       let job: { status: string; stage?: Stage | null; modelId: string; revision: number; queuePosition?: number | null; gaps?: string[]; error?: string | null } | null = null;
       try {
-        const res = await fetch(`/api/jobs/${jobId}`);
+        const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}`);
         if (res.status === 404) { dispatch({ type: 'ERROR', message: 'This generation no longer exists — please try again.' }); return; }
+        if (!res.ok) throw new Error('Could not read job status');
         job = await res.json();
+        if (!job || !['queued', 'running', 'cancelled', 'succeeded', 'failed'].includes(job.status)
+          || (job.status === 'succeeded' && (typeof job.modelId !== 'string' || !job.modelId))) {
+          throw new Error('Invalid job status');
+        }
         misses = 0;
       } catch {
-        if (++misses >= 5) { dispatch({ type: 'ERROR', message: 'Connection lost — your diagram may still finish; reload to check.' }); return; }
+        if (++misses >= 5) { dispatch({ type: 'ERROR', message: 'Connection lost — your diagram may still finish. Retry the same input to reconnect to the job.' }); return; }
         await new Promise((r) => setTimeout(r, 1000));
         continue;
       }
-      if (!job) continue;
       if (job.status === 'queued') {
         setQueuedPos(job.queuePosition ?? null);
         dispatch({ type: 'STAGE', stage: 'queued' });
@@ -110,10 +162,7 @@ export default function WorkspacePage() {
       if (job.status === 'cancelled') { setQueuedPos(null); dispatch({ type: 'CANCEL' }); return; }
       if (job.status === 'succeeded') {
         setQueuedPos(null);
-        setModelId(job.modelId);
-        if (job.gaps && job.gaps.length > 0) dispatch({ type: 'PARTIAL', modelId: job.modelId, revision: job.revision, gaps: job.gaps });
-        else dispatch({ type: 'SUCCESS', modelId: job.modelId, revision: job.revision });
-        void loadModel(job.modelId);
+        await loadModel(job.modelId, job.gaps);
         return;
       }
       dispatch({ type: 'ERROR', message: job.error ?? 'generation failed' });
@@ -121,40 +170,35 @@ export default function WorkspacePage() {
     }
   };
 
+  const submitGeneration = async (url: string, body: object) => {
+    try {
+      const res = await fetch(url, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+      });
+      if (res.status === 429) {
+        const q = (await res.json()) as { reason: string; message?: string; resetAt?: number };
+        dispatch({ type: 'QUOTA_BLOCKED', reason: q.reason, resetAt: q.resetAt ?? Date.now() + 60_000, message: q.message ?? '' });
+        return;
+      }
+      if (!res.ok) { dispatch({ type: 'ERROR', message: await responseMessage(res, 'Could not start generation. Please try again.') }); return; }
+      const { jobId, remaining } = (await res.json()) as { jobId?: unknown; remaining?: number };
+      if (typeof jobId !== 'string' || !jobId) throw new Error('Missing job ID');
+      if (typeof remaining === 'number') setRemaining(remaining);
+      jobIdRef.current = jobId;
+      void poll(jobId);
+    } catch {
+      dispatch({ type: 'ERROR', message: 'Could not start generation. Check your connection and try again; retrying the same input will reconnect to any job already started.' });
+    }
+  };
+
   const generate = async (prompt: string, view: ViewType) => {
     dispatch({ type: 'GENERATE' });
-    const res = await fetch('/api/generate', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ prompt, view, idempotencyKey: idempotencyKeyFor(prompt, view) }),
-    });
-    if (res.status === 429) {
-      const q = (await res.json()) as { reason: string; message?: string; resetAt?: number };
-      dispatch({ type: 'QUOTA_BLOCKED', reason: q.reason, resetAt: q.resetAt ?? Date.now() + 60_000, message: q.message ?? '' });
-      return;
-    }
-    if (!res.ok) { dispatch({ type: 'ERROR', message: (await res.text()) || 'request failed' }); return; }
-    const { jobId, remaining } = (await res.json()) as { jobId: string; remaining?: number };
-    if (typeof remaining === 'number') setRemaining(remaining);
-    jobIdRef.current = jobId;
-    void poll(jobId);
+    await submitGeneration('/api/generate', { prompt, view, idempotencyKey: idempotencyKeyFor(prompt, view) });
   };
 
   const generateRepo = async (form: RepoForm) => {
     dispatch({ type: 'GENERATE_REPO' });
-    const res = await fetch('/api/repo', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ ...form, view: 'architecture', idempotencyKey: idempotencyKeyFor(`${form.url}|${form.subdir ?? ''}|${form.ref ?? ''}`, 'architecture') }),
-    });
-    if (res.status === 429) {
-      const q = (await res.json()) as { reason: string; message?: string; resetAt?: number };
-      dispatch({ type: 'QUOTA_BLOCKED', reason: q.reason, resetAt: q.resetAt ?? Date.now() + 60_000, message: q.message ?? '' });
-      return;
-    }
-    if (!res.ok) { dispatch({ type: 'ERROR', message: (await res.text()) || 'request failed' }); return; }
-    const { jobId, remaining } = (await res.json()) as { jobId: string; remaining?: number };
-    if (typeof remaining === 'number') setRemaining(remaining);
-    jobIdRef.current = jobId;
-    void poll(jobId);
+    await submitGeneration('/api/repo', { ...form, view: 'architecture', idempotencyKey: idempotencyKeyFor(`${form.url}|${form.subdir ?? ''}|${form.ref ?? ''}`, 'architecture') });
   };
 
   const cancelJob = async () => {
@@ -185,12 +229,14 @@ export default function WorkspacePage() {
         dispatch({ type: 'QUOTA_BLOCKED', reason: q.reason, resetAt: q.resetAt ?? Date.now() + 60_000, message: q.message ?? '' });
         return;
       }
-      if (!res.ok) { dispatch({ type: 'ERROR', message: (await res.text()) || 'refine failed' }); return; }
+      if (!res.ok) { setSummary(await responseMessage(res, 'Refinement failed. Please try again.')); return; }
       const { ops, model: nextModel, remaining } = (await res.json()) as { ops: EditOp[]; model: SystemModel; remaining?: number };
       setHistory((h) => pushHistory(h, model));
       setModel(nextModel);
       setSummary(summarizeOps(ops));
       if (typeof remaining === 'number') setRemaining(remaining);
+    } catch {
+      setSummary('Could not refine the diagram. Check your connection before trying again.');
     } finally {
       setRefining(false);
     }
@@ -199,36 +245,58 @@ export default function WorkspacePage() {
   const doUndo = async () => {
     const { model: prev, stack } = undo(history);
     if (!prev || !modelId) return;
-    const res = await fetch(`/api/models/${modelId}/undo`, {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ prevRevision: prev.revision }),
-    });
-    if (!res.ok) { dispatch({ type: 'ERROR', message: (await res.text()) || 'undo failed' }); return; }
-    const { model: undone } = (await res.json()) as { model: SystemModel };
-    setModel(undone);
-    setHistory(stack);
-    setSummary('');
-    setSelected(null);
+    try {
+      const res = await fetch(`/api/models/${modelId}/undo`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ prevRevision: prev.revision }),
+      });
+      if (!res.ok) { setSummary(await responseMessage(res, 'Undo failed. Please try again.')); return; }
+      const { model: undone } = (await res.json()) as { model: SystemModel };
+      setModel(undone);
+      setHistory(stack);
+      setSummary('');
+      setSelected(null);
+    } catch {
+      setSummary('Could not undo the change. Check your connection before trying again.');
+    }
   };
 
   const doExport = async (kind: 'svg' | 'png') => {
     if (!model || !activeView) return;
-    const svg = await buildSvg(model, activeView);
-    let blob = new Blob([svg], { type: 'image/svg+xml' });
-    let ext = 'svg';
-    if (kind === 'png') {
+    setSummary('Preparing export…');
+    try {
+      const svg = await buildSvg(model, activeView);
+      let blob = new Blob([svg], { type: 'image/svg+xml' });
+      let ext = 'svg';
+      if (kind === 'png') {
+        try {
+          const { ensureResvg, renderPng } = await import('../../probes/render/export');
+          const [wasm, ...fonts] = await Promise.all([
+            '/resvg/index_bg.wasm', '/fonts/inter-400.woff2', '/fonts/inter-600.woff2',
+          ].map(async (path) => {
+            const res = await fetch(path);
+            if (!res.ok) throw new Error(`Export asset unavailable: ${path}`);
+            const bytes = new Uint8Array(await res.arrayBuffer());
+            if (!bytes.byteLength) throw new Error(`Export asset empty: ${path}`);
+            return bytes;
+          }));
+          await ensureResvg(wasm!);
+          const png = await renderPng(svg, fonts);
+          blob = new Blob([png as unknown as BlobPart], { type: 'image/png' });
+          ext = 'png';
+        } catch { /* fall back to SVG, honestly named and reported below */ }
+      }
+      const url = URL.createObjectURL(blob);
       try {
-        const { ensureResvg, renderPng } = await import('../../probes/render/export');
-        await ensureResvg(fetch('/resvg/index_bg.wasm').then((r) => r.arrayBuffer()));
-        const png = await renderPng(svg, []);
-        blob = new Blob([png as unknown as BlobPart], { type: 'image/png' });
-        ext = 'png';
-      } catch { /* fonts/wasm unavailable → fall back to SVG, honestly named */ }
+        const a = document.createElement('a');
+        a.href = url; a.download = `archwoven-${activeView}.${ext}`; a.click();
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+      setSummary(kind === 'png' && ext === 'svg' ? 'PNG export unavailable. Downloaded SVG instead.' : `${ext.toUpperCase()} downloaded.`);
+    } catch {
+      setSummary('Could not export the diagram. Please try again.');
     }
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `archwoven-${activeView}.${ext}`; a.click();
-    URL.revokeObjectURL(url);
   };
 
   const showCanvas = (state.kind === 'success' || state.kind === 'partial') && model;
@@ -238,19 +306,29 @@ export default function WorkspacePage() {
   const privacy = model ? `🔒 ${model.privacy.classification} · ${model.privacy.boundary}` : `🔒 ${deploy === 'local' ? 'private · local-only' : 'public · external-allowed'}`;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#070b14', color: '#e5e7eb' }}>
-      <header style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: '1px solid #1f2937' }}>
-        <strong style={{ fontSize: '1.1rem' }}>Arch<span style={{ color: '#5eead4' }}>woven</span></strong>
+    <div className="aw-workspace">
+      <header className="aw-header">
+        <a className="aw-brand" href="/workspace" aria-label="Archwoven workspace"><span className="aw-brand-mark" aria-hidden="true">⌘</span>Arch<span>woven</span></a>
+        <span className="aw-header-caption">Architecture, connected.</span>
+        <div className="aw-header-status">
         <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 6, background: '#111a2e', color: '#93c5fd' }}>{privacy}</span>
         <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 6, background: '#111a2e', color: '#fbbf24' }}>◐ {remaining ?? pool}/{pool} credits today</span>
-        {fake && <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 6, background: '#3b0d0d', color: '#fca5a5' }}>DEMO DATA</span>}
+        {!llmReady && (
+          <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 6, background: '#3b2f0d', color: '#fbbf24' }}>
+            ⚠ No API key — set ANTHROPIC_API_KEY in apps/web/.env.local, or run locally: ARCHWOVEN_MODE=local pnpm dev
+          </span>
+        )}
         {state.kind === 'partial' && state.gaps.length > 0 && (
           <span title={state.gaps.join('\n')} style={{ fontSize: 12, padding: '2px 8px', borderRadius: 6, background: '#3b2f0d', color: '#fbbf24' }}>⚠ {state.gaps.length} gaps</span>
         )}
+        </div>
       </header>
+      {fake && <div role="status" style={{ padding: '10px 16px', background: '#3b2f0d', color: '#fde68a', fontSize: 13 }}>
+        Demo mode: generation and refinement return fixed sample data, not diagrams based on your input. Disable ARCHWOVEN_FAKE and configure a generation provider to create real diagrams.
+      </div>}
       <div className="workspace-shell" style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         <ControlPanel
-          running={state.kind === 'running'}
+          running={state.kind === 'running' || restoring}
           remaining={remaining ?? pool}
           mode={mode}
           prefill={state.kind === 'idle' ? state.prefill : undefined}
@@ -261,18 +339,23 @@ export default function WorkspacePage() {
           onCancel={cancelJob}
         />
         {showCanvas ? (
-          <main style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
-            <div style={{ position: 'absolute', top: 8, left: 8, zIndex: 5, display: 'flex', gap: 6 }}>
+          <main className="aw-diagram-main" aria-label="Architecture diagram">
+            <div className="aw-view-tabs" role="group" aria-label="Diagram views">
               {viewTabs.map((v) => (
-                <button key={v.id} onClick={() => setActiveView(v.id)} style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, border: '1px solid ' + (v.id === activeView ? '#5eead4' : '#1f2937'), background: v.id === activeView ? '#0f2e2b' : '#111a2e', color: '#cbd5e1', cursor: 'pointer' }}>{v.type}</button>
+                <button key={v.id} aria-pressed={v.id === activeView} onClick={() => {
+                  setActiveView(v.id);
+                  const hash = new URLSearchParams(window.location.hash.slice(1));
+                  hash.set('view', v.id);
+                  window.history.replaceState(null, '', `#${hash}`);
+                }}>{v.type === 'er' ? 'Data model' : v.type.replace('-', ' ')}</button>
               ))}
             </div>
             <div style={{ flex: 1, minHeight: 0 }}><Canvas model={model} modelId={modelId ?? ''} viewId={activeView || viewTabs[0]?.id || ''} onSelect={setSelected} onDeselect={() => setSelected(null)} /></div>
             <RefineBar busy={refining} summary={summary} canUndo={history.length > 1} onRefine={refine} onUndo={doUndo} onExport={doExport} />
           </main>
         ) : (
-          <main style={{ flex: 1, display: 'grid', placeItems: 'center', padding: 24, color: '#8b98b8' }}>
-            <CanvasPlaceholder state={state} queuedPos={queuedPos} onReset={() => dispatch({ type: 'RESET' })} />
+          <main className="aw-empty-main" aria-label="Diagram workspace" aria-live="polite">
+            {restoring ? <div role="status">Opening your workspace…</div> : <CanvasPlaceholder state={state} queuedPos={queuedPos} onReset={() => dispatch({ type: 'RESET' })} />}
           </main>
         )}
         {showCanvas && <Inspector payload={selected ? inspectorFor(model, selected) : null} gaps={state.kind === 'partial' ? state.gaps : undefined} passport={passport} />}
@@ -299,10 +382,27 @@ function CanvasPlaceholder({ state, queuedPos, onReset }: { state: ReturnType<ty
     </div>;
   }
   if (state.kind === 'error') return <div style={{ textAlign: 'center', color: '#f87171' }}>Something went wrong: {state.message}<div><button onClick={onReset} style={{ marginTop: 12, padding: '6px 12px', borderRadius: '8px', border: '1px solid #334155', background: 'transparent', color: '#e5e7eb', cursor: 'pointer' }}>Try again</button></div></div>;
-  if (state.kind === 'success' || state.kind === 'partial') return <div style={{ textAlign: 'center' }}>Model ready (rev {state.revision}). Canvas + inspector arrive in the next milestone.{state.kind === 'partial' && <div style={{ color: '#fbbf24', marginTop: 8, fontSize: 12 }}>{state.gaps.join(' · ')}</div>}</div>;
+  if (state.kind === 'success' || state.kind === 'partial') return <div role="status">Opening diagram revision {state.revision}…</div>;
   if (state.kind === 'cancelled') return <div>Cancelled. <button onClick={onReset} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #334155', background: 'transparent', color: '#e5e7eb', cursor: 'pointer' }}>Reset</button></div>;
   if (state.kind === 'stale') return <div style={{ color: '#fbbf24' }}>This diagram changed elsewhere (latest rev {state.latestRevision}). Reload to continue.</div>;
   if (state.kind === 'clarifying') return <div>A few clarifying questions: {state.questions.join(' · ')}</div>;
   if (state.kind === 'paused') return <div>Paused: {state.message}</div>;
-  return <div>Pick an example or describe a system to begin.</div>;
+  return <div className="aw-welcome">
+    <span className="aw-eyebrow">FROM THE BIG PICTURE TO EVERY CONNECTION</span>
+    <h2>A little context.<br /><span>A clearer architecture.</span></h2>
+    <p>Turn your system into a map you can explore, question, and make your own.</p>
+    <div className="aw-map-preview" aria-hidden="true">
+      <div className="aw-preview-node"><span>01 / EXPERIENCE</span><strong>Web app</strong><small>Where it begins</small></div>
+      <div className="aw-preview-link">→</div>
+      <div className="aw-preview-node aw-preview-service"><span>02 / LOGIC</span><strong>API service</strong><small>The pieces connect</small></div>
+      <div className="aw-preview-link">→</div>
+      <div className="aw-preview-node aw-preview-data"><span>03 / DATA</span><strong>Database</strong><small>The story takes shape</small></div>
+    </div>
+    <div className="aw-welcome-steps">
+      <div><span>1</span><strong>Describe</strong><p>Choose an example or bring your own idea.</p></div>
+      <div><span>2</span><strong>Explore</strong><p>Follow a route. Inspect a connection.</p></div>
+      <div><span>3</span><strong>Make it yours</strong><p>Refine in words and export when ready.</p></div>
+    </div>
+    <p className="aw-welcome-note">Architecture · Sequence · Data model · Component detail</p>
+  </div>;
 }

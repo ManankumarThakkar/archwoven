@@ -15,10 +15,14 @@ export function NodeFinder({ model, viewNodes, onPick, onClose }: {
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
   const hits = findNodes(model, viewNodes, query);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
   useEffect(() => { setActive(0); }, [query]);
+  useEffect(() => {
+    listRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
+  }, [active, query]);
 
   const pick = (id: string | undefined) => { if (id) { onPick(id); onClose(); } };
 
@@ -41,7 +45,7 @@ export function NodeFinder({ model, viewNodes, onPick, onClose }: {
         placeholder="Find node…"
         aria-label="Find node"
       />
-      <ul role="listbox" aria-label="Matching nodes">
+      <ul ref={listRef} role="listbox" aria-label="Matching nodes">
         {hits.map((h, i) => (
           <li key={h.id} role="option" aria-selected={i === active}>
             <button className={'aw-finder-item' + (i === active ? ' aw-finder-active' : '')} onClick={() => pick(h.id)}>
