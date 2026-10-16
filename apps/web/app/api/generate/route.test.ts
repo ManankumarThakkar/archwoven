@@ -181,6 +181,25 @@ describe('POST /api/generate', () => {
     }
   });
 
+  it('hosted without a key: 503 at the gate with human copy, credits untouched (no SDK error later)', async () => {
+    const prevKey = process.env.ANTHROPIC_API_KEY;
+    const prevMode = process.env.ARCHWOVEN_MODE;
+    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.ARCHWOVEN_MODE; // force hosted regardless of suite mode
+    try {
+      const res = await POST(req({ prompt: 'shop', view: 'architecture', idempotencyKey: 'nokey' }));
+      expect(res.status).toBe(503);
+      const body = await res.json() as { reason: string; message: string };
+      expect(body.reason).toBe('llm-not-configured');
+      expect(body.message).toMatch(/ANTHROPIC_API_KEY/);
+      expect(body.message).toMatch(/ARCHWOVEN_MODE=local/);
+      expect(serverDeps.store.creditsUsed('test-sess', new Date().toISOString().slice(0, 10))).toBe(0);
+    } finally {
+      if (prevKey !== undefined) process.env.ANTHROPIC_API_KEY = prevKey;
+      if (prevMode !== undefined) process.env.ARCHWOVEN_MODE = prevMode;
+    }
+  });
+
   it('hosted mode: the stamp is public · external-allowed even if the model claims private', async () => {
     const prevMode = process.env.ARCHWOVEN_MODE;
     delete process.env.ARCHWOVEN_MODE; // force hosted regardless of suite mode

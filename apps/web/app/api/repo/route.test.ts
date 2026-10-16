@@ -3,6 +3,8 @@ import { validFullModel } from '@archwoven/model';
 import { openStore } from '@archwoven/jobs';
 import { NOT_FOUND_OR_PRIVATE_COPY } from '@archwoven/ingest';
 import type { Fragment } from '@archwoven/extract';
+import { assembleRepoModel, type StructuredClient } from '@archwoven/llm';
+import petclinic from '../../../../../packages/llm/src/fixtures/petclinic-schema-drift.json';
 import { serverDeps } from '../../lib/server';
 import { resetSlots } from '../../lib/llm-limiter';
 import { POST } from './route';
@@ -38,6 +40,20 @@ const getReq = (id: string, cookie = 'aw_sid=test-sess') =>
 
 const okIngest = { ok: true as const, sha: SHA, framework: 'fastapi', fragment: frag, gaps: [], filesScanned: 42 };
 
+// Only the paid model transport is replaced: exercise the real assembly,
+// validator, repair loop, route persistence, metering and refunds together.
+function petclinicClient(repairSucceeds: boolean): StructuredClient {
+  let attempt = 0;
+  return {
+    messages: { countTokens: async () => ({ input_tokens: 500 }) },
+    beta: { messages: { create: async () => ({
+      content: [{ type: 'text', text: JSON.stringify(attempt++ === 0 || !repairSucceeds ? petclinic.invalidModel : petclinic.repairedModel) }],
+      stop_reason: 'end_turn',
+      usage: { input_tokens: 1200, cache_creation_input_tokens: 900, cache_read_input_tokens: 100, output_tokens: 800 },
+    }) } },
+  };
+}
+
 async function waitJob(id: string, until?: (s: string) => boolean) {
   for (let i = 0; i < 200; i++) {
     const job = serverDeps.store.getJob(id);
@@ -63,6 +79,43 @@ beforeEach(() => {
 });
 
 describe('POST /api/repo', () => {
+  it.each([true, false])('PetClinic schema repair succeeds=%s: real assembly persists or fails with correct metering and credits', async (repairSucceeds) => {
+    serverDeps.ingestRepo = async () => ({ ...okIngest, framework: 'spring-boot', fragment: petclinic.fragment as Fragment, gaps: petclinic.fragment.gaps });
+    const client = petclinicClient(repairSucceeds);
+    serverDeps.assembleRepoModel = (fragment, meta, opts) => assembleRepoModel(fragment, meta, { ...opts, client });
+    const res = await POST(req({ url: 'https://github.com/spring-projects/spring-petclinic' }));
+    expect(res.status).toBe(202);
+    const { jobId } = await res.json() as { jobId: string };
+    const job = await waitJob(jobId);
+    expect(job.status).toBe(repairSucceeds ? 'succeeded' : 'failed');
+    const revision = serverDeps.store.getRevision(jobId);
+    if (repairSucceeds) {
+      expect(revision).toMatchObject({
+        title: 'Spring PetClinic',
+        privacy: QUOTA
+          ? { classification: 'public', boundary: 'external-allowed' }
+          : { classification: 'private', boundary: 'local-only' },
+      });
+      const poll = await GET(getReq(jobId), { params: Promise.resolve({ id: jobId }) });
+      expect((await poll.json()).gaps).toEqual(['No deployment descriptor detected']);
+    } else {
+      expect(revision).toBeNull();
+      expect(job.error).toContain('views.0.type');
+      expect(job.error).toContain('visibility');
+    }
+    expect(serverDeps.store.creditsUsed('test-sess', day())).toBe(repairSucceeds && QUOTA ? 2 : 0);
+    const calls = serverDeps.store.listCalls('test-sess');
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject(repairSucceeds
+      ? { outcome: 'repaired', retries: 1, inputTokens: 2400, cacheWriteTokens: 1800, cacheReadTokens: 200, outputTokens: 1600 }
+      : { outcome: 'failed', retries: 2, inputTokens: 3600, cacheWriteTokens: 2700, cacheReadTokens: 300, outputTokens: 2400 });
+    expect(calls[0]!.costUsd).toBeGreaterThan(0);
+    // Repeated cancellation after settlement cannot refund successful work or
+    // double-refund a failed job.
+    await CANCEL(cancelReq(jobId), { params: Promise.resolve({ id: jobId }) });
+    expect(serverDeps.store.creditsUsed('test-sess', day())).toBe(repairSucceeds && QUOTA ? 2 : 0);
+  });
+
   it('happy path: 202 → succeeded, revision saved with pinned sha, 2 credits spent at accept', async () => {
     const res = await POST(req({ url: 'https://github.com/foo/bar', idempotencyKey: 'k1' }));
     expect(res.status).toBe(202);
@@ -132,6 +185,27 @@ describe('POST /api/repo', () => {
     const b = await POST(req({ url: 'https://github.com/foo/bar', idempotencyKey: 'dup' }));
     const { jobId: id2 } = (await b.json()) as { jobId: string };
     expect(id2).toBe(id1);
+    expect(serverDeps.store.creditsUsed('test-sess', day())).toBe(QUOTA ? 2 : 0);
+  });
+
+  it('reanalyzes the same repository after an old extraction failure and charges only successful work', async () => {
+    const body = { url: 'https://github.com/foo/bar', idempotencyKey: 'retry-old-extractor' };
+    serverDeps.ingestRepo = async () => ({ ok: false, reason: 'unsupported', message: 'No Spring Boot or FastAPI constructs found — M3 supports those two frameworks.' });
+    const first = await POST(req(body));
+    const { jobId: oldId } = await first.json() as { jobId: string };
+    expect((await waitJob(oldId)).status).toBe('failed');
+    expect(serverDeps.store.creditsUsed('test-sess', day())).toBe(0);
+    serverDeps.ingestRepo = async () => okIngest;
+    const retry = await POST(req(body));
+    expect(retry.status).toBe(202);
+    const { jobId: newId } = await retry.json() as { jobId: string };
+    expect(newId).not.toBe(oldId);
+    expect((await waitJob(newId)).status).toBe('succeeded');
+    expect(serverDeps.store.getJob(oldId)?.status).toBe('failed');
+    expect(serverDeps.store.creditsUsed('test-sess', day())).toBe(QUOTA ? 2 : 0);
+    expect(serverDeps.store.listCalls('test-sess')).toHaveLength(1);
+    const again = await POST(req(body));
+    expect((await again.json()).jobId).toBe(newId);
     expect(serverDeps.store.creditsUsed('test-sess', day())).toBe(QUOTA ? 2 : 0);
   });
 
@@ -214,6 +288,31 @@ describe('POST /api/repo', () => {
     const calls = serverDeps.store.listCalls('test-sess');
     expect(calls.length).toBe(1); // tokens hit call_log even though the job was cancelled
     expect(calls[0]!.outputTokens).toBe(usage.outputTokens);
+  });
+
+  it('meters a valid model returned after cancellation without saving a revision or refunding twice', async () => {
+    const started = deferred();
+    const finish = deferred();
+    serverDeps.assembleRepoModel = async () => {
+      started.resolve();
+      await finish.promise; // provider completes despite cancellation
+      return { ok: true, model: structuredClone(validFullModel), usage: { ...usage, repairs: 1 } };
+    };
+    const res = await POST(req({ url: 'https://github.com/foo/bar' }));
+    const { jobId } = await res.json() as { jobId: string };
+    await started.promise;
+    await CANCEL(cancelReq(jobId), { params: Promise.resolve({ id: jobId }) });
+    expect(serverDeps.store.getJob(jobId)!.status).toBe('cancelled');
+    expect(serverDeps.store.creditsUsed('test-sess', day())).toBe(0);
+    finish.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(serverDeps.store.getJob(jobId)!.status).toBe('cancelled');
+    expect(serverDeps.store.getRevision(jobId)).toBeNull();
+    expect(serverDeps.store.listCalls('test-sess')).toEqual([
+      expect.objectContaining({ outcome: 'failed', retries: 1, inputTokens: 1000, cacheWriteTokens: 5000, cacheReadTokens: 10000, outputTokens: 1500 }),
+    ]);
+    await CANCEL(cancelReq(jobId), { params: Promise.resolve({ id: jobId }) });
+    expect(serverDeps.store.creditsUsed('test-sess', day())).toBe(0);
   });
 
   it('cancel after success is a no-op — no double refund', async () => {

@@ -5,6 +5,7 @@ import { parseRepoUrl, type ParsedRepoUrl } from '@archwoven/ingest';
 import {
   serverDeps, readOrCreateSession, sessionCookie, tierOf,
   creditsExhaustedCopy, STOP_LOSS_COPY, BURST_COPY,
+  llmNotConfigured, LLM_NOT_CONFIGURED_COPY,
 } from '../../lib/server';
 import { withSlot } from '../../lib/llm-limiter';
 import { deployMode, privacyForMode } from '../../lib/mode';
@@ -47,6 +48,7 @@ export async function POST(req: Request) {
     ? (safeSubdir(String(body.subdir)) ? String(body.subdir) : null)
     : parsed?.subdir ?? undefined;
   if (subdir === null) return Response.json({ error: 'subdir must be a simple relative path without ".."' }, { status: 400, headers });
+  if (llmNotConfigured()) return Response.json({ reason: 'llm-not-configured', message: LLM_NOT_CONFIGURED_COPY }, { status: 503, headers });
 
   const tier = tierOf(sessionId);
   const key = body.idempotencyKey ? String(body.idempotencyKey) : undefined;
@@ -120,7 +122,12 @@ export async function POST(req: Request) {
       if (!out.ok) return fail(out.errors.join('; '), out.usage, out.usage.repairs);
       const checked = validateModel(out.model);
       if (!checked.ok) return fail(checked.errors.join('; '), out.usage, out.usage.repairs);
-      if (!claim()) return; // cancelled during design — cancel owns the terminal write
+      if (!claim()) {
+        // A provider can finish successfully despite cancellation. Cancel owns
+        // settlement/refund, but spent tokens still belong in the stop-loss meter.
+        recordUsage(serverDeps.store, { sessionId, tier, action: 'repo', usage: out.usage, retries: out.usage.repairs, outcome: 'failed' });
+        return;
+      }
       // §9: privacy is server-stamped from deploy mode — model self-report never wins.
       const stamped = { ...checked.model, privacy: privacyForMode(deployMode()) };
       serverDeps.store.saveRevision(jobId, stamped, sessionId);

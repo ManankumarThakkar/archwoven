@@ -3,14 +3,16 @@
   "private": true,
   "packageManager": "pnpm@12.9.1",
   "scripts": {
-    "dev": "pnpm --filter web dev",
+    "dev": "pnpm build:packages && pnpm --filter web dev",
     "start:local": "ARCHWOVEN_MODE=local pnpm --filter web start",
     "build": "pnpm -r build",
     "test": "vitest run",
     "typecheck": "pnpm -r typecheck",
-    "bench:selftest": "pnpm --filter @archwoven/model build && node benchmarks/ordinary-model-floor/harness.selftest.mjs"
+    "bench:selftest": "pnpm --filter @archwoven/model build && node benchmarks/ordinary-model-floor/harness.selftest.mjs",
+    "build:packages": "pnpm -r --filter \"./packages/**\" build"
   },
   "devDependencies": {
+    "happy-dom": "^21.0.1",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4"
   }

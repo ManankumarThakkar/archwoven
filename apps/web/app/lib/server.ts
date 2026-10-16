@@ -14,6 +14,13 @@ import type { SystemModel, ViewType } from '@archwoven/model';
 /** §9: in local deployments every raw fetch passes the egress guard; hosted uses plain fetch. */
 const egressFetch: typeof fetch = deployMode() === 'local' ? makeEgressGuard(LOCAL_EGRESS_ALLOW) : fetch;
 
+/** Hosted without a key dies deep in the SDK ("Could not resolve authentication
+ *  method") after credits are reserved — fail at the gate, in human words, first. */
+export const LLM_NOT_CONFIGURED_COPY =
+  'No LLM is configured for this server. Set ANTHROPIC_API_KEY in apps/web/.env.local and restart, or run locally with Ollama: ARCHWOVEN_MODE=local pnpm dev.';
+export const llmNotConfigured = (): boolean =>
+  deployMode() === 'hosted' && !fakeMode() && (process.env.ANTHROPIC_API_KEY ?? '').trim().length === 0;
+
 /**
  * Server singletons + injectable seams. Tests replace `serverDeps.store`
  * (":memory:") and `serverDeps.generateModel` / `serverDeps.generateRefinement`

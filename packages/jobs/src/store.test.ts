@@ -64,6 +64,29 @@ describe('jobs store', () => {
     expect(s.findJobByIdempotencyKey('k1', 'sessB')).toBeNull();
   });
 
+  it.each(['failed', 'cancelled'] as const)('allows a fresh attempt after %s without removing job history', (status) => {
+    const s = openStore(':memory:');
+    s.createJob({ id: 'old', modelId: 'old', kind: 'repo', idempotencyKey: 'repo-key', sessionId: 'owner' });
+    s.updateJob('old', { status, error: 'previous attempt stopped' });
+    expect(s.findJobByIdempotencyKey('repo-key', 'owner')).toBeNull();
+    s.createJob({ id: 'retry', modelId: 'retry', kind: 'repo', idempotencyKey: 'repo-key', sessionId: 'owner' });
+    expect(s.findJobByIdempotencyKey('repo-key', 'owner')?.id).toBe('retry');
+    expect(s.getJob('old')).toMatchObject({ status, error: 'previous attempt stopped' });
+    expect(s.getJob('old')?.idempotencyKey).toBeUndefined();
+    s.close();
+  });
+
+  it.each(['queued', 'running', 'succeeded'] as const)('keeps %s attempts deduplicated and scoped to their owner', (status) => {
+    const s = openStore(':memory:');
+    s.createJob({ id: 'existing', modelId: 'existing', kind: 'repo', idempotencyKey: 'repo-key', sessionId: 'owner' });
+    s.updateJob('existing', { status });
+    expect(s.findJobByIdempotencyKey('repo-key', 'owner')?.id).toBe('existing');
+    expect(() => s.createJob({ id: 'duplicate', modelId: 'duplicate', kind: 'repo', idempotencyKey: 'repo-key', sessionId: 'owner' })).toThrow();
+    s.createJob({ id: 'other', modelId: 'other', kind: 'repo', idempotencyKey: 'repo-key', sessionId: 'other-owner' });
+    expect(s.findJobByIdempotencyKey('repo-key', 'owner')?.id).toBe('existing');
+    s.close();
+  });
+
   it('records ownership on jobs and revisions', () => {
     const s = openStore(':memory:');
     s.createJob({ id: 'j1', modelId: 'm1', kind: 'generate', sessionId: 'sessA' });
@@ -98,7 +121,7 @@ describe('jobs store', () => {
     expect(s.reserveCredits('s3', day, 1, 6)).not.toBeNull();
   });
 
-  it('marks orphaned running/queued jobs failed on reopen and refunds their reserved credits', () => {
+  it('marks orphaned running/queued jobs failed on explicit sweep and refunds their reserved credits', () => {
     const file = `${process.env.TMPDIR ?? '/tmp'}/aw-orphan-test-${Date.now()}.db`;
     const s1 = openStore(file);
     s1.createJob({ id: 'j1', modelId: 'm1', kind: 'generate', sessionId: 's4' });
@@ -107,6 +130,8 @@ describe('jobs store', () => {
     s1.reserveCredits('s4', day, 1, 6);
     s1.close();
     const s2 = openStore(file);
+    expect(s2.getJob('j1')?.status).toBe('running'); // open alone must never sweep (dev re-evaluates per route bundle)
+    expect(s2.sweepOrphans()).toBe(1);
     expect(s2.getJob('j1')?.status).toBe('failed');
     expect(s2.getJob('j1')?.error).toMatch(/restarted/);
     expect(s2.creditsUsed('s4', day)).toBe(0);
