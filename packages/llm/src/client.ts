@@ -1,8 +1,10 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
+import { generatedViewErrors } from './generated-view';
 import {
   SystemModelSchema,
   SequenceMetaSchema,
+  FieldSchema,
   validateModel,
   validFullModelExtended,
   type SystemModel,
@@ -210,7 +212,11 @@ ${JSON.stringify(promptSchema)}
 The value encoded inside sequenceJson must follow this complete schema. A fragment is optional on a message, never a property on the sequence root. For example a message may include "fragment":{"type":"opt","covers":[2,3,4]} to group those numbered messages.
 <sequence-json-schema>
 ${JSON.stringify(z.toJSONSchema(SequenceMetaSchema, { target: 'draft-2020-12', io: 'input' }))}
-</sequence-json-schema>`;
+</sequence-json-schema>
+The value encoded inside fieldsJson must follow this schema; key may be pk, fk or uk, and absent types/keys stay unspecified.
+<fields-json-schema>
+${JSON.stringify(z.toJSONSchema(z.array(FieldSchema), { target: 'draft-2020-12', io: 'input' }))}
+</fields-json-schema>`;
 
 /** Ollama supports the native schema directly: no Anthropic grammar workarounds,
  * encoded JSON strings or forced nullable defaults. New models have no parent
@@ -253,7 +259,7 @@ Hard rules:
 - every node and edge carries provenance: user-specified (stated by the user), source-supported (seen in code), inferred (reasonable deduction), proposed (your recommendation, not the user's).
 - never invent business-critical components as user-specified; when unsure use inferred or proposed.
 - sequence views: participants + messages, seq consecutive from 1, kind call|return|async, fragments alt|loop|opt with covers listing message seqs.
-- ER views: entity nodes with fields (name, type, key pk|fk|uk) and relation edges with cardinality 1:1|1:N|N:M.
+- ER views: entity nodes with fields (name, type, key pk|fk|uk) and relation edges with cardinality 1:1|1:N|N:M. N:M is one relation edge, not mirrored/duplicate edges. If cardinality is unknown, use null and an openQuestions entry with blockedBy set to that edge id.
 - every view lists its member node ids and edge ids; every referenced id exists.
 - labels short (<= 40 chars); no HTML, no markdown, no comments in the JSON.
 - Optional semantic fields — emit when they genuinely hold: semanticChecks (allowedRoots/allowedTerminals = nodes legitimately without incoming/outgoing edges, requiredEdges/requiredPaths = bindings and paths the architecture really has), view mainPath (ordered node ids along real forward edges), edge role (main|branch|async|return|error), boundaries (wraps node ids, a node sits in at most one), guidedViews (<= 5 chapters, focus = node ids, note explains the chapter). Never emit a check your own output would fail.
@@ -362,9 +368,8 @@ export async function generateModel(
     }
 
     const result = validateModel(parsed);
-    if (result.ok) return { ok: true, model: result.model, usage: usageFrom(billed, effort, Date.now() - t0, repairs) };
-
-    lastErrors = result.errors;
+    lastErrors = result.ok ? generatedViewErrors(result.model, view) : result.errors;
+    if (result.ok && !lastErrors.length) return { ok: true, model: result.model, usage: usageFrom(billed, effort, Date.now() - t0, repairs) };
     if (attempt < MAX_REPAIRS) {
       repairs++;
       messages.push({ role: 'assistant', content: text });

@@ -4,12 +4,53 @@ import { describe, expect, it } from 'vitest';
 import { validFullModel } from '@archwoven/model';
 import { sequenceSvg } from './sequence';
 import { ensureResvg, renderPng } from './export';
+import { Resvg } from '@resvg/resvg-wasm';
+import { entityLayout } from '../../lib/entity';
+import { buildSvg } from '../../lib/export-svg';
+import { layoutModel } from './layout';
 
 const require = createRequire(import.meta.url);
 
 const here = new URL('.', import.meta.url).pathname;
 
 describe('renderPng (resvg-wasm)', () => {
+  it('keeps an ER relationship caption outside both entity boxes', async () => {
+    await ensureResvg(readFileSync(require.resolve('@resvg/resvg-wasm/index_bg.wasm')));
+    const m = structuredClone(validFullModel), view = m.views.find(v => v.id === 'view.er')!;
+    view.orientation = 'LR'; view.nodes = ['entity.user', 'entity.order']; view.edges = ['er.user-order'];
+    m.edges.find(e => e.id === 'er.user-order')!.label = 'has a reader profile';
+    const svg = await buildSvg(m, view.id), placed = await layoutModel(m, view.id);
+    const caption = svg.match(/<text[^>]*>has a reader profile · 1:N<\/text>/)![0];
+    const renderer = new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" width="2000" height="2000" font-family="Inter">${caption}</svg>`, { font: { fontBuffers: [readFileSync(`${here}../../public/fonts/inter-400.woff2`)], defaultFontFamily: 'Inter' } });
+    try {
+      const label = renderer.getBBox()!;
+      for (const node of placed.nodes) expect(label.x + label.width <= node.x || label.x >= node.x + node.width || label.y + label.height <= node.y || label.y >= node.y + node.height).toBe(true);
+    } finally { renderer.free(); }
+  });
+  it('contains wide field/header glyphs using the actual bundled font metrics', async () => {
+    await ensureResvg(readFileSync(require.resolve('@resvg/resvg-wasm/index_bg.wasm')));
+    const entity = structuredClone(validFullModel.nodes.find(n => n.id === 'entity.user')!);
+    entity.label = 'W'.repeat(42); entity.fields = [{ name: 'W'.repeat(22), type: 'W'.repeat(16) }];
+    const box = entityLayout(entity);
+    const fonts = [readFileSync(`${here}../../public/fonts/inter-400.woff2`), readFileSync(`${here}../../public/fonts/inter-600.woff2`)];
+    const groups = [{ lines: box.label, size: 13, width: box.width - 28 }, ...box.rows.flatMap(row => [{ lines: row.name, size: 12, width: 160 }, { lines: row.type, size: 12, width: 124 }])];
+    for (const group of groups) for (const line of group.lines) {
+      const rendered = new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="40"><text x="0" y="25" font-family="Inter" font-size="${group.size}" font-weight="600">${line}</text></svg>`, { font: { fontBuffers: fonts, defaultFontFamily: 'Inter' } });
+      try { expect(rendered.getBBox()!.width).toBeLessThanOrEqual(group.width); } finally { rendered.free(); }
+    }
+  });
+  it.each(['1:1', '1:N', 'N:M'] as const)('retains %s cardinality endpoints in the real ER PNG rasterizer', async cardinality => {
+    await ensureResvg(readFileSync(require.resolve('@resvg/resvg-wasm/index_bg.wasm')));
+    const m = structuredClone(validFullModel); m.edges.find(e => e.id === 'er.user-order')!.cardinality = cardinality;
+    m.views.find(v => v.id === 'view.er')!.edges = ['er.user-order'];
+    const svg = await buildSvg(m, 'view.er');
+    const fonts = [readFileSync(`${here}../../public/fonts/inter-400.woff2`)];
+    const original = await renderPng(svg, fonts);
+    for (const endpoint of ['start', 'end']) {
+      const removed = svg.replace(new RegExp(` marker-${endpoint}="url\\(#er-[^"]+\\)"`, 'g'), '');
+      expect(original).not.toEqual(await renderPng(removed, fonts));
+    }
+  });
   it.each(['async', 'return'] as const)('retains the %s open arrowhead in the actual PNG rasterizer', async kind => {
     await ensureResvg(readFileSync(require.resolve('@resvg/resvg-wasm/index_bg.wasm')));
     const m = structuredClone(validFullModel);

@@ -36,6 +36,22 @@ function fakeClient(canned: (unknown | null)[], opts: { countedTokens?: number; 
 }
 
 describe('generateModel (mocked SDK)', () => {
+  it('repairs a new ER model that silently omits cardinality instead of saving it as complete', async () => {
+    const incomplete = structuredClone(validFull);
+    delete incomplete.edges.find(e => e.id === 'er.user-order')!.cardinality;
+    const { client, calls } = fakeClient([incomplete, validFull]);
+    const out = await generateModel('Users have many orders', 'er', { client });
+    expect(out.ok).toBe(true); expect(out.usage.repairs).toBe(1); expect(calls).toHaveLength(2);
+  });
+  it('includes field names, types and PK/FK/UK constraints in the hosted string-value contract', () => {
+    const nested = MODEL_JSON_CONTRACT.match(/<fields-json-schema>\n([\s\S]+?)\n<\/fields-json-schema>/);
+    expect(nested).not.toBeNull();
+    const field = JSON.parse(nested![1]!).items;
+    expect(field.properties).toHaveProperty('name'); expect(field.properties).toHaveProperty('type');
+    expect(JSON.stringify(field.properties.key)).toContain('pk');
+    expect(JSON.stringify(field.properties.key)).toContain('fk');
+    expect(JSON.stringify(field.properties.key)).toContain('uk');
+  });
   it('gives hosted generation the complete sequence value contract despite its string wire encoding', () => {
     const nested = MODEL_JSON_CONTRACT.match(/<sequence-json-schema>\n([\s\S]+?)\n<\/sequence-json-schema>/);
     expect(nested).not.toBeNull();

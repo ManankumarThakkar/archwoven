@@ -13,6 +13,8 @@ import { NodeFinder } from './NodeFinder';
 import { OutlineRail } from './OutlineRail';
 import { SequenceCanvas } from './SequenceCanvas';
 import { PROVENANCE_STYLE } from '../../lib/provenance';
+import { EntityNode } from './EntityNode';
+import { erMarkers, erLabel, ER_MARKER_DEFS } from '../../lib/entity';
 
 const MOTION_KEY = 'archwoven-motion';
 
@@ -23,7 +25,7 @@ function BoundaryNode({ data }: { data: { label: string } }) {
     </div>
   );
 }
-const nodeTypes = { boundary: BoundaryNode };
+const nodeTypes = { boundary: BoundaryNode, entity: EntityNode };
 
 const readHash = (): Record<string, string> =>
   Object.fromEntries(new URLSearchParams((typeof window !== 'undefined' ? window.location.hash : '').replace(/^#/, '')));
@@ -92,19 +94,25 @@ function GraphCanvas({ model, modelId, viewId, onSelect, onDeselect }: CanvasPro
       const nodes: Node[] = r.nodes.map((n) => {
         const node = model.nodes.find((m) => m.id === n.id)!;
         const s = PROVENANCE_STYLE[node.provenance];
+        const entity = view?.type === 'er' && node.kind === 'entity';
+        const sourcePosition = view?.orientation === 'LR' ? Position.Right : Position.Bottom;
+        const targetPosition = view?.orientation === 'LR' ? Position.Left : Position.Top;
         return {
           id: n.id,
           position: { x: n.x, y: n.y },
-          sourcePosition: view?.orientation === 'LR' ? Position.Right : Position.Bottom,
-          targetPosition: view?.orientation === 'LR' ? Position.Left : Position.Top,
-          data: { label: `${s.badge} · ${node.label}` },
-          style: { width: n.width, height: n.height, border: `2px solid ${s.border}`, background: s.bg, color: '#e5e7eb', borderRadius: 10, display: 'grid', placeItems: 'center', fontSize: 13 },
+          type: entity ? 'entity' : undefined,
+          sourcePosition, targetPosition,
+          data: entity ? { entity: node, sourcePosition, targetPosition } : { label: `${s.badge} · ${node.label}` },
+          style: entity
+            ? { width: n.width, height: n.height, borderRadius: 10, background: '#0f172a' }
+            : { width: n.width, height: n.height, border: `2px solid ${s.border}`, background: s.bg, color: '#e5e7eb', borderRadius: 10, display: 'grid', placeItems: 'center', fontSize: 13 },
         };
       });
       const edges: Edge[] = (view?.edges ?? []).flatMap((id) => {
         const e = model.edges.find((m) => m.id === id);
         if (!e) return [];
-        return [{ id, source: e.from, target: e.to, label: e.label ?? '', animated: e.type === 'async' && motion === 'motion', style: { stroke: PROVENANCE_STYLE[e.provenance].border } }];
+        const markers = view?.type === 'er' ? erMarkers(e) : {};
+        return [{ id, source: e.from, target: e.to, label: view?.type === 'er' ? erLabel(e) : e.label ?? '', markerStart: markers.start, markerEnd: markers.end, ariaLabel: view?.type === 'er' ? `${e.from} to ${e.to}: ${erLabel(e)}` : undefined, animated: e.type === 'async' && motion === 'motion', style: { stroke: PROVENANCE_STYLE[e.provenance].border } }];
       });
       // boundary hulls over the members actually placed in this view (partial views hull what's there)
       const byId = new Map(r.nodes.map((n) => [n.id, n]));
@@ -301,6 +309,7 @@ function GraphCanvas({ model, modelId, viewId, onSelect, onDeselect }: CanvasPro
 
   return (
     <div className="aw-canvas" style={{ width: '100%', height: '100%', position: 'relative' }}>
+      {view?.type === 'er' && <svg aria-hidden="true" width="0" height="0" style={{ position: 'absolute' }}><defs dangerouslySetInnerHTML={{ __html: ER_MARKER_DEFS }} /></svg>}
       <div className="aw-canvas-toolbar" style={{ position: 'absolute', top: 36, left: 8, zIndex: 5, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
         <select aria-label="route from" value={probeFrom} onChange={(e) => setProbeFrom(e.target.value)} style={selectCls} disabled={!!probe}>
           <option value="">from…</option>{viewNodes.map((id) => <option key={id} value={id}>{model.nodes.find((n) => n.id === id)?.label ?? id}</option>)}
@@ -356,6 +365,7 @@ function GraphCanvas({ model, modelId, viewId, onSelect, onDeselect }: CanvasPro
             </>
           )}
           <button type="button" style={btnCls} onClick={() => setFinderOpen(true)}>Find node /</button>
+          {view?.type === 'er' && <span style={{ fontSize: 11, color: '#a6b4cf' }}>PK primary · FK foreign · UK unique · 1 one · N/M many</span>}
         </div>
       </div>
       {chapter?.note && (

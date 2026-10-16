@@ -34,6 +34,26 @@ const promptContract = (body: Record<string, unknown>) => {
 };
 
 describe('generateModelLocal (Ollama adapter)', () => {
+  it('requires an explicit cardinality choice in the native ER grammar while allowing null for unknowns', async () => {
+    let format!: { properties: { edges: { items: { required: string[]; properties: { cardinality: unknown } } } } };
+    const out = await generateModelLocal('Users have many orders', 'er', { fetchImpl: (async (_url, init) => {
+      format = JSON.parse(init!.body as string).format;
+      return ndjsonResponse([JSON.stringify(validFullModel)]);
+    }) as typeof fetch });
+    expect(out.ok).toBe(true);
+    expect(format.properties.edges.items.required).toContain('cardinality');
+    expect(JSON.stringify(format.properties.edges.items.properties.cardinality)).toContain('null');
+  });
+  it('repairs missing ER cardinality while allowing explicitly disclosed unknown relationships', async () => {
+    const incomplete = structuredClone(validFullModel);
+    incomplete.edges.find(e => e.id === 'er.user-order')!.cardinality = null;
+    const disclosed = structuredClone(incomplete);
+    disclosed.openQuestions.push({ id: 'q.cardinality', text: 'How many orders can a user have?', blockedBy: 'er.user-order' });
+    let calls = 0;
+    const out = await generateModelLocal('An ER model with an unknown relationship', 'er', { fetchImpl: (async () => ndjsonResponse([JSON.stringify(calls++ ? disclosed : incomplete)])) as typeof fetch });
+    expect(out.ok).toBe(true); expect(out.usage.repairs).toBe(1); expect(calls).toBe(2);
+    if (out.ok) expect(out.model.edges.find(e => e.id === 'er.user-order')!.cardinality).toBeNull();
+  });
   it('streams NDJSON, parses the model, and records TTFT + token usage', async () => {
     const json = JSON.stringify(validFullModel);
     const mid = Math.floor(json.length / 2);

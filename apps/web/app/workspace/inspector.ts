@@ -1,4 +1,4 @@
-import type { Evidence, NodeKind, SystemModel } from '@archwoven/model';
+import type { Evidence, Field, Cardinality, NodeKind, SystemModel } from '@archwoven/model';
 
 export interface EvidenceLink {
   label: string;
@@ -14,6 +14,8 @@ export interface InspectorPayload {
   nodeKind?: NodeKind;
   endpoints?: { from: string; to: string };
   type?: string;
+  fields?: Field[];
+  cardinality?: Cardinality | null;
   evidence: EvidenceLink[];
   gaps: string[];
 }
@@ -48,6 +50,7 @@ export function inspectorFor(model: SystemModel, id: string): InspectorPayload |
       id,
       kind: 'node',
       nodeKind: node.kind,
+      ...(node.kind === 'entity' ? { fields: node.fields ?? [] } : {}),
       label: node.label,
       provenance: node.provenance,
       role: ROLE[node.kind],
@@ -64,6 +67,7 @@ export function inspectorFor(model: SystemModel, id: string): InspectorPayload |
       provenance: edge.provenance,
       endpoints: { from: edge.from, to: edge.to },
       type: edge.type,
+      ...(edge.type === 'relation' ? { cardinality: edge.cardinality ?? null } : {}),
       evidence: edge.evidence.map(evidenceLink),
       gaps: model.openQuestions.filter((q) => q.blockedBy === id).map((q) => q.text),
     };
