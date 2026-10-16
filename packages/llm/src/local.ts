@@ -8,6 +8,7 @@ import { LOCAL_MODEL_SYSTEM, NATIVE_MODEL_JSON_SCHEMA, MAX_REPAIRS, type Generat
 import { LOCAL_REPO_SYSTEM, fenceEscape, pinEvidence, sourceEvidenceErrors, preserveSourceGaps } from './repo';
 import { LOCAL_REFINEMENT_SYSTEM } from './refine';
 import type { RefineOutcome } from './refine';
+import { buildSourceModel, SOURCE_PRESENTATION_SCHEMA, SOURCE_PRESENTATION_SYSTEM } from './source-presentation';
 
 /** Overridable via OLLAMA_MODEL (.env.local); 20b (~13 GB) keeps a 16 GB-light
  * footprint vs 120b's 65 GB resident — same family, same constrained-decoding path. */
@@ -49,7 +50,7 @@ const zeroUsage = (model: string, ttftMs = 0): LocalTaskUsage => ({ model, effor
 export async function ollamaChat(
   messages: { role: string; content: string }[],
   format: unknown,
-  opts: { fetchImpl?: typeof fetch; model?: string; baseUrl?: string; think?: boolean; effort?: TaskUsage['effort'] } = {},
+  opts: { fetchImpl?: typeof fetch; model?: string; baseUrl?: string; think?: boolean; effort?: TaskUsage['effort']; maxOutputTokens?: number } = {},
 ): Promise<OllamaResult> {
   const doFetch = opts.fetchImpl ?? fetch;
   const model = opts.model ?? LOCAL_MODEL;
@@ -62,7 +63,7 @@ export async function ollamaChat(
     res = await doFetch(`${baseUrl}/api/chat`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ model, stream: true, think: opts.think ?? false, num_predict: MAX_OUTPUT_TOKENS, keep_alive: '10m', format, messages }),
+      body: JSON.stringify({ model, stream: true, think: opts.think ?? false, options: { num_predict: Math.min(MAX_OUTPUT_TOKENS, Math.max(1, Math.floor(opts.maxOutputTokens ?? MAX_OUTPUT_TOKENS))) }, keep_alive: '10m', format, messages }),
     });
   } catch (e) {
     return { text: '', usage: zeroUsage(model), error: `ollama request failed: ${e instanceof Error ? e.message : String(e)}` };
@@ -244,9 +245,10 @@ export async function assembleRepoModelLocal(
   opts: { fetchImpl?: typeof fetch; model?: string; baseUrl?: string; signal?: AbortSignal } = {},
 ): Promise<GenerateOutcome> {
   const repoFull = `${meta.owner}/${meta.repo}`;
+  const generic = !!fragment.sourceContext;
   const context = fenceEscape(JSON.stringify({ framework: meta.framework, repo: repoFull, sha: meta.sha, fragment }));
   const messages: { role: string; content: string }[] = [
-    { role: 'system', content: LOCAL_REPO_SYSTEM },
+    { role: 'system', content: generic ? SOURCE_PRESENTATION_SYSTEM : LOCAL_REPO_SYSTEM },
     { role: 'user', content: `Repository: ${repoFull} @ ${meta.sha}\nFramework: ${meta.framework}\n\n<repo-data>\n${context}\n</repo-data>` },
   ];
 
@@ -255,7 +257,7 @@ export async function assembleRepoModelLocal(
   let usage = zeroUsage(opts.model ?? LOCAL_MODEL);
 
   for (let attempt = 0; attempt <= MAX_REPAIRS; attempt++) {
-    const r = await ollamaChat(messages, NATIVE_MODEL_JSON_SCHEMA, opts);
+    const r = await ollamaChat(messages, generic ? SOURCE_PRESENTATION_SCHEMA : NATIVE_MODEL_JSON_SCHEMA, { ...opts, maxOutputTokens: generic ? 4096 : MAX_OUTPUT_TOKENS });
     usage = { ...r.usage, repairs };
     if (r.error) {
       lastErrors = [r.error];
@@ -269,7 +271,7 @@ export async function assembleRepoModelLocal(
       parsed = undefined;
     }
     if (parsed !== undefined) {
-      const result = validateModel(parsed);
+      const result = generic ? buildSourceModel(fragment, parsed, { classification: 'private', boundary: 'local-only' }) : validateModel(parsed);
       if (result.ok) {
         lastErrors = sourceEvidenceErrors(fragment, result.model);
         if (!lastErrors.length) {
@@ -284,7 +286,7 @@ export async function assembleRepoModelLocal(
     if (attempt < MAX_REPAIRS) {
       repairs++;
       messages.push({ role: 'assistant', content: r.text });
-      messages.push({ role: 'user', content: `The model JSON failed validation with these errors — fix them and emit the complete corrected JSON only:\n- ${lastErrors.join('\n- ')}` });
+      messages.push({ role: 'user', content: `The ${generic ? 'source presentation' : 'model'} JSON failed validation with these errors — fix them and emit the complete corrected JSON only:\n- ${lastErrors.join('\n- ')}` });
     }
   }
 

@@ -131,7 +131,8 @@ describe('generateModelLocal (Ollama adapter)', () => {
 
     const out = await generateModelLocal('shop', 'architecture', { fetchImpl: fakeFetch });
     expect(out.ok).toBe(true);
-    expect(body.num_predict).toBe(16000); // local guard, thinking-inclusive (§15 hosted lock does not apply)
+    expect((body.options as { num_predict: number } | undefined)?.num_predict).toBe(16000); // Ollama runtime options, thinking-inclusive
+    expect(body).not.toHaveProperty('num_predict');
     expect(body.keep_alive).toBe('10m');
   });
 
@@ -199,16 +200,12 @@ describe('generateRefinementLocal (Ollama EditOps)', () => {
 });
 
 describe('assembleRepoModelLocal (Ollama, fenced)', () => {
-  it.each(['invented-file', 'out-of-range', 'runtime-service', 'runtime-edge'] as const)('repairs generic %s claims using the same bounded evidence contract', async (failure) => {
+  it.each(['evidence', 'nodes', 'edges', 'privacy'] as const)('repairs an unsupported generic presentation %s field', async (field) => {
     const files = { 'main.py': 'from worker import run', 'worker.py': 'def run(): pass' };
     const fragment = extractGeneric(Object.keys(files), (path) => files[path as keyof typeof files]);
-    const fixed = { ...structuredClone(validFullModel), nodes: fragment.nodes, edges: fragment.edges, views: [{ id: 'view.architecture', type: 'architecture', nodes: fragment.nodes.map((node) => node.id), edges: fragment.edges.map((edge) => edge.id) }], openQuestions: [] };
-    const bad = structuredClone(fixed);
-    if (failure === 'invented-file') bad.nodes[0]!.evidence = [{ path: 'never-read.py', lines: [1, 1] }];
-    if (failure === 'out-of-range') bad.nodes[0]!.evidence = [{ path: 'main.py', lines: [5, 10] }];
-    if (failure === 'runtime-service') bad.nodes[0]!.kind = 'service';
-    if (failure === 'runtime-edge') { bad.edges[0]!.type = 'sync'; bad.edges[0]!.label = 'calls'; }
-    const bodies: { messages: { content: string }[] }[] = [];
+    const fixed = { title: 'Source map', openQuestions: [], guidedViews: [] };
+    const bad = { ...fixed, [field]: [{ invented: 'runtime claim' }] };
+    const bodies: { messages: { content: string }[]; options?: { num_predict: number } }[] = [];
     const urls: string[] = [];
     const fakeFetch = (async (url: unknown, init?: RequestInit) => {
       urls.push(String(url));
@@ -218,7 +215,8 @@ describe('assembleRepoModelLocal (Ollama, fenced)', () => {
     const out = await assembleRepoModelLocal(fragment, { owner: 'local', repo: 'cli', sha: 'abc123', framework: 'generic' }, { fetchImpl: fakeFetch });
     expect(out.ok).toBe(true);
     expect(bodies).toHaveLength(2);
-    expect(bodies[1]!.messages.at(-1)!.content).toMatch(/sample|module\/component|imports/);
+    expect(bodies[1]!.messages.at(-1)!.content).toMatch(/presentation/);
+    expect(bodies[0]!.options?.num_predict).toBe(4096);
     expect(urls.every((url) => url.startsWith('http://localhost:11434/'))).toBe(true);
     if (!out.ok) return;
     expect(out.usage.repairs).toBe(1);
@@ -227,15 +225,15 @@ describe('assembleRepoModelLocal (Ollama, fenced)', () => {
     expect(out.model.nodes[0]!.evidence[0]).toMatchObject({ repo: 'local/cli', commit: 'abc123' });
   });
 
-  it('fails closed locally when generic responses keep citing unsampled files', async () => {
+  it('fails closed locally when generic responses keep returning source graph data', async () => {
     const fragment = extractGeneric(['main.py'], () => 'print(1)');
-    const bad = { ...structuredClone(validFullModel), nodes: [{ ...fragment.nodes[0]!, evidence: [{ path: 'never-read.py', lines: [1, 1] }] }], edges: [], views: [{ id: 'view.architecture', type: 'architecture', nodes: [fragment.nodes[0]!.id], edges: [] }] };
+    const bad = { title: 'Source map', openQuestions: [], guidedViews: [], nodes: [] };
     let calls = 0;
     const fakeFetch = (async () => { calls++; return ndjsonResponse([JSON.stringify(bad)]); }) as typeof fetch;
     const out = await assembleRepoModelLocal(fragment, { owner: 'local', repo: 'cli', sha: 'abc123', framework: 'generic' }, { fetchImpl: fakeFetch });
     expect(out.ok).toBe(false);
     expect(calls).toBe(3);
-    if (!out.ok) expect(out.errors.join(' ')).toMatch(/evidence.*sample/i);
+    if (!out.ok) expect(out.errors.join(' ')).toMatch(/presentation/);
   });
 
   it('assembles with the repo-data fence and pins evidence server-side', async () => {

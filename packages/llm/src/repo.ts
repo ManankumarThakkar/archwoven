@@ -1,4 +1,5 @@
 import type { Fragment } from '@archwoven/extract';
+import { buildSourceModel, SOURCE_PRESENTATION_SYSTEM } from './source-presentation';
 import { validateModel, validFullModelExtended, type Evidence } from '@archwoven/model';
 import {
   MODEL, MAX_REPAIRS, MAX_TOKENS, CONTEXT_TOKEN_LIMIT, MODEL_JSON_CONTRACT, NATIVE_MODEL_JSON_CONTRACT,
@@ -104,7 +105,8 @@ export async function assembleRepoModel(
   const t0 = Date.now();
   const context = fenceEscape(JSON.stringify({ framework: meta.framework, repo: repoFull, sha: meta.sha, fragment }));
   const messages: unknown[] = [{ role: 'user', content: `Repository: ${repoFull} @ ${meta.sha}\nFramework: ${meta.framework}\n\n<repo-data>\n${context}\n</repo-data>` }];
-  const system = [{ type: 'text', text: REPO_SYSTEM, cache_control: { type: 'ephemeral' } }];
+  const generic = !!fragment.sourceContext;
+  const system = [{ type: 'text', text: generic ? SOURCE_PRESENTATION_SYSTEM : REPO_SYSTEM, cache_control: { type: 'ephemeral' } }];
 
   // §15 gate, fail closed — same contract as generateModel.
   try {
@@ -134,7 +136,7 @@ export async function assembleRepoModel(
       // limit as generateModel; validateModel + repair loop enforce the shape.
       response = await client.beta.messages.create({
         model: MODEL,
-        max_tokens: MAX_TOKENS,
+        max_tokens: generic ? 2048 : MAX_TOKENS,
         system,
         messages,
       }, { signal: opts.signal });
@@ -147,18 +149,18 @@ export async function assembleRepoModel(
     const text = response.content.filter((b) => b.type === 'text').map((b) => b.text ?? '').join('');
     let parsed: unknown;
     try {
-      parsed = decodeWireModel(JSON.parse(text));
+      parsed = generic ? JSON.parse(text) : decodeWireModel(JSON.parse(text));
     } catch (e) {
       lastErrors = [`output was not valid JSON (${response.stop_reason ?? 'unknown'}): ${e instanceof Error ? e.message : String(e)}`];
       if (attempt < MAX_REPAIRS) {
         repairs++;
         messages.push({ role: 'assistant', content: text });
-        messages.push({ role: 'user', content: `Your previous response was not complete valid JSON${response.stop_reason === 'max_tokens' ? ' (it was truncated)' : ''} — emit the complete valid Archwoven system model JSON only, no markdown, no commentary.` });
+        messages.push({ role: 'user', content: `Your previous response was not complete valid JSON${response.stop_reason === 'max_tokens' ? ' (it was truncated)' : ''} — emit the complete valid ${generic ? 'source presentation' : 'Archwoven system model'} JSON only, no markdown, no commentary.` });
       }
       continue;
     }
 
-    const result = validateModel(parsed);
+    const result = generic ? buildSourceModel(fragment, parsed, { classification: 'public', boundary: 'external-allowed' }) : validateModel(parsed);
     if (result.ok) {
       lastErrors = sourceEvidenceErrors(fragment, result.model);
       if (!lastErrors.length) {
@@ -172,7 +174,7 @@ export async function assembleRepoModel(
     if (attempt < MAX_REPAIRS) {
       repairs++;
       messages.push({ role: 'assistant', content: text });
-      messages.push({ role: 'user', content: `The model JSON failed validation with these errors — fix them and emit the complete corrected JSON only:\n- ${lastErrors.join('\n- ')}` });
+      messages.push({ role: 'user', content: `The ${generic ? 'source presentation' : 'model'} JSON failed validation with these errors — fix them and emit the complete corrected JSON only:\n- ${lastErrors.join('\n- ')}` });
     }
   }
 
