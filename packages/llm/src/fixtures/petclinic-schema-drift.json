@@ -1,0 +1,29 @@
+{
+  "description": "Synthetic reproduction of the confirmed Spring PetClinic schema mismatch; not a captured provider response.",
+  "fragment": {
+    "nodes": [{"id":"svc.petclinic","kind":"service","label":"PetClinic","provenance":"source-supported","evidence":[{"path":"src/main/java/org/springframework/samples/petclinic/PetClinicApplication.java","lines":[1,20]}]}],
+    "edges": [],
+    "endpoints": [],
+    "gaps": ["No deployment descriptor detected"]
+  },
+  "invalidModel": {
+    "schemaVersion": "1",
+    "revision": 1,
+    "title": "Spring PetClinic",
+    "nodes": [{"id":"svc.petclinic","kind":"service","label":"PetClinic","provenance":"source-supported","evidence":[{"path":"src/main/java/org/springframework/samples/petclinic/PetClinicApplication.java","lines":[1,20]}]}],
+    "edges": [],
+    "views": [{"id":"view.architecture","type":"system-context","label":"Architecture","nodeIds":["svc.petclinic"],"gaps":["No deployment descriptor detected"]}],
+    "gaps": ["No deployment descriptor detected"],
+    "privacy": {"classification":"public","boundary":"external-allowed","visibility":"public"}
+  },
+  "repairedModel": {
+    "schemaVersion": "1",
+    "revision": 1,
+    "title": "Spring PetClinic",
+    "openQuestions": [{"id":"gap.deployment","text":"No deployment descriptor detected"}],
+    "nodes": [{"id":"svc.petclinic","kind":"service","label":"PetClinic","provenance":"source-supported","evidence":[{"path":"src/main/java/org/springframework/samples/petclinic/PetClinicApplication.java","lines":[1,20]}]}],
+    "edges": [],
+    "views": [{"id":"view.architecture","type":"architecture","nodes":["svc.petclinic"],"edges":[]}],
+    "privacy": {"classification":"public","boundary":"external-allowed"}
+  }
+}

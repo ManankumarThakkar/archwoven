@@ -1,12 +1,12 @@
 import { z } from 'zod';
 import type { Fragment } from '@archwoven/extract';
 import {
-  SystemModelSchema, EditOpSchema, applyEditOps, validateModel,
+  EditOpSchema, applyEditOps, validateModel,
   type EditOp, type SystemModel, type ViewType,
 } from '@archwoven/model';
-import { STABLE_SYSTEM, MAX_REPAIRS, faithfulSchema, type GenerateOutcome, type TaskUsage } from './client';
-import { REPO_SYSTEM, fenceEscape, pinEvidence } from './repo';
-import { REFINEMENT_SYSTEM } from './refine';
+import { LOCAL_MODEL_SYSTEM, NATIVE_MODEL_JSON_SCHEMA, MAX_REPAIRS, type GenerateOutcome, type TaskUsage } from './client';
+import { LOCAL_REPO_SYSTEM, fenceEscape, pinEvidence, sourceEvidenceErrors, preserveSourceGaps } from './repo';
+import { LOCAL_REFINEMENT_SYSTEM } from './refine';
 import type { RefineOutcome } from './refine';
 
 /** Overridable via OLLAMA_MODEL (.env.local); 20b (~13 GB) keeps a 16 GB-light
@@ -133,10 +133,10 @@ export async function generateModelLocal(
   opts: { fetchImpl?: typeof fetch; model?: string; baseUrl?: string; think?: boolean } = {},
 ): Promise<GenerateOutcome> {
   const messages: { role: string; content: string }[] = [
-    { role: 'system', content: STABLE_SYSTEM },
+    { role: 'system', content: LOCAL_MODEL_SYSTEM },
     { role: 'user', content: `View: ${view}\n\n${prompt}` },
   ];
-  const format = z.toJSONSchema(SystemModelSchema);
+  const format = NATIVE_MODEL_JSON_SCHEMA;
 
   let lastErrors: string[] = [];
   let repairs = 0;
@@ -187,7 +187,7 @@ export async function generateRefinementLocal(
   opts: { fetchImpl?: typeof fetch; model?: string; baseUrl?: string } = {},
 ): Promise<RefineOutcome> {
   const messages: { role: string; content: string }[] = [
-    { role: 'system', content: REFINEMENT_SYSTEM },
+    { role: 'system', content: LOCAL_REFINEMENT_SYSTEM },
     { role: 'user', content: `View: ${view}\n\nCurrent model JSON (revision ${model.revision}):\n${JSON.stringify(model)}\n\nInstruction: ${instruction}` },
   ];
 
@@ -246,7 +246,7 @@ export async function assembleRepoModelLocal(
   const repoFull = `${meta.owner}/${meta.repo}`;
   const context = fenceEscape(JSON.stringify({ framework: meta.framework, repo: repoFull, sha: meta.sha, fragment }));
   const messages: { role: string; content: string }[] = [
-    { role: 'system', content: REPO_SYSTEM },
+    { role: 'system', content: LOCAL_REPO_SYSTEM },
     { role: 'user', content: `Repository: ${repoFull} @ ${meta.sha}\nFramework: ${meta.framework}\n\n<repo-data>\n${context}\n</repo-data>` },
   ];
 
@@ -255,7 +255,7 @@ export async function assembleRepoModelLocal(
   let usage = zeroUsage(opts.model ?? LOCAL_MODEL);
 
   for (let attempt = 0; attempt <= MAX_REPAIRS; attempt++) {
-    const r = await ollamaChat(messages, faithfulSchema, opts);
+    const r = await ollamaChat(messages, NATIVE_MODEL_JSON_SCHEMA, opts);
     usage = { ...r.usage, repairs };
     if (r.error) {
       lastErrors = [r.error];
@@ -271,10 +271,15 @@ export async function assembleRepoModelLocal(
     if (parsed !== undefined) {
       const result = validateModel(parsed);
       if (result.ok) {
-        pinEvidence(result.model, repoFull, meta.sha); // pinned server-side, never model-supplied
-        return { ok: true, model: result.model, usage };
+        lastErrors = sourceEvidenceErrors(fragment, result.model);
+        if (!lastErrors.length) {
+          preserveSourceGaps(fragment, result.model);
+          pinEvidence(result.model, repoFull, meta.sha); // pinned server-side, never model-supplied
+          return { ok: true, model: result.model, usage };
+        }
+      } else {
+        lastErrors = result.errors;
       }
-      lastErrors = result.errors;
     }
     if (attempt < MAX_REPAIRS) {
       repairs++;

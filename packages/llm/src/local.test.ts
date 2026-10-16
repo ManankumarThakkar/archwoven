@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { validFullModel } from '@archwoven/model';
 import { generateModelLocal, generateRefinementLocal, assembleRepoModelLocal, LOCAL_MODEL } from './local';
 import { makeEgressGuard, LOCAL_EGRESS_ALLOW } from './egress';
+import { extractGeneric } from '@archwoven/extract';
 
 const enc = new TextEncoder();
 
@@ -27,6 +28,11 @@ function rawResponse(lines: string[]): Response {
   return new Response(stream, { headers: { 'content-type': 'application/x-ndjson' } });
 }
 
+const promptContract = (body: Record<string, unknown>) => {
+  const system = (body.messages as { role: string; content: string }[])[0]!.content;
+  return JSON.parse(system.split('<model-json-schema>')[1]!.split('</model-json-schema>')[0]!);
+};
+
 describe('generateModelLocal (Ollama adapter)', () => {
   it('streams NDJSON, parses the model, and records TTFT + token usage', async () => {
     const json = JSON.stringify(validFullModel);
@@ -42,6 +48,10 @@ describe('generateModelLocal (Ollama adapter)', () => {
     expect(out.ok).toBe(true);
     if (!out.ok) return;
     expect(out.model.title).toBe(validFullModel.title);
+    expect(out.model.nodes.find((node) => node.id === 'entity.user')!.fields).toEqual([
+      { name: 'id', type: 'uuid', key: 'pk' }, { name: 'email', type: 'text', key: 'uk' },
+    ]);
+    expect(out.model.views.find((view) => view.type === 'sequence')!.sequence!.participants).toEqual(['actor.user', 'gateway.api', 'svc.orders', 'external.stripe']);
     const u = out.usage as typeof out.usage & { ttftMs: number };
     expect(u.ttftMs).toBeGreaterThanOrEqual(0);
     expect(u.outputTokens).toBe(800);
@@ -119,7 +129,8 @@ describe('generateModelLocal (Ollama adapter)', () => {
       return ndjsonResponse([JSON.stringify(validFullModel)]);
     }) as unknown as typeof fetch;
 
-    await generateModelLocal('shop', 'architecture', { fetchImpl: fakeFetch });
+    const out = await generateModelLocal('shop', 'architecture', { fetchImpl: fakeFetch });
+    expect(out.ok).toBe(true);
     expect(body.num_predict).toBe(16000); // local guard, thinking-inclusive (§15 hosted lock does not apply)
     expect(body.keep_alive).toBe('10m');
   });
@@ -137,6 +148,14 @@ describe('generateModelLocal (Ollama adapter)', () => {
     const format = body.format as { type: string; properties: Record<string, { const?: string }> };
     expect(format.type).toBe('object');
     expect(format.properties.schemaVersion!.const).toBe('1');
+    const contract = promptContract(body);
+    expect(body.format).toEqual(contract);
+    expect(contract.properties.nodes.items.properties.evidence.type).toBe('array');
+    expect(contract.properties.nodes.items.properties).not.toHaveProperty('evidenceJson');
+    expect(contract.properties.views.items.properties).toHaveProperty('sequence');
+    expect(contract.properties).not.toHaveProperty('layout');
+    expect(contract.properties).not.toHaveProperty('parentId');
+    expect(contract.properties.openQuestions.type).toBe('array');
   });
 });
 
@@ -159,6 +178,12 @@ describe('generateRefinementLocal (Ollama EditOps)', () => {
     expect(urls.every((u) => u.includes('localhost:11434'))).toBe(true);
     expect((body.format as { type: string }).type).toBe('array');
     expect(JSON.stringify(body.messages)).toContain('add a cache');
+    const system = (body.messages as { content: string }[])[0]!.content;
+    expect(system).toContain('patch field is an OBJECT');
+    expect(system).not.toContain('patch field is a STRING');
+    const format = body.format as { items: { properties: { patch: { type: string } } } };
+    expect(format.items.properties.patch.type).toBe('object');
+    expect(out.ops[0]!.patch).toEqual({ id: 'svc.cache', kind: 'service', label: 'Cache', provenance: 'proposed' });
   });
 
   it('repairs a bad baseRevision within budget', async () => {
@@ -174,6 +199,45 @@ describe('generateRefinementLocal (Ollama EditOps)', () => {
 });
 
 describe('assembleRepoModelLocal (Ollama, fenced)', () => {
+  it.each(['invented-file', 'out-of-range', 'runtime-service', 'runtime-edge'] as const)('repairs generic %s claims using the same bounded evidence contract', async (failure) => {
+    const files = { 'main.py': 'from worker import run', 'worker.py': 'def run(): pass' };
+    const fragment = extractGeneric(Object.keys(files), (path) => files[path as keyof typeof files]);
+    const fixed = { ...structuredClone(validFullModel), nodes: fragment.nodes, edges: fragment.edges, views: [{ id: 'view.architecture', type: 'architecture', nodes: fragment.nodes.map((node) => node.id), edges: fragment.edges.map((edge) => edge.id) }], openQuestions: [] };
+    const bad = structuredClone(fixed);
+    if (failure === 'invented-file') bad.nodes[0]!.evidence = [{ path: 'never-read.py', lines: [1, 1] }];
+    if (failure === 'out-of-range') bad.nodes[0]!.evidence = [{ path: 'main.py', lines: [5, 10] }];
+    if (failure === 'runtime-service') bad.nodes[0]!.kind = 'service';
+    if (failure === 'runtime-edge') { bad.edges[0]!.type = 'sync'; bad.edges[0]!.label = 'calls'; }
+    const bodies: { messages: { content: string }[] }[] = [];
+    const urls: string[] = [];
+    const fakeFetch = (async (url: unknown, init?: RequestInit) => {
+      urls.push(String(url));
+      bodies.push(JSON.parse(String(init?.body)));
+      return ndjsonResponse([JSON.stringify(bodies.length === 1 ? bad : fixed)]);
+    }) as typeof fetch;
+    const out = await assembleRepoModelLocal(fragment, { owner: 'local', repo: 'cli', sha: 'abc123', framework: 'generic' }, { fetchImpl: fakeFetch });
+    expect(out.ok).toBe(true);
+    expect(bodies).toHaveLength(2);
+    expect(bodies[1]!.messages.at(-1)!.content).toMatch(/sample|module\/component|imports/);
+    expect(urls.every((url) => url.startsWith('http://localhost:11434/'))).toBe(true);
+    if (!out.ok) return;
+    expect(out.usage.repairs).toBe(1);
+    expect(out.model.edges[0]).toMatchObject({ type: 'relation', label: 'imports' });
+    expect(out.model.openQuestions.map((question) => question.text)).toEqual(expect.arrayContaining(fragment.gaps));
+    expect(out.model.nodes[0]!.evidence[0]).toMatchObject({ repo: 'local/cli', commit: 'abc123' });
+  });
+
+  it('fails closed locally when generic responses keep citing unsampled files', async () => {
+    const fragment = extractGeneric(['main.py'], () => 'print(1)');
+    const bad = { ...structuredClone(validFullModel), nodes: [{ ...fragment.nodes[0]!, evidence: [{ path: 'never-read.py', lines: [1, 1] }] }], edges: [], views: [{ id: 'view.architecture', type: 'architecture', nodes: [fragment.nodes[0]!.id], edges: [] }] };
+    let calls = 0;
+    const fakeFetch = (async () => { calls++; return ndjsonResponse([JSON.stringify(bad)]); }) as typeof fetch;
+    const out = await assembleRepoModelLocal(fragment, { owner: 'local', repo: 'cli', sha: 'abc123', framework: 'generic' }, { fetchImpl: fakeFetch });
+    expect(out.ok).toBe(false);
+    expect(calls).toBe(3);
+    if (!out.ok) expect(out.errors.join(' ')).toMatch(/evidence.*sample/i);
+  });
+
   it('assembles with the repo-data fence and pins evidence server-side', async () => {
     let body: Record<string, unknown> = {};
     const fakeFetch = (async (_url: unknown, init?: RequestInit) => {
@@ -189,6 +253,14 @@ describe('assembleRepoModelLocal (Ollama, fenced)', () => {
     expect(out.ok).toBe(true);
     if (!out.ok) return;
     const user = String((body.messages as { role: string; content: string }[])[1]?.content ?? '');
+    const contract = promptContract(body);
+    expect(body.format).toEqual(contract);
+    expect(contract.properties.nodes.items.properties.evidence.type).toBe('array');
+    expect(contract.properties.nodes.items.properties).not.toHaveProperty('evidenceJson');
+    expect(contract.properties.views.items.properties).toHaveProperty('sequence');
+    expect(contract.required).not.toContain('openQuestions');
+    expect(contract.properties.openQuestions.type).toBe('array');
+    expect(contract.properties).not.toHaveProperty('parentId');
     expect(user).toContain('<repo-data>');
     // exactly one closing fence in the user message — nothing inside can close it early
     expect(user.split('<\\/repo-data>').length - 1).toBe(0);
@@ -197,6 +269,27 @@ describe('assembleRepoModelLocal (Ollama, fenced)', () => {
     if (ev.length > 0) {
       expect(ev.every((e) => e.repo === 'acme/shop' && e.commit === 'abc123')).toBe(true);
     }
+  });
+
+  it('repairs a response using hosted wire aliases into a native local model', async () => {
+    const native = { schemaVersion: '1', revision: 1, title: 'Private API', nodes: [{ id: 'svc.api', kind: 'service', label: 'API', provenance: 'source-supported', evidence: [{ path: 'main.py' }] }], edges: [], views: [{ id: 'view.architecture', type: 'architecture', nodes: ['svc.api'], edges: [] }], privacy: { classification: 'private', boundary: 'local-only' } };
+    const wire = { ...native, nodes: [{ id: 'svc.api', kind: 'service', label: 'API', provenance: 'source-supported', evidenceJson: '[{"path":"main.py"}]' }] };
+    const bodies: Record<string, unknown>[] = [];
+    const fakeFetch = (async (_url: unknown, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      return ndjsonResponse([JSON.stringify(bodies.length === 1 ? wire : native)]);
+    }) as unknown as typeof fetch;
+    const out = await assembleRepoModelLocal(
+      { nodes: [], edges: [], endpoints: [], gaps: [] },
+      { owner: 'local', repo: 'api', sha: 'abc123', framework: 'fastapi' },
+      { fetchImpl: fakeFetch },
+    );
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.usage.repairs).toBe(1);
+    expect(bodies).toHaveLength(2);
+    expect(JSON.stringify(bodies[1]!.messages)).toContain('evidenceJson');
+    expect(out.model.nodes[0]!.evidence).toEqual([{ path: 'main.py', repo: 'local/api', commit: 'abc123' }]);
   });
 });
 
