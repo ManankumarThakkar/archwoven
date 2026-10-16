@@ -1,6 +1,5 @@
-import { readFileSync } from 'node:fs';
 import type { NodeKind } from '@archwoven/model';
-import { getParser, walkFiles, parseSource, evidence, visit } from './loader';
+import { getParser, loadSources, parseSource, evidence, visit, type SourceInventory } from './loader';
 import type { Fragment } from './fragment';
 import { deriveSemanticChecks } from './fragment';
 
@@ -12,7 +11,8 @@ const stringsIn = (text: string): string[] => [...text.matchAll(/["']([^"']*)["'
  * their factory functions, SQLAlchemy entities + FK relations, httpx externals,
  * pydantic-settings datasources. Computed prefixes and mounts become explicit gaps.
  */
-export async function extractFastApi(dir: string): Promise<Fragment> {
+export async function extractFastApi(dir: string, inventory?: SourceInventory): Promise<Fragment> {
+  const sources = loadSources(dir, ['.py'], inventory);
   const parser = await getParser('python');
   const frag: Fragment = { nodes: [], edges: [], endpoints: [], gaps: [] };
   const seen = new Set<string>();
@@ -35,8 +35,8 @@ export async function extractFastApi(dir: string): Promise<Fragment> {
   // Pass 1: parse everything, collect bindings.
   interface Module { rel: string; text: string; tree: Awaited<ReturnType<typeof parseSource>>['tree'] }
   const modules: Module[] = [];
-  for (const file of walkFiles(dir, '.py')) {
-    const p = await parseSource(parser, file, dir);
+  for (const [path, source] of sources) {
+    const p = await parseSource(parser, source, path);
     modules.push({ rel: p.relPath, text: p.source, tree: p.tree });
   }
 

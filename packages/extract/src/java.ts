@@ -1,8 +1,5 @@
-import { basename } from 'node:path';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import type { EdgeType, NodeKind } from '@archwoven/model';
-import { getParser, walkFiles, parseSource, evidence, visit, childOfType } from './loader';
+import { getParser, loadSources, parseSource, evidence, visit, childOfType, type SourceInventory } from './loader';
 import type { Fragment } from './fragment';
 import { deriveSemanticChecks } from './fragment';
 
@@ -37,7 +34,8 @@ const DATASTORES: [RegExp, string][] = [
  * repositories, DI edges, JPA entity owning-side relations, Kafka topics, datasource.
  * Placeholders (${VAR}) and dynamic wiring become explicit gaps — never guesses.
  */
-export async function extractSpringBoot(dir: string): Promise<Fragment> {
+export async function extractSpringBoot(dir: string, inventory?: SourceInventory): Promise<Fragment> {
+  const sources = loadSources(dir, ['.java', '.yml', '.yaml', '.properties'], inventory);
   const parser = await getParser('java');
   const frag: Fragment = { nodes: [], edges: [], endpoints: [], gaps: [] };
   const seen = new Set<string>();
@@ -56,8 +54,9 @@ export async function extractSpringBoot(dir: string): Promise<Fragment> {
     frag.edges.push({ id, from, to, type, label, provenance: 'source-supported', evidence: ev ? [ev] : [] });
   };
 
-  for (const file of walkFiles(dir, '.java')) {
-    const { tree, relPath } = await parseSource(parser, file, dir);
+  for (const [path, source] of sources) {
+    if (!path.endsWith('.java')) continue;
+    const { tree, relPath } = await parseSource(parser, source, path);
     visit(tree.rootNode, 'class_declaration', (cls) => {
       const name = cls.childForFieldName('name')?.text;
       if (!name) return;
@@ -192,9 +191,8 @@ export async function extractSpringBoot(dir: string): Promise<Fragment> {
 
   // Config: datasource + unresolved placeholders
   const datastores: { id: string; name: string; ev: { path: string; lines: [number, number] } }[] = [];
-  for (const file of walkFiles(dir, '.yml').concat(walkFiles(dir, '.properties'))) {
-    const rel = `${basename(file)}`;
-    const text = readFileSync(file, 'utf8');
+  for (const [rel, text] of sources) {
+    if (!/\.(?:ya?ml|properties)$/.test(rel)) continue;
     const lines = text.split('\n');
     for (const [re, name] of DATASTORES) {
       const idx = lines.findIndex((l) => !/^\s*#/.test(l) && re.test(l)); // commented-out URLs are not live config
