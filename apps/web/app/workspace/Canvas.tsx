@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ReactFlow, Background, Controls, MiniMap, Position, type Node, type Edge, type ReactFlowInstance } from '@xyflow/react';
+import { ReactFlow, Background, Controls, ControlButton, MiniMap, Position, type Node, type Edge, type ReactFlowInstance } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import type { SystemModel, NodeKind } from '@archwoven/model';
 import { layoutModel } from '../../lib/layout';
@@ -14,18 +14,23 @@ import { OutlineRail } from './OutlineRail';
 import { SequenceCanvas } from './SequenceCanvas';
 import { PROVENANCE_STYLE } from '../../lib/provenance';
 import { EntityNode } from './EntityNode';
+import { SystemNode } from './SystemNode';
+import { RoutedEdge } from './RoutedEdge';
+import { GRAPH_MARKER_DEFS, graphArrow } from '../../lib/graph-svg';
+import { graphScene } from '../../lib/graph-geometry';
 import { erMarkers, erLabel, ER_MARKER_DEFS } from '../../lib/entity';
 
 const MOTION_KEY = 'archwoven-motion';
 
-function BoundaryNode({ data }: { data: { label: string } }) {
+function BoundaryNode({ data }: { data: { label: string; lines: string[] } }) {
   return (
     <div style={{ width: '100%', height: '100%', border: '1.5px dashed #64748b', borderRadius: 14, pointerEvents: 'none' }}>
-      <span style={{ position: 'absolute', top: -9, left: 12, fontSize: 10, background: '#070b14', color: '#94a3b8', padding: '0 6px', borderRadius: 4 }}>{data.label}</span>
+      <span title={data.label} style={{ position: 'absolute', top: 8, left: 12, fontSize: 11, lineHeight: '16px', color: '#94a3b8' }}>{data.lines.map((line, i) => <span key={i} style={{ display: 'block' }}>{line}</span>)}</span>
     </div>
   );
 }
-const nodeTypes = { boundary: BoundaryNode, entity: EntityNode };
+const nodeTypes = { boundary: BoundaryNode, entity: EntityNode, system: SystemNode };
+const edgeTypes = { routed: RoutedEdge };
 
 const readHash = (): Record<string, string> =>
   Object.fromEntries(new URLSearchParams((typeof window !== 'undefined' ? window.location.hash : '').replace(/^#/, '')));
@@ -47,9 +52,10 @@ export function Canvas(props: CanvasProps) {
 }
 
 function GraphCanvas({ model, modelId, viewId, onSelect, onDeselect }: CanvasProps) {
+  const [layoutError, setLayoutError] = useState<string | null>(null);
   const [shareBusy, setShareBusy] = useState(false);
   const [shareErr, setShareErr] = useState<string | null>(null);
-  const [placed, setPlaced] = useState<{ key: string; nodes: Node[]; edges: Edge[] }>({ key: '', nodes: [], edges: [] });
+  const [placed, setPlaced] = useState<{ key: string; nodes: Node[]; edges: Edge[]; bounds: { x: number; y: number; width: number; height: number } }>({ key: '', nodes: [], edges: [], bounds: { x: 0, y: 0, width: 0, height: 0 } });
   const [focusId, setFocusId] = useState<string | null>(null);
   const [relationId, setRelationId] = useState<string | null>(null);
   const [finderOpen, setFinderOpen] = useState(false);
@@ -89,45 +95,37 @@ function GraphCanvas({ model, modelId, viewId, onSelect, onDeselect }: CanvasPro
 
   useEffect(() => {
     let alive = true;
+    setLayoutError(null);
     layoutModel(model, viewId).then((r) => {
       if (!alive) return;
       const nodes: Node[] = r.nodes.map((n) => {
         const node = model.nodes.find((m) => m.id === n.id)!;
         const s = PROVENANCE_STYLE[node.provenance];
-        const entity = view?.type === 'er' && node.kind === 'entity';
+        const entity = node.kind === 'entity';
         const sourcePosition = view?.orientation === 'LR' ? Position.Right : Position.Bottom;
         const targetPosition = view?.orientation === 'LR' ? Position.Left : Position.Top;
         return {
           id: n.id,
           position: { x: n.x, y: n.y },
-          type: entity ? 'entity' : undefined,
+          type: entity ? 'entity' : 'system',
           sourcePosition, targetPosition,
-          data: entity ? { entity: node, sourcePosition, targetPosition } : { label: `${s.badge} · ${node.label}` },
+          data: entity ? { entity: node, sourcePosition, targetPosition } : { node, sourcePosition, targetPosition },
           style: entity
             ? { width: n.width, height: n.height, borderRadius: 10, background: '#0f172a' }
-            : { width: n.width, height: n.height, border: `2px solid ${s.border}`, background: s.bg, color: '#e5e7eb', borderRadius: 10, display: 'grid', placeItems: 'center', fontSize: 13 },
+            : { width: n.width, height: n.height, borderRadius: 10, background: s.bg },
         };
       });
       const edges: Edge[] = (view?.edges ?? []).flatMap((id) => {
         const e = model.edges.find((m) => m.id === id);
         if (!e) return [];
-        const markers = view?.type === 'er' ? erMarkers(e) : {};
-        return [{ id, source: e.from, target: e.to, label: view?.type === 'er' ? erLabel(e) : e.label ?? '', markerStart: markers.start, markerEnd: markers.end, ariaLabel: view?.type === 'er' ? `${e.from} to ${e.to}: ${erLabel(e)}` : undefined, animated: e.type === 'async' && motion === 'motion', style: { stroke: PROVENANCE_STYLE[e.provenance].border } }];
+        const markers = view?.type === 'er' ? erMarkers(e) : { end: graphArrow(e) };
+        const route = r.edges.find(route => route.id === id);
+        return [{ id, source: e.from, target: e.to, type: route ? 'routed' : undefined, data: route ? { route } : undefined, label: view?.type === 'er' ? erLabel(e) : e.label ?? '', markerStart: markers.start, markerEnd: markers.end, ariaLabel: view?.type === 'er' ? `${e.from} to ${e.to}: ${erLabel(e)}` : undefined, animated: e.type === 'async' && motion === 'motion', style: { stroke: PROVENANCE_STYLE[e.provenance].border, strokeDasharray: e.type === 'async' ? '6 4' : undefined } }];
       });
-      // boundary hulls over the members actually placed in this view (partial views hull what's there)
-      const byId = new Map(r.nodes.map((n) => [n.id, n]));
-      const hulls: Node[] = model.boundaries.flatMap((b) => {
-        const members = b.wraps.map((id) => byId.get(id)).filter(Boolean);
-        if (members.length === 0) return [];
-        const xs = members.map((m) => m!.x), ys = members.map((m) => m!.y);
-        const x2 = members.map((m) => m!.x + m!.width), y2 = members.map((m) => m!.y + m!.height);
-        const min = { x: Math.min(...xs) - 24, y: Math.min(...ys) - 32 };
-        const w = Math.max(...x2) - Math.min(...xs) + 48, h = Math.max(...y2) - Math.min(...ys) + 56;
-        if (!Number.isFinite(min.x) || !Number.isFinite(w) || w <= 0 || h <= 0) return [];
-        return [{ id: `bnd:${b.id}`, type: 'boundary', position: min, data: { label: b.label }, style: { width: w, height: h }, draggable: false, selectable: false, zIndex: -1 }];
-      });
-      setPlaced({ key: layoutKey, nodes: [...hulls, ...nodes], edges });
-    });
+      const { boundaries, bounds } = graphScene(model, r);
+      const hulls: Node[] = boundaries.map(b => ({ id: `bnd:${b.id}`, type: 'boundary', position: { x: b.x, y: b.y }, data: { label: b.label, lines: b.lines }, style: { width: b.width, height: b.height }, draggable: false, selectable: false, zIndex: -1 }));
+      setPlaced({ key: layoutKey, nodes: [...hulls, ...nodes], edges, bounds });
+    }).catch(() => { if (alive) setLayoutError('This view could not be laid out. Try another view or refine the diagram.'); });
     return () => { alive = false; };
   }, [model, viewId, motion, layoutKey]);
 
@@ -178,16 +176,15 @@ function GraphCanvas({ model, modelId, viewId, onSelect, onDeselect }: CanvasPro
 
   // Fit after the replacement layout reaches React Flow, never against the old
   // view's nodes. React Flow queues fitView until node measurement completes.
-  const fitCamera = useCallback(() => {
+  const fitCamera = useCallback((wholeView = false) => {
     if (!rfRef.current || placed.key !== layoutKey || !placed.nodes.length) return;
     const cameraKey = JSON.stringify([placed.key, chapter?.id ?? null]);
-    if (fittedCameraRef.current === cameraKey) return;
-    const ids = chapter?.focus.filter((id) => placed.nodes.some((node) => node.id === id)) ?? [];
+    if (!wholeView && fittedCameraRef.current === cameraKey) return;
+    const ids = wholeView ? [] : chapter?.focus.filter((id) => placed.nodes.some((node) => node.id === id)) ?? [];
     fittedCameraRef.current = cameraKey;
-    void rfRef.current.fitView({
-      duration: motion === 'still' ? 0 : 600,
-      ...(ids.length ? { nodes: ids.map((id) => ({ id })), padding: 0.25 } : {}),
-    });
+    const options = { duration: motion === 'still' ? 0 : 600, minZoom: 0.05, maxZoom: 2, padding: 0.15 };
+    if (ids.length) void rfRef.current.fitView({ ...options, nodes: ids.map(id => ({ id })), padding: 0.25 });
+    else void rfRef.current.fitBounds(placed.bounds, options);
   }, [placed, layoutKey, chapter, motion]);
   useEffect(() => { fitCamera(); }, [fitCamera]);
 
@@ -307,9 +304,11 @@ function GraphCanvas({ model, modelId, viewId, onSelect, onDeselect }: CanvasPro
   const btnCls = { fontSize: 11, padding: '2px 8px', borderRadius: 6, border: '1px solid #334155', background: '#111a2e', color: '#e5e7eb', cursor: 'pointer' } as const;
   const viewNodes = view?.nodes ?? [];
 
+  if (layoutError) return <div className="aw-canvas" role="alert" style={{ padding: 24 }}>{layoutError}</div>;
+
   return (
     <div className="aw-canvas" style={{ width: '100%', height: '100%', position: 'relative' }}>
-      {view?.type === 'er' && <svg aria-hidden="true" width="0" height="0" style={{ position: 'absolute' }}><defs dangerouslySetInnerHTML={{ __html: ER_MARKER_DEFS }} /></svg>}
+      <svg aria-hidden="true" width="0" height="0" style={{ position: 'absolute' }}><defs dangerouslySetInnerHTML={{ __html: GRAPH_MARKER_DEFS + ER_MARKER_DEFS }} /></svg>
       <div className="aw-canvas-toolbar" style={{ position: 'absolute', top: 36, left: 8, zIndex: 5, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
         <select aria-label="route from" value={probeFrom} onChange={(e) => setProbeFrom(e.target.value)} style={selectCls} disabled={!!probe}>
           <option value="">from…</option>{viewNodes.map((id) => <option key={id} value={id}>{model.nodes.find((n) => n.id === id)?.label ?? id}</option>)}
@@ -374,8 +373,9 @@ function GraphCanvas({ model, modelId, viewId, onSelect, onDeselect }: CanvasPro
         </div>
       )}
       <div className="aw-flow-area"><ReactFlow
-        nodes={nodes} edges={edges} nodeTypes={nodeTypes}
+        nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
         colorMode="dark"
+        minZoom={0.05}
         onInit={(inst) => { rfRef.current = inst as ReactFlowInstance<Node, Edge>; fitCamera(); }}
         onNodeClick={(_, n) => { if (n.type === 'boundary') return; focusNode(n.id); }}
         onPaneClick={() => { setFocusId(null); setRelationId(null); writeHash({ focus: null, relation: null }); onDeselect(); }}
@@ -383,7 +383,7 @@ function GraphCanvas({ model, modelId, viewId, onSelect, onDeselect }: CanvasPro
         proOptions={{ hideAttribution: true }}
       >
         <Background gap={16} color="#1a2333" />
-        <Controls />
+        <Controls showFitView={false}><ControlButton aria-label="Fit View" title="Fit View" onClick={() => fitCamera(true)}>⛶</ControlButton></Controls>
         {viewNodes.length > 12 && <MiniMap pannable zoomable />}
       </ReactFlow></div>
       <OutlineRail model={model} viewNodes={viewNodes} activeId={focusId} onFocusNode={focusNode} />

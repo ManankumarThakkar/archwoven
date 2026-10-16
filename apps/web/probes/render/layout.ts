@@ -1,7 +1,8 @@
 import ELK from 'elkjs/lib/elk.bundled.js';
-import type { LayoutOptions } from 'elkjs';
+import type { LayoutOptions, ElkNode, ElkExtendedEdge, ElkPoint } from 'elkjs';
 import type { SystemModel, View } from '@archwoven/model';
 import { entityLayout } from '../../lib/entity';
+import { systemNodeLayout, edgeCaption } from '../../lib/graph-geometry';
 
 const elk = new ELK();
 
@@ -13,10 +14,17 @@ export interface PlacedNode {
   height: number;
 }
 
+export interface RoutedEdge {
+  id: string;
+  points: ElkPoint[];
+  label?: { x: number; y: number; width: number; height: number; lines: string[] };
+}
+
 export interface LayoutResult {
   width: number;
   height: number;
   nodes: PlacedNode[];
+  edges: RoutedEdge[];
 }
 
 /** Node box sizing: ER entities size with their fields; everything else is label-based. */
@@ -27,7 +35,8 @@ export function nodeSize(model: SystemModel, nodeId: string): { width: number; h
     const { width, height } = entityLayout(node);
     return { width, height };
   }
-  return { width: Math.max(150, label.length * 8.5 + 36), height: 46 };
+  const { width, height } = systemNodeLayout(node ?? { id: nodeId, kind: 'component', label, provenance: 'inferred', evidence: [] });
+  return { width, height };
 }
 
 const BASE_OPTIONS: LayoutOptions = {
@@ -35,7 +44,7 @@ const BASE_OPTIONS: LayoutOptions = {
   'elk.direction': 'DOWN',
   'elk.spacing.nodeNode': '48',
   'elk.layered.spacing.nodeNodeBetweenLayers': '72',
-  'elk.edgeRouting': 'SPLINES',
+  'elk.edgeRouting': 'ORTHOGONAL',
   'elk.padding': '[top=40,left=40,bottom=40,right=40]',
   'elk.selfloopDistribution': 'NEAREST_SECTOR',
 };
@@ -48,43 +57,54 @@ export async function layoutModel(model: SystemModel, viewId: string): Promise<L
   const view: View | undefined = model.views.find((v) => v.id === viewId);
   if (!view) throw new Error(`unknown view: ${viewId}`);
 
-  const children = view.nodes.map((id) => {
+  const horizontal = view.orientation === 'LR';
+  const nodeIndex = new Map(view.nodes.map((id, i) => [id, i]));
+  const children: ElkNode[] = view.nodes.map((id, i) => {
     const { width, height } = nodeSize(model, id);
-    return { id, width, height };
+    return { id: `n-${i}`, width, height, layoutOptions: { 'elk.portConstraints': 'FIXED_POS' }, ports: [
+      { id: `p-${i}-out`, x: horizontal ? width : width / 2, y: horizontal ? height / 2 : height, width: 0, height: 0, layoutOptions: { 'elk.port.side': horizontal ? 'EAST' : 'SOUTH' } },
+      { id: `p-${i}-in`, x: horizontal ? 0 : width / 2, y: horizontal ? height / 2 : 0, width: 0, height: 0, layoutOptions: { 'elk.port.side': horizontal ? 'WEST' : 'NORTH' } },
+    ] };
   });
-  const edges = view.edges.map((id) => {
-    const edge = model.edges.find((e) => e.id === id);
+  const captions = new Map<string, ReturnType<typeof edgeCaption>>();
+  const edges: ElkExtendedEdge[] = view.edges.map((id, i) => {
+    const edge = model.edges.find(e => e.id === id);
     if (!edge) throw new Error(`unknown edge in view ${viewId}: ${id}`);
-    return { id, sources: [edge.from], targets: [edge.to] };
+    const from = nodeIndex.get(edge.from), to = nodeIndex.get(edge.to);
+    if (from === undefined || to === undefined) throw new Error(`edge ${id} has endpoints outside this view`);
+    const caption = edgeCaption(edge, view.type); captions.set(id, caption);
+    return { id: `e-${i}`, sources: [`p-${from}-out`], targets: [`p-${to}-in`], ...(caption ? { labels: [{ id: `label-${i}`, text: caption.lines.join('\n'), width: caption.width, height: caption.height, layoutOptions: { 'elk.edgeLabels.placement': 'CENTER' } }] } : {}) };
   });
-
-  interface ElkResult {
-    width?: number;
-    height?: number;
-    children?: { id: string; x?: number; y?: number; width?: number; height?: number }[];
-  }
-  const layout = (await elk.layout({
-    id: viewId,
+  const graph: ElkNode = {
+    id: 'root',
     layoutOptions: {
       ...BASE_OPTIONS,
-      'elk.direction': view.orientation === 'LR' ? 'RIGHT' : 'DOWN',
-      // Entity relationships carry both a name and multiplicity. Leave space
-      // between the larger field tables so their captions remain readable.
+      'elk.direction': horizontal ? 'RIGHT' : 'DOWN',
+      'elk.spacing.edgeLabel': '12',
+      'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
       ...(view.type === 'er' ? { 'elk.layered.spacing.nodeNodeBetweenLayers': '180' } : {}),
     },
-    children,
-    edges,
-  })) as ElkResult;
+    children, edges,
+  };
+  const layout = await elk.layout(graph);
 
   const nodes: PlacedNode[] = (layout.children ?? []).map((c) => ({
-    id: c.id,
+    id: view.nodes[Number(c.id.slice(2))]!,
     x: c.x ?? 0,
     y: c.y ?? 0,
     width: c.width ?? 150,
     height: c.height ?? 46,
   }));
 
-  return { width: layout.width ?? 0, height: layout.height ?? 0, nodes };
+  const routed: RoutedEdge[] = (layout.edges ?? []).map(edge => {
+    const id = view.edges[Number(edge.id.slice(2))]!;
+    const sections = edge.sections ?? [];
+    if (sections.length !== 1) throw new Error(`edge ${id} has no continuous routed section`);
+    const section = sections[0]!;
+    const caption = captions.get(id), box = edge.labels?.[0];
+    return { id, points: [section.startPoint, ...(section.bendPoints ?? []), section.endPoint], ...(caption && box ? { label: { x: box.x ?? 0, y: box.y ?? 0, ...caption } } : {}) };
+  });
+  return { width: layout.width ?? 0, height: layout.height ?? 0, nodes, edges: routed };
 }
 
 /** Axis-aligned overlap count — the readability check the memo cites. */

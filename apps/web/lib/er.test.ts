@@ -3,17 +3,25 @@ import { validFullModel } from '@archwoven/model';
 import { buildSvg } from './export-svg';
 import { nodeSize } from './layout';
 import { entityLayout } from './entity';
+import { textWidth } from './svg-text';
 
 describe('ER product rendering', () => {
+  it('keeps ordinary field names and types on one line when the bundled font fits', () => {
+    const entity = structuredClone(validFullModel.nodes.find(n => n.id === 'entity.user')!);
+    entity.fields = [{ name: 'display_name', type: 'VARCHAR(320)' }];
+    const box = entityLayout(entity);
+    expect(box.rows[0]!.name).toEqual(['display_name']);
+    expect(box.rows[0]!.type).toEqual(['VARCHAR(320)']);
+  });
   it('bounds wide-glyph lines within each field/type/header column', () => {
     const entity = structuredClone(validFullModel.nodes.find(n => n.id === 'entity.user')!);
     entity.label = 'W'.repeat(42); entity.fields = [{ name: 'W'.repeat(22), type: 'W'.repeat(16) }];
     const box = entityLayout(entity);
-    // A deliberately conservative 1.2em upper bound keeps wide glyphs inside
-    // their columns with the 12px body / 13px header fonts used by both renderers.
-    expect(box.label.every(line => line.length * 13 * 1.2 <= box.width - 28)).toBe(true);
-    expect(box.rows.every(row => row.name.every(line => line.length * 12 * 1.2 <= 160))).toBe(true);
-    expect(box.rows.every(row => row.type.every(line => line.length * 12 * 1.2 <= 124))).toBe(true);
+    // The shared advance estimate is also checked against actual resvg font
+    // geometry in the rasterizer tests.
+    expect(box.label.every(line => textWidth(line, 13) <= box.width - 28)).toBe(true);
+    expect(box.rows.every(row => row.name.every(line => textWidth(line, 12) <= 160))).toBe(true);
+    expect(box.rows.every(row => row.type.every(line => textWidth(line, 12) <= 124))).toBe(true);
   });
   it('exports every field, type, key and relationship cardinality', async () => {
     const m = structuredClone(validFullModel);
