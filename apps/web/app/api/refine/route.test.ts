@@ -38,6 +38,20 @@ beforeEach(() => {
 });
 
 describe('POST /api/refine', () => {
+  it('a cancelled request cannot persist a late successful refinement', async () => {
+    const controller = new AbortController();
+    serverDeps.generateRefinement = async (_instruction, _model, _view, opts) => {
+      expect(opts?.signal).toBeDefined();
+      controller.abort();
+      return { ok: true, ops: [addCacheOp], usage };
+    };
+    const request = new Request(req({ modelId: 'm1', baseRevision: validFullModel.revision, instruction: 'add a cache' }), { signal: controller.signal });
+    const res = await POST(request);
+    expect(res.status).toBe(502);
+    expect(serverDeps.store.getRevision('m1')?.revision).toBe(validFullModel.revision);
+    expect(serverDeps.store.creditsUsed('test-sess', new Date().toISOString().slice(0, 10))).toBe(0);
+    expect(serverDeps.store.listCalls('test-sess')).toHaveLength(1);
+  });
   it('happy: applies ops, commits revision+1, charges 0.25, returns remaining', async () => {
     const res = await POST(req({ modelId: 'm1', baseRevision: validFullModel.revision, instruction: 'add a cache' }));
     expect(res.status).toBe(200);

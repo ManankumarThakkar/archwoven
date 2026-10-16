@@ -61,8 +61,8 @@ describe('POST /api/jobs/:id/cancel', () => {
     expect(serverDeps.store.creditsUsed('test-sess', day())).toBe(2);
   });
 
-  it('generate jobs are NOT cancellable — 409, no refund, no cancelled state (C1)', async () => {
-    // the generate route has no abort plumbing — refund-then-complete is a free generation
+  it('unregistered legacy work is not cancellable — 409, no unsafe refund (C1)', async () => {
+    // No registered controller/settlement boundary: refund-then-complete would grant free work.
     serverDeps.store.createJob({ id: 'g1', modelId: 'g1', kind: 'generate', sessionId: 'test-sess' });
     serverDeps.store.addCreditsUsed('test-sess', day(), 1);
     const res = await POST(cancelReq('g1'), ctx('g1'));

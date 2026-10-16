@@ -94,6 +94,7 @@ export async function assembleRepoModel(
   opts: { client?: StructuredClient; effort?: Effort; signal?: AbortSignal } = {},
 ): Promise<GenerateOutcome> {
   const effort: Effort = opts.effort ?? 'medium';
+  if (opts.signal?.aborted) return { ok: false, errors: ['cancelled'], usage: usageFrom({}, effort, 0, 0) };
   const repoFull = `${meta.owner}/${meta.repo}`;
   if (!opts.client && fakeMode()) {
     const model = structuredClone(validFullModelExtended);
@@ -110,7 +111,7 @@ export async function assembleRepoModel(
 
   // §15 gate, fail closed — same contract as generateModel.
   try {
-    const counted = await client.messages.countTokens({ model: MODEL, system, messages });
+    const counted = await client.messages.countTokens({ model: MODEL, system, messages }, { signal: opts.signal });
     if (counted.input_tokens > CONTEXT_TOKEN_LIMIT) {
       return { ok: false, errors: ['repo fragment exceeds the 25k token limit — narrow the subdirectory or reduce endpoints'], usage: usageFrom({}, effort, Date.now() - t0, 0) };
     }
@@ -142,6 +143,7 @@ export async function assembleRepoModel(
       }, { signal: opts.signal });
     } catch (e) {
       lastErrors = [`request failed: ${e instanceof Error ? e.message : String(e)}`];
+      if (opts.signal?.aborted) break;
       continue;
     }
     addUsage(response.usage);
