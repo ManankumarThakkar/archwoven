@@ -26,13 +26,18 @@ docs/               SPEC.md + milestone plans + probe memos
 
 ## Development
 
+Use **Node.js 24** (the job store uses `node:sqlite`) and **pnpm 12.9.1**, pinned in `package.json`. A new download has no installed dependencies, compiled internal packages, provider credentials or saved diagrams.
+
 ```bash
 corepack enable          # pnpm via packageManager field
-pnpm install
+pnpm install --frozen-lockfile
+pnpm build:packages    # required before tests/typechecks on a new checkout
 pnpm test              # vitest
 pnpm typecheck         # tsc across workspaces
-pnpm dev               # Next.js dev server (localhost smoke page)
+pnpm dev               # Next.js dev server; open /workspace
 ```
+
+If Corepack is unavailable, install the pinned pnpm version with `npm install --global pnpm@12.9.1`. Before generating, configure either your real API key or a running Ollama instance as described below. Without a provider, hosted mode shows setup guidance and rejects generation; it does not substitute sample diagrams.
 
 ## Workspace walkthrough
 
@@ -44,10 +49,10 @@ pnpm dev               # Next.js dev server (localhost smoke page)
 
 ## Run with your real API key
 
-Next loads `apps/web/.env.local`; keep your existing `ANTHROPIC_API_KEY` there. Run from the repository root:
+Next loads `apps/web/.env.local`; keep your existing `ANTHROPIC_API_KEY` there. On a new checkout, create that gitignored file with `ANTHROPIC_API_KEY=your-real-key`. Do not commit it. Run from the repository root:
 
 ```bash
-pnpm install
+pnpm install --frozen-lockfile
 ARCHWOVEN_MODE=hosted ARCHWOVEN_FAKE=0 pnpm dev
 # open http://localhost:3000/workspace
 curl -s http://localhost:3000/api/config

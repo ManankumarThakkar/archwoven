@@ -79,3 +79,24 @@ These are concrete gaps against SPEC, rather than unchecked historical plan boxe
 Temporary artifacts under `/tmp/archwoven-postmerge/` include build/test/typecheck/selftest logs, models, sanitized job/usage summaries, negative-gate results, actual SVG/PNG downloads and screenshots: `architecture.png`, `repository.png`, `sequence-missing-timeline.png`, `er-missing-fields.png`, `local-browser.png`, `mobile-repository.png`, `mobile-empty.png`, and `local-import-ui-gap.png`. Temporary databases contain session state and must not be published. Only the clean Suite B receipt and documentation are prepared in the repository.
 
 Re-run core gates: `pnpm test`, `ARCHWOVEN_MODE=local pnpm test`, `pnpm typecheck`, `pnpm build`, `pnpm bench:selftest`, and `node benchmarks/repair-rounds/harness.selftest.mjs`. Check the new Suite B receipt with its report command; Suite A remains explicitly ineligible. Product source was unchanged during this audit; the follow-up publishes only documentation and the pinned receipt.
+
+## Clean-download recheck after PR #10
+
+Rechecked merged `main` at `c6dd0f162ed23f5e74e1431db4edfd900e3f2ba1` on 2026-10-15 (America/Chicago). A Git archive in `/tmp/archwoven-clean-download-20261015` reproduced a downloaded source tree without `.git`, existing build output, app dependencies, credentials or saved models. Installed the locked dependencies separately using Node.js 24.21.0 / pnpm 12.9.1. No API key was copied into the download; local live checks used the already installed Ollama `gpt-oss:20b` with `ARCHWOVEN_FAKE=0`.
+
+The original README order (`install → test → typecheck`) failed: 15 test files failed to load/run, with 3 failed assertions, and typechecking could not resolve the unbuilt extract package. CI had hidden this ordering problem by building first. Building internal packages resolved the failures. The README now explicitly requires `pnpm build:packages` before tests/typechecks and states the runtime/provider prerequisites. Verification removed generated artifacts from the temporary download, then reran the corrected order before starting Next.
+
+| Clean-download check | Result |
+|---|---|
+| Locked dependency install | PASS; separately installed dependencies, no copied `node_modules` |
+| Corrected setup → hosted test suite | PASS; 45 files / 430 tests |
+| Corrected setup → typecheck before first Next startup | PASS; all workspaces |
+| Local test suite | PASS; 415 tests / 15 expected skips |
+| Production build | PASS; standard root `pnpm build` |
+| Default hosted startup without credentials | PASS setup behavior; config reports `fake: false`, `llmReady: false`; generation returns HTTP 503 with configuration instructions |
+| Real native description → persistence → browser/reload | PASS; Temperature Sensor → Aquarium Monitor → SQLite, exactly 3 nodes / 2 edges, 0 repairs; private/local-only stamp |
+| Public MCP Observatory → GitHub download → native assembly → browser/reload | PASS bounded map; 10 source modules / 13 static imports, 0 repairs; coverage/unknown-behavior gaps remain visible after reload. Warning presentation is PARTIAL: badge changes from 5 to 6 because overlapping job/model disclosures are combined differently on restoration; consolidate these summaries in a follow-up. |
+
+Both new saved models passed `validateModel`. These real native calls used 2,141 input / 1,301 output tokens for the description and 11,375 input / 4,110 output tokens for repository assembly. Automated tests use controlled doubles; they are separate from these live-provider checks. Hosted real-provider results remain the preceding audit's evidence, not a fresh hosted call from this credential-free download.
+
+Logs are `/tmp/archwoven-clean-*.log`; browser evidence is `/tmp/archwoven-clean-diagram.png` and `/tmp/archwoven-clean-repository.png`; sanitized model/job/usage summaries are `/tmp/archwoven-clean-results.json`. A fresh download requires dependencies and a configured provider; it does not include the current machine's key, Ollama installation/model or database. This setup correction does not resolve the remaining product tasks above. No tracked documentation or source files were deleted: the condition that the project be complete before cleanup has not been met.
