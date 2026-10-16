@@ -36,6 +36,11 @@ export function Inspector({ payload, gaps, passport }: { payload: InspectorPaylo
         </div>
       )}
       {payload.role && <p style={{ fontSize: 13, color: '#8b98b8' }}>{payload.role}</p>}
+      {payload.fields && <div style={{ fontSize: 12, overflowWrap: 'anywhere' }}>
+        <strong>Fields</strong>
+        {payload.fields.length ? <ul style={{ paddingLeft: 16 }}>{payload.fields.map((field, i) => <li key={i}><span style={{ color: '#5eead4' }}>{field.key?.toUpperCase() ?? '—'}</span> {field.name} · <span style={{ color: '#a6b4cf' }}>{field.type ?? 'unspecified'}</span></li>)}</ul> : <p>No fields provided</p>}
+      </div>}
+      {payload.cardinality !== undefined && <div style={{ fontSize: 12, color: '#a6b4cf' }}>Cardinality: {payload.cardinality ?? 'unspecified'}</div>}
 
       <div>
         <div style={{ fontSize: 12, color: '#8b98b8', marginBottom: 4 }}>Evidence</div>

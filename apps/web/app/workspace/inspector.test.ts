@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { inspectorFor } from './inspector';
 import type { SystemModel } from '@archwoven/model';
+import { validFullModel } from '@archwoven/model';
 
 const model: SystemModel = {
   schemaVersion: '1',
@@ -22,6 +23,10 @@ const model: SystemModel = {
 };
 
 describe('inspectorFor', () => {
+  it('preserves entity fields and relationship cardinality in inspection', () => {
+    expect(inspectorFor(validFullModel, 'entity.order')?.fields).toEqual(validFullModel.nodes.find(n => n.id === 'entity.order')!.fields);
+    expect(inspectorFor(validFullModel, 'er.user-order')?.cardinality).toBe('1:N');
+  });
   it('node → label, kind, provenance, role blurb, evidence links', () => {
     const p = inspectorFor(model, 'svc.orders');
     expect(p).not.toBeNull();

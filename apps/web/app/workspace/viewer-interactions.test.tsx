@@ -3,7 +3,7 @@ import React, { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Edge, Node } from '@xyflow/react';
-import type { SystemModel } from '@archwoven/model';
+import { validFullModel, type SystemModel } from '@archwoven/model';
 import { Canvas } from './Canvas';
 import { NodeFinder } from './NodeFinder';
 
@@ -30,8 +30,8 @@ vi.mock('@xyflow/react', async (importOriginal) => ({
       return Promise.resolve(true);
     } }); }, []);
     return <div data-flow-theme={colorMode}>
-    {nodes.map((n) => <button key={n.id} data-node={n.id} data-source-position={n.sourcePosition} data-target-position={n.targetPosition} className={n.className} onClick={() => onNodeClick(null, n)}>{n.id}</button>)}
-    {edges.map((e) => <button key={e.id} data-edge={e.id} className={e.className} data-animated={String(e.animated)} onClick={() => onEdgeClick(null, e)}>{e.id}</button>)}
+    {nodes.map((n) => <button key={n.id} data-node={n.id} data-node-type={n.type} data-inline-shadow={n.style?.boxShadow} data-source-position={n.sourcePosition} data-target-position={n.targetPosition} className={n.className} onClick={() => onNodeClick(null, n)}>{n.id}</button>)}
+    {edges.map((e) => <button key={e.id} data-edge={e.id} title={String(e.label ?? '')} data-start={typeof e.markerStart === 'string' ? e.markerStart : ''} data-end={typeof e.markerEnd === 'string' ? e.markerEnd : ''} className={e.className} data-animated={String(e.animated)} onClick={() => onEdgeClick(null, e)}>{e.id}</button>)}
     {children}
   </div>;
   },
@@ -458,5 +458,20 @@ describe('sequence workspace viewer', () => {
     await act(async () => root.render(<Canvas model={mixed} modelId="sequence-model" viewId="architecture" onSelect={selected} onDeselect={deselected} />));
     expect(deselected).toHaveBeenCalled();
     expect(new URLSearchParams(window.location.hash.slice(1)).get('focus')).toBeNull();
+  });
+});
+
+describe('ER workspace dispatch', () => {
+  it('uses entity nodes and one/many relationship markers with explicit cardinality labels', async () => {
+    await act(async () => root.render(<Canvas model={validFullModel} modelId="er-model" viewId="view.er" onSelect={() => {}} onDeselect={() => {}} />));
+    expect(host.querySelectorAll('[data-node-type="entity"]')).toHaveLength(3);
+    const oneMany = host.querySelector('[data-edge="er.user-order"]')!;
+    expect(oneMany.getAttribute('title')).toContain('1:N');
+    expect(oneMany.getAttribute('data-start')).toContain('er-one');
+    expect(oneMany.getAttribute('data-end')).toContain('er-many');
+    expect(host.querySelector('[data-edge="er.order-product"]')?.getAttribute('data-start')).toContain('er-many');
+    await click(host.querySelector('[data-node="entity.user"]'));
+    expect(host.querySelector('[data-node="entity.user"]')?.className).toBe('aw-route-current');
+    expect(host.querySelector('[data-node="entity.user"]')?.getAttribute('data-inline-shadow')).toBeNull();
   });
 });

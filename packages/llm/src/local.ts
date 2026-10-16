@@ -1,3 +1,4 @@
+import { generatedViewErrors } from './generated-view';
 import { z } from 'zod';
 import type { Fragment } from '@archwoven/extract';
 import {
@@ -178,7 +179,14 @@ export async function generateModelLocal(
     { role: 'system', content: LOCAL_MODEL_SYSTEM },
     { role: 'user', content: `View: ${view}\n\n${prompt}` },
   ];
-  const format = NATIVE_MODEL_JSON_SCHEMA;
+  const format = structuredClone(NATIVE_MODEL_JSON_SCHEMA);
+  if (view === 'er') {
+    // Make omission impossible in the native grammar; null remains available
+    // for genuinely unknown cardinality, which the content gate discloses.
+    const edgeList = format.properties?.edges;
+    const edge = edgeList && typeof edgeList === 'object' ? edgeList.items : undefined;
+    if (edge && !Array.isArray(edge) && typeof edge === 'object') edge.required = [...new Set([...(edge.required ?? []), 'cardinality'])];
+  }
 
   let lastErrors: string[] = [];
   let repairs = 0;
@@ -200,8 +208,8 @@ export async function generateModelLocal(
     }
     if (parsed !== undefined) {
       const result = validateModel(parsed);
-      if (result.ok) return { ok: true, model: result.model, usage };
-      lastErrors = result.errors;
+      lastErrors = result.ok ? generatedViewErrors(result.model, view) : result.errors;
+      if (result.ok && !lastErrors.length) return { ok: true, model: result.model, usage };
     }
     if (attempt < MAX_REPAIRS) {
       repairs++;

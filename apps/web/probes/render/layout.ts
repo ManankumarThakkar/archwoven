@@ -1,6 +1,7 @@
 import ELK from 'elkjs/lib/elk.bundled.js';
 import type { LayoutOptions } from 'elkjs';
 import type { SystemModel, View } from '@archwoven/model';
+import { entityLayout } from '../../lib/entity';
 
 const elk = new ELK();
 
@@ -23,8 +24,8 @@ export function nodeSize(model: SystemModel, nodeId: string): { width: number; h
   const node = model.nodes.find((n) => n.id === nodeId);
   const label = node?.label ?? nodeId;
   if (node?.kind === 'entity') {
-    const rows = node.fields?.length ?? 0;
-    return { width: 190, height: 34 + rows * 22 };
+    const { width, height } = entityLayout(node);
+    return { width, height };
   }
   return { width: Math.max(150, label.length * 8.5 + 36), height: 46 };
 }
@@ -67,6 +68,9 @@ export async function layoutModel(model: SystemModel, viewId: string): Promise<L
     layoutOptions: {
       ...BASE_OPTIONS,
       'elk.direction': view.orientation === 'LR' ? 'RIGHT' : 'DOWN',
+      // Entity relationships carry both a name and multiplicity. Leave space
+      // between the larger field tables so their captions remain readable.
+      ...(view.type === 'er' ? { 'elk.layered.spacing.nodeNodeBetweenLayers': '180' } : {}),
     },
     children,
     edges,

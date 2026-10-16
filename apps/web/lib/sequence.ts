@@ -1,23 +1,9 @@
 import type { SystemModel } from '@archwoven/model';
 import { PROVENANCE_STYLE } from './provenance';
 
-export const escapeXml = (s: string): string => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[c]!);
+import { escapeXml, linesOf } from './svg-text';
+export { escapeXml } from './svg-text';
 
-/** Wrap without dropping text, including long identifiers and explicit newlines. */
-function linesOf(text: string, limit: number): string[] {
-  const lines: string[] = [];
-  for (const paragraph of text.split(/\r?\n/)) {
-    let line = '';
-    for (const word of paragraph.split(/\s+/).filter(Boolean)) {
-      if (line && line.length + word.length + 1 > limit) { lines.push(line); line = ''; }
-      let rest = word;
-      while (rest.length > limit) { if (line) { lines.push(line); line = ''; } lines.push(rest.slice(0, limit)); rest = rest.slice(limit); }
-      line += (line ? ' ' : '') + rest;
-    }
-    lines.push(line);
-  }
-  return lines.length ? lines : [''];
-}
 const textAt = (x: number, y: number, lines: string[], anchor = 'middle', color = '#e6edf7') =>
   `<text x="${x}" y="${y}" text-anchor="${anchor}" fill="${color}">${lines.map((line, i) => `<tspan x="${x}" dy="${i ? 18 : 0}">${escapeXml(line)}</tspan>`).join('')}</text>`;
 
