@@ -85,6 +85,10 @@ always records scratch provenance, so a successful selftest or diagnostic
 run cannot be presented as pinned evidence. `report` also marks legacy
 receipts without clean-source provenance ineligible (exit 2).
 
+## Current merged-source receipt
+
+`results/2026-10-16-postmerge-d6f28bcd.json` was generated from clean merged source `d6f28bcd24eaa72fd3141759acdd66ee898d0cfb`. Its report passes all eight deterministic cases and is evidence-eligible for validator round-trips only. The filename uses UTC. It does not measure LLM repair performance; see the [post-merge audit](../../docs/POST-MERGE-AUDIT.md). The historical receipt below is unchanged.
+
 ## Historical receipt and regeneration
 
 `results/2026-10-15-manan.json` is retained unchanged as history. Its

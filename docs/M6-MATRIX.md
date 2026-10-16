@@ -1,5 +1,7 @@
 # M6 verification matrix
 
+Historical snapshot. Current merged-source verification, superseded blockers and remaining work: [post-merge audit](POST-MERGE-AUDIT.md).
+
 Historical deterministic snapshot, 2026-10-15. Subsequent real-provider coverage and approved broader repository support: [live checks](LIVE-CHECKS.md). PASS denotes the evidence named in the row; it does not imply an unrun live model call passed.
 
 | Requirement | Regression evidence | Browser evidence | Status / limit |

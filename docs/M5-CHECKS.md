@@ -1,5 +1,7 @@
 # M5 private-mode live checks — local deployment evidence
 
+Historical snapshot. Current merged-source verification, superseded blockers and remaining work: [post-merge audit](POST-MERGE-AUDIT.md).
+
 Run date: 2026-10-15 · machine: Apple Silicon Mac Studio, 128 GB · Ollama as launchd service, loopback :11434.
 Model: **gpt-oss:20b** (MXFP4, ~13 GB resident). The plan named gpt-oss:120b; 120b's 65 GB resident load crashed the dev box, so the default moved to 20b (`OLLAMA_MODEL` overrides — see §7). Probe D was re-run against 20b before any live claim; results in §2.
 

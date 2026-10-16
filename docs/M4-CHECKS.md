@@ -1,5 +1,7 @@
 # M4 scenario checks — live fake-mode transcripts (2026-10-10)
 
+Historical snapshot. Current merged-source verification, superseded blockers and remaining work: [post-merge audit](POST-MERGE-AUDIT.md).
+
 Fake server: `ARCHWOVEN_FAKE=1 ARCHWOVEN_DEMO_ACK=1 ARCHWOVEN_DB=/tmp/aw-m4.db PORT=3111 pnpm start` (apps/web).
 
 ## 1. Semantic fields flow end-to-end (describe → store → serve)

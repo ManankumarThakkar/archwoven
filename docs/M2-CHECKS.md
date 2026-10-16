@@ -1,5 +1,7 @@
 # M2 scenario checks (1–8, 13)
 
+Historical snapshot. Current merged-source verification, superseded blockers and remaining work: [post-merge audit](POST-MERGE-AUDIT.md).
+
 Each essential scenario from the master prompt §"Essential scenario checks", mapped to how it is verified and the honest result. Scenarios 9–12, 14 are M3/M5 (privacy enforcement, injection hardening, public/private parity).
 
 | # | Scenario | Verified by | Result |

@@ -1,0 +1,129 @@
+{
+  "provenance": {
+    "mode": "pinned",
+    "sourceState": "clean",
+    "validatorSha256": "2c8a0ebca6bbcaa8667b81d78e270f0c2e0b603c885386f422a5fa615cd31ab7"
+  },
+  "kind": "repair-rounds-receipts",
+  "suite": "repair-rounds",
+  "ts": "2026-10-16T04:13:46.220Z",
+  "runner": "postmerge-d6f28bcd",
+  "repositoryCommit": "d6f28bcd24eaa72fd3141759acdd66ee898d0cfb",
+  "packageSha256": "9d466d4efda6c9f38d0a6fb4c7785d163dd960d4e29f87a2255ca69ac1c98881",
+  "results": [
+    {
+      "case": "dangling-edge-ref",
+      "class": "referential-integrity",
+      "detected": true,
+      "expectedMatch": true,
+      "firstDisclosure": true,
+      "stage": "graph",
+      "stubRepaired": false,
+      "roundsToPass": 3,
+      "pass": true,
+      "diagnostics": [
+        "edge \"e.catalog-pg\" to unknown node: \"59922917c56d2b6a8e1a4d83a0f6f0e6c1d9b2f4a7e8c5d3b6a9f2e1c8d7b4a5\""
+      ]
+    },
+    {
+      "case": "duplicate-node-id",
+      "class": "identity-uniqueness",
+      "detected": true,
+      "expectedMatch": true,
+      "firstDisclosure": true,
+      "stage": "graph",
+      "stubRepaired": true,
+      "roundsToPass": 2,
+      "pass": true,
+      "diagnostics": [
+        "duplicate node id: \"gateway.api\""
+      ]
+    },
+    {
+      "case": "missing-required-label",
+      "class": "schema-required-field",
+      "detected": true,
+      "expectedMatch": true,
+      "firstDisclosure": false,
+      "stage": "schema",
+      "stubRepaired": false,
+      "roundsToPass": 3,
+      "pass": true,
+      "diagnostics": [
+        "nodes.1.label: Invalid input: expected string, received undefined"
+      ]
+    },
+    {
+      "case": "invalid-enum-kind",
+      "class": "schema-enum-domain",
+      "detected": true,
+      "expectedMatch": true,
+      "firstDisclosure": false,
+      "stage": "schema",
+      "stubRepaired": false,
+      "roundsToPass": 3,
+      "pass": true,
+      "diagnostics": [
+        "nodes.4.kind: Invalid option: expected one of \"actor\"|\"service\"|\"gateway\"|\"datastore\"|\"queue\"|\"external\"|\"entity\"|\"component\""
+      ]
+    },
+    {
+      "case": "revision-mismatch",
+      "class": "revision-lineage",
+      "detected": true,
+      "expectedMatch": true,
+      "firstDisclosure": true,
+      "stage": "graph",
+      "stubRepaired": true,
+      "roundsToPass": 2,
+      "pass": true,
+      "diagnostics": [
+        "parentId 3 must equal revision - 1 (0)"
+      ]
+    },
+    {
+      "case": "required-path-broken",
+      "class": "semantic-reachability",
+      "detected": true,
+      "expectedMatch": true,
+      "firstDisclosure": true,
+      "stage": "graph",
+      "stubRepaired": false,
+      "roundsToPass": 3,
+      "pass": true,
+      "diagnostics": [
+        "requiredPath unreachable: \"actor.user\"→\"datastore.postgres\"",
+        "node has no incoming edge but is not in allowedRoots: \"datastore.postgres\""
+      ]
+    },
+    {
+      "case": "boundary-overlap",
+      "class": "boundary-uniqueness",
+      "detected": true,
+      "expectedMatch": true,
+      "firstDisclosure": true,
+      "stage": "graph",
+      "stubRepaired": true,
+      "roundsToPass": 2,
+      "pass": true,
+      "diagnostics": [
+        "node in two boundaries: \"gateway.api\" (b.core, b.data)"
+      ]
+    },
+    {
+      "case": "seq-gap",
+      "class": "sequence-integrity",
+      "detected": true,
+      "expectedMatch": true,
+      "firstDisclosure": true,
+      "stage": "graph",
+      "stubRepaired": true,
+      "roundsToPass": 2,
+      "pass": true,
+      "diagnostics": [
+        "view \"view.sequence\" message seq must be consecutive from 1, got 6 at index 3"
+      ]
+    }
+  ],
+  "fingerprint": "162e2e6e1f4e305efa4384c60b9fe20e6f3994e183c66914e7357e484795860c"
+}

@@ -11,7 +11,7 @@ AI-assisted architecture workspace: plain-English requirements or public GitHub 
 - **M0:** monorepo scaffold + the versioned system-model schema and referential-integrity validator that every later milestone writes against.
 - **M1:** technical probes (rendering, structured-output validity/cost, tree-sitter extraction, local model on Apple Silicon).
 - **M2+:** plain-English vertical slice → public repo analysis → private/local mode → evaluations & hardening.
-- **M6 working batch:** saved-diagram restoration, viewer interaction fixes, responsive workspace, schema-consistent generation and benchmark evidence hardening. Verification and limitations: [M6 checks](docs/M6-CHECKS.md). Incremental review order: [PR plan](docs/M6-PR-PLAN.md).
+- **M6 merged (PR #9):** saved-diagram restoration, viewer fixes, responsive workspace, generation repairs, broader repository maps and benchmark safeguards. Fresh end-to-end results and unfinished first-release work: [post-merge audit](docs/POST-MERGE-AUDIT.md). Historical checks: [M6 checks](docs/M6-CHECKS.md).
 
 ## Layout
 
