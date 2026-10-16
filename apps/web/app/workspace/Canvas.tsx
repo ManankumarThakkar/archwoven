@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ReactFlow, Background, Controls, MiniMap, Position, type Node, type Edge, type ReactFlowInstance } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import type { SystemModel, NodeKind, Provenance } from '@archwoven/model';
+import type { SystemModel, NodeKind } from '@archwoven/model';
 import { layoutModel } from '../../lib/layout';
 import { journey, reachability } from './graph-inspect';
 import { motionMode } from './motion';
@@ -11,14 +11,8 @@ import { lensKindsInView, lensPasses, parseLens, serializeLens, toggleLens } fro
 import { pulseOrder } from './pulses';
 import { NodeFinder } from './NodeFinder';
 import { OutlineRail } from './OutlineRail';
-
-// proposed/inferred are visually distinct from user-specified/source-supported (scenario 6).
-const PROVENANCE_STYLE: Record<Provenance, { border: string; bg: string; badge: string }> = {
-  'user-specified': { border: '#5eead4', bg: '#0f2e2b', badge: 'you' },
-  'source-supported': { border: '#93c5fd', bg: '#10233f', badge: 'code' },
-  inferred: { border: '#fbbf24', bg: '#3a2e10', badge: 'inferred' },
-  proposed: { border: '#c4b5fd', bg: '#2a2440', badge: 'proposed' },
-};
+import { SequenceCanvas } from './SequenceCanvas';
+import { PROVENANCE_STYLE } from '../../lib/provenance';
 
 const MOTION_KEY = 'archwoven-motion';
 
@@ -42,7 +36,15 @@ const writeHash = (patch: Record<string, string | null>) => {
   history.replaceState(null, '', s ? `#${s}` : window.location.pathname + window.location.search);
 };
 
-export function Canvas({ model, modelId, viewId, onSelect, onDeselect }: { model: SystemModel; modelId: string; viewId: string; onSelect: (id: string) => void; onDeselect: () => void }) {
+type CanvasProps = { model: SystemModel; modelId: string; viewId: string; onSelect: (id: string) => void; onDeselect: () => void };
+
+export function Canvas(props: CanvasProps) {
+  return props.model.views.find(v => v.id === props.viewId)?.type === 'sequence'
+    ? <SequenceCanvas key={`${props.modelId}:${props.viewId}`} {...props} />
+    : <GraphCanvas {...props} />;
+}
+
+function GraphCanvas({ model, modelId, viewId, onSelect, onDeselect }: CanvasProps) {
   const [shareBusy, setShareBusy] = useState(false);
   const [shareErr, setShareErr] = useState<string | null>(null);
   const [placed, setPlaced] = useState<{ key: string; nodes: Node[]; edges: Edge[] }>({ key: '', nodes: [], edges: [] });
@@ -124,10 +126,11 @@ export function Canvas({ model, modelId, viewId, onSelect, onDeselect }: { model
   // permalinks: read once on mount, write on every interaction
   useEffect(() => {
     const h = readHash();
-    const focusedNode = model.nodes.find((n) => n.id === h.focus);
+    const focusedNode = model.nodes.find((n) => n.id === h.focus && view?.nodes.includes(n.id));
     const restoredLens = parseLens(h.lens);
     const clearLens = focusedNode !== undefined && !lensPasses(focusedNode.kind, restoredLens);
-    if (focusedNode) setFocusId(focusedNode.id);
+    if (focusedNode) { setFocusId(focusedNode.id); onSelect(focusedNode.id); }
+    else if (h.focus) { setFocusId(null); writeHash({ focus: null }); onDeselect(); }
     if (h.route) {
       const [a, b] = h.route!.split('~');
       if (a && b) { setProbeFrom(a); setProbeTo(b); }
@@ -138,7 +141,8 @@ export function Canvas({ model, modelId, viewId, onSelect, onDeselect }: { model
     }
     setLens(clearLens ? [] : restoredLens);
     if (clearLens) writeHash({ lens: null });
-    if (h.relation && model.edges.some((e) => e.id === h.relation)) { setRelationId(h.relation!); onSelect(h.relation!); }
+    if (h.relation && view?.edges.includes(h.relation) && model.edges.some((e) => e.id === h.relation)) { setRelationId(h.relation!); onSelect(h.relation!); }
+    else if (h.relation) { setRelationId(null); writeHash({ relation: null }); onDeselect(); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modelIdKey(model)]);
 

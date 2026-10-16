@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import {
   SystemModelSchema,
+  SequenceMetaSchema,
   validateModel,
   validFullModelExtended,
   type SystemModel,
@@ -205,7 +206,11 @@ const promptSchema = wireSchema(z.toJSONSchema(SystemModelSchema, {
 export const MODEL_JSON_CONTRACT = `Output must conform to this JSON schema. Use the exact property names and enum values; additional properties are forbidden. evidenceJson and fieldsJson contain JSON-encoded arrays; sequenceJson contains a JSON-encoded object with participants and messages. Omit absent optional fields. On a new model omit parentId. layout is computed by the server and must be omitted.
 <model-json-schema>
 ${JSON.stringify(promptSchema)}
-</model-json-schema>`;
+</model-json-schema>
+The value encoded inside sequenceJson must follow this complete schema. A fragment is optional on a message, never a property on the sequence root. For example a message may include "fragment":{"type":"opt","covers":[2,3,4]} to group those numbered messages.
+<sequence-json-schema>
+${JSON.stringify(z.toJSONSchema(SequenceMetaSchema, { target: 'draft-2020-12', io: 'input' }))}
+</sequence-json-schema>`;
 
 /** Ollama supports the native schema directly: no Anthropic grammar workarounds,
  * encoded JSON strings or forced nullable defaults. New models have no parent

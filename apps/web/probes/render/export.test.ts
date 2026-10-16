@@ -10,6 +10,18 @@ const require = createRequire(import.meta.url);
 const here = new URL('.', import.meta.url).pathname;
 
 describe('renderPng (resvg-wasm)', () => {
+  it.each(['async', 'return'] as const)('retains the %s open arrowhead in the actual PNG rasterizer', async kind => {
+    await ensureResvg(readFileSync(require.resolve('@resvg/resvg-wasm/index_bg.wasm')));
+    const m = structuredClone(validFullModel);
+    const seq = m.views.find(v => v.type === 'sequence')!.sequence!;
+    seq.messages = [{ seq: 1, from: seq.participants[0]!, to: seq.participants[1]!, kind, label: 'Response' }];
+    const svg = sequenceSvg(m, 'view.sequence');
+    const withoutHeads = svg.replace(/<marker\b[\s\S]*?<\/marker>/g, marker => marker.replace(/stroke="[^"]+"/g, 'stroke="none"'));
+    const fonts = [readFileSync(`${here}../../public/fonts/inter-400.woff2`)];
+    const original = await renderPng(svg, fonts);
+    const removed = await renderPng(withoutHeads, fonts);
+    expect(original).not.toEqual(removed);
+  });
   it('renders the sequence SVG to a valid PNG at 2x with bundled fonts', async () => {
     await ensureResvg(readFileSync(require.resolve('@resvg/resvg-wasm/index_bg.wasm')));
     const fontBuffers = [
