@@ -21,6 +21,15 @@ const springTree = (): string => {
 };
 
 describe('ingestLocal (private clone import, §8)', () => {
+  it('uses bounded generic analysis for local Go repos without executing source', async () => {
+    const d = tmp();
+    writeFileSync(join(d, 'main.go'), 'package main\nfunc main() {}');
+    const r = await ingestLocal(d, { revParse: cannedRev, extractSpringBoot: async () => { throw new Error('must not run'); }, extractFastApi: async () => { throw new Error('must not run'); } });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.framework).toBe('generic');
+    expect(r.fragment.nodes[0]).toMatchObject({ label: 'main.go', kind: 'component' });
+  });
   it('spring tree → fragment + injected sha + framework', async () => {
     const d = springTree();
     const r = await ingestLocal(d, { revParse: cannedRev, extractSpringBoot: async () => ({ ...emptyFragment(), nodes: [{ id: 'svc.app', kind: 'service', label: 'App', provenance: 'source-supported', evidence: [] }], endpoints: [{ method: 'GET', path: '/api/x', controller: 'ApiController' }] }), extractFastApi: async () => emptyFragment() });

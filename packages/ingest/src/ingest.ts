@@ -1,10 +1,10 @@
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Fragment } from '@archwoven/extract';
+import { extractGeneric, isAnalysisFile, type Fragment } from '@archwoven/extract';
 import { pinCommit, fetchTarball, type GithubApiFetch } from './fetch';
 import { unpackTarball, cleanupDir, type UnpackCaps } from './unpack';
-import { detectFramework } from './detect';
+import { detectFramework, useGenericAnalysis } from './detect';
 
 /**
  * Repo ingest orchestration: pin → fetch → unpack → detect → extract.
@@ -54,25 +54,23 @@ export async function ingestRepo(
 
     if (files.length === 0) return { ok: false, reason: 'empty-repository', message: 'The repository has no analyzable source files after safety filtering.' };
 
-    // subdir narrows both detection and extraction — one framework, one scope
+    // A requested subdir narrows both detection and source analysis.
     const scoped = parsed.subdir ? files.filter((f) => f.startsWith(parsed.subdir + '/')).map((f) => f.slice(parsed.subdir!.length + 1)) : files;
     if (scoped.length === 0) return { ok: false, reason: 'empty-subdir', message: `No files under ${parsed.subdir} after safety filtering.` };
 
     if (files.includes('.gitmodules')) gaps.push('submodule(s) declared — codeload excludes submodule contents; they were not analyzed');
     if (files.includes('.gitattributes') && /filter=lfs/.test(readSafe(workDir, '.gitattributes'))) gaps.push('Git LFS pointers — large binary files were not downloaded');
 
-    const framework = detectFramework(scoped, (rel) => readSafe(workDir, joinDir(parsed.subdir, rel)));
-    if (framework === 'mixed') {
-      return { ok: false, reason: 'mixed-frameworks', message: 'This monorepo contains both Spring Boot and FastAPI services — narrow to one service subdirectory.' };
-    }
-    if (framework === 'unsupported') {
-      return { ok: false, reason: 'unsupported-framework', message: 'No Spring Boot or FastAPI constructs found — M3 supports those two frameworks.' };
-    }
+    const readable = scoped.filter(isAnalysisFile);
+    const detected = detectFramework(readable, (rel) => readSafe(workDir, joinDir(parsed.subdir, rel)));
+    const framework = useGenericAnalysis(readable, detected) ? 'generic' : detected;
 
     const extractDir = parsed.subdir ? join(workDir, parsed.subdir) : workDir;
     opts.onStage?.('extracting');
     try {
-      const fragment = framework === 'spring-boot' ? await deps.extractSpringBoot(extractDir) : await deps.extractFastApi(extractDir);
+      const fragment = framework === 'generic'
+        ? extractGeneric(scoped, (rel) => readSafe(workDir, joinDir(parsed.subdir, rel)), { pathPrefix: parsed.subdir })
+        : framework === 'spring-boot' ? await deps.extractSpringBoot(extractDir) : await deps.extractFastApi(extractDir);
       return { ok: true, sha: pinned.sha, framework, fragment, gaps: [...gaps, ...fragment.gaps], filesScanned: scoped.length };
     } catch (e) {
       return { ok: false, reason: 'extraction-failed', message: e instanceof Error ? e.message : String(e) };

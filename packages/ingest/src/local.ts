@@ -2,8 +2,8 @@ import { execFile } from 'node:child_process';
 import { lstatSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
-import type { Fragment } from '@archwoven/extract';
-import { detectFramework } from './detect';
+import { extractGeneric, isAnalysisFile, type Fragment } from '@archwoven/extract';
+import { detectFramework, useGenericAnalysis } from './detect';
 import { isVendor, type UnpackCaps } from './unpack';
 import type { IngestResult } from './ingest';
 
@@ -87,14 +87,16 @@ export async function ingestLocal(
   if (scoped.length === 0) return { ok: false, reason: 'empty-subdir', message: `No files under ${opts.subdir} after safety filtering.` };
 
   const read = (rel: string): string => { try { return readFileSync(join(abs, opts.subdir ?? '', rel), 'utf8'); } catch { return ''; } };
-  const framework = detectFramework(scoped, read);
-  if (framework === 'mixed') return { ok: false, reason: 'mixed-frameworks', message: 'This directory contains both Spring Boot and FastAPI services — narrow to one service subdirectory.' };
-  if (framework === 'unsupported') return { ok: false, reason: 'unsupported-framework', message: 'No Spring Boot or FastAPI constructs found — M3 supports those two frameworks.' };
+  const readable = scoped.filter(isAnalysisFile);
+  const detected = detectFramework(readable, read);
+  const framework = useGenericAnalysis(readable, detected) ? 'generic' : detected;
 
   const extractDir = opts.subdir ? join(abs, opts.subdir) : abs;
   opts.onStage?.('extracting');
   try {
-    const fragment = framework === 'spring-boot' ? await deps.extractSpringBoot(extractDir) : await deps.extractFastApi(extractDir);
+    const fragment = framework === 'generic'
+      ? extractGeneric(scoped, read, { pathPrefix: opts.subdir })
+      : framework === 'spring-boot' ? await deps.extractSpringBoot(extractDir) : await deps.extractFastApi(extractDir);
     return { ok: true, sha, framework, fragment, gaps: [...gaps, ...fragment.gaps], filesScanned: scoped.length };
   } catch (e) {
     return { ok: false, reason: 'extraction-failed', message: e instanceof Error ? e.message : String(e) };
