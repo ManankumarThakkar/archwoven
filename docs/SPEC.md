@@ -6,6 +6,8 @@
 
 ---
 
+**Implementation status:** this specification includes unfinished release scope. The [post-merge audit](POST-MERGE-AUDIT.md) distinguishes shipped behavior, tested boundaries and remaining work; a schema-valid generated model does not establish complete sequence/ER rendering.
+
 ## 1. Decisions
 
 ### Locked (2026-10-06, this session)
@@ -16,6 +18,8 @@
 | D3 | **Hosting gate:** Anonymous use for plain-English + public repos (rate-limited); GitHub OAuth unlocks private repos. |
 | D4 | **Private input path:** Local clone import first (zero auth surface, fastest boundary proof); GitHub fine-grained PAT/OAuth added within milestone 4. |
 | D5 | **Hardware baseline for private mode:** user's Mac Studio M5 Max / 128 GB. Ollama (v0.35+, `format` = JSON-schema structured outputs) as local inference server. Candidates, validated at probe (d): **gpt-oss:120b** (~65 GB native MXFP4, 131k ctx, native schema-aware tool calling) default; **Nemotron 3.5 Lightning 30B MLX** (~18–20 GB est., 1M ctx, fast) fallback. ~8–10 s TTFT @ 15k-token prompt expected. Nemotron-class 550B models don't fit — skip. Sizes re-verified at install. |
+
+Later approved/runtime updates: the M5 ledger records the switch to `gpt-oss:20b` as the local default, with `OLLAMA_MODEL` override. The M6 scope explicitly excludes hosted OAuth/private GitHub access; private clone import remains local-only. Hosted model generation uses JSON instructions plus validation/bounded repairs because of structured grammar limits; native local inference uses its schema contract. Earlier D2–D5/probe wording above is historical where these later decisions supersede it.
 
 ### Stack — verified by research 2026-10-06 (licenses checked)
 - **Architecture + ER views:** `@xyflow/react` 12.12 (MIT core; Pro tier is paid — never copy Pro-only templates) with custom nodes; ER entity boxes as custom node components.

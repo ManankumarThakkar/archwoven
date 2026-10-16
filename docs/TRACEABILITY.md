@@ -1,5 +1,7 @@
 # TRACEABILITY — living doc (SPEC.md → code → tests)
 
+Current implementation and acceptance status: [post-merge audit](POST-MERGE-AUDIT.md). A code mapping may identify scaffolding or a probe; it is not by itself a completed release gate.
+
 Updated per milestone. M6 working-tree rows added 2026-10-15; verification scope and limits are recorded in M6-CHECKS.md.
 
 | Req | Requirement (SPEC ref) | Implementation | Tests / evidence |

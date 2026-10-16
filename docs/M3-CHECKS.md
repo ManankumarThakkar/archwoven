@@ -1,5 +1,7 @@
 # M3 scenario checks (4–6, 12)
 
+Historical snapshot. Current merged-source verification, superseded blockers and remaining work: [post-merge audit](POST-MERGE-AUDIT.md).
+
 Essential scenario checks from the master prompt, verified against the repo-mode pipeline. Live evidence: `next start` with `ARCHWOVEN_FAKE=1 ARCHWOVEN_DEMO_ACK=1` (boot guard requires the ack), SQLite at `/tmp/aw-m3.db`, port 3111, 2026-10-09.
 
 | # | Scenario | Verified by | Result |

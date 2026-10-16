@@ -1,5 +1,7 @@
 # M6 incremental delivery
 
+Status: implementation merged through PR #9 at `d6f28bcd`. The tables below retain the delivery plan. Use [post-merge audit](POST-MERGE-AUDIT.md) for the current backlog and fresh checks. The clean Suite B receipt is included with the post-merge audit follow-up.
+
 The remaining implementation is delivered on `feat/m6-release-hardening` in focused commits, with one review checklist covering the boundaries below. The tables retain the intended task order and acceptance gates; commit groups combine shared-file changes where necessary. Each group includes its regression tests and relevant traceability rows. Do not stage `.env.local`, databases, screenshots, generated build output, or scratch receipts.
 
 | Order | Proposed PR | Tasks and boundary | Acceptance gate |

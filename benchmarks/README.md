@@ -32,7 +32,4 @@ Receipts land in `results/<UTC-date>-<runner>.jsonl`; failures pin
 exact build. Defect tags: clipping, node-overlap, label-overlap, hidden-route,
 stacked-edge, weak-hierarchy, unbalanced-whitespace, theme-contrast.
 
-**Status:** harness + 3 cases + selftest are live in CI (`pnpm bench:selftest`).
-Live model runs (feeding `prompts/*.txt` through generate, then gating) await an
-API key — same documented blocker as M3's live extraction. Suite B (repair-rounds)
-is planned for M5.
+**Current status:** both harnesses and their selftests are implemented. The post-merge real-provider Suite A run produced three schema-valid models; its strict semantic matcher passed 1/3 because two label aliases were rejected, and all named-human visual reviews remain missing. Suite A is ineligible; an API key is no longer the blocker. Suite B has a clean receipt pinned to merged commit `d6f28bcd`, with all eight deterministic cases passing. See [post-merge audit](../docs/POST-MERGE-AUDIT.md) for exact limits and remaining work.

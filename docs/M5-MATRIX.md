@@ -1,5 +1,7 @@
 # M5 private-mode matrix — eligibility, honestly
 
+Historical snapshot. Current merged-source verification, superseded blockers and remaining work: [post-merge audit](POST-MERGE-AUDIT.md).
+
 Scenarios from the master spec's private vertical (§8/§9). A row is **live** only
 when a real run on this machine produced the artifact; **stub** = canned fixture in
 tests; **CI** = runs in GitHub Actions; **PENDING** = not yet done (never claimed).

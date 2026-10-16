@@ -1,5 +1,7 @@
 # M4 benchmark floor matrix — ordinary-model-floor
 
+Historical snapshot. Current merged-source verification, superseded blockers and remaining work: [post-merge audit](POST-MERGE-AUDIT.md).
+
 Format adapted from the archify benchmark harness (MIT); no archify code vendored.
 Gates: **semantic** (required nodes bound by alias + mandatory type, required
 relationships present) · **validate** (`validateModel`: Zod + referential +

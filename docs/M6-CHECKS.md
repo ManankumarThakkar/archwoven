@@ -1,5 +1,7 @@
 # M6 release-hardening checks
 
+Historical snapshot. Current merged-source verification, superseded blockers and remaining work: [post-merge audit](POST-MERGE-AUDIT.md).
+
 Historical deterministic snapshot; subsequent real-provider checks and approved broader repository support are recorded in [live checks](LIVE-CHECKS.md).
 
 Run date: 2026-10-15. Branch: `feat/m6-release-hardening`. Changes remain uncommitted; these are working-tree checks, not evidence pinned to a release revision. The intentional starting diff was preserved. No commits, PRs, paid provider calls or live local inference were performed.

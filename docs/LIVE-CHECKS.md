@@ -1,5 +1,7 @@
 # Real-provider verification
 
+Historical snapshot. Current merged-source verification, superseded blockers and remaining work: [post-merge audit](POST-MERGE-AUDIT.md).
+
 Run date: 2026-10-15 (America/Chicago; server records cross midnight UTC). Branch `feat/m6-release-hardening`; the live checks below were recorded against the then-uncommitted working tree. This follows the earlier fixture-only [M6 snapshot](M6-CHECKS.md). The user explicitly approved live provider testing and the broader source-analysis fallback. No key values, browser cookies, or private repository content are included here. No commits or PRs were created during those live checks.
 
 ## Configuration and original symptom
