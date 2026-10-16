@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { extractGeneric, isAnalysisFile, type Fragment } from '@archwoven/extract';
+import { extractGeneric, isAnalysisFile, isExtractionFile, type Fragment, type SourceInventory } from '@archwoven/extract';
 import { pinCommit, fetchTarball, type GithubApiFetch } from './fetch';
 import { unpackTarball, cleanupDir, type UnpackCaps } from './unpack';
 import { detectFramework, useGenericAnalysis } from './detect';
@@ -13,8 +13,8 @@ import { detectFramework, useGenericAnalysis } from './detect';
  */
 export interface IngestDeps {
   fetcher: GithubApiFetch;
-  extractSpringBoot: (dir: string) => Promise<Fragment>;
-  extractFastApi: (dir: string) => Promise<Fragment>;
+  extractSpringBoot: (dir: string, sources: SourceInventory) => Promise<Fragment>;
+  extractFastApi: (dir: string, sources: SourceInventory) => Promise<Fragment>;
   tmpRoot?: string;
 }
 
@@ -61,16 +61,18 @@ export async function ingestRepo(
     if (files.includes('.gitmodules')) gaps.push('submodule(s) declared — codeload excludes submodule contents; they were not analyzed');
     if (files.includes('.gitattributes') && /filter=lfs/.test(readSafe(workDir, '.gitattributes'))) gaps.push('Git LFS pointers — large binary files were not downloaded');
 
-    const readable = scoped.filter(isAnalysisFile);
-    const detected = detectFramework(readable, (rel) => readSafe(workDir, joinDir(parsed.subdir, rel)));
+    const sources = new Map(scoped.filter(isExtractionFile).map((rel) => [rel, readSafe(workDir, joinDir(parsed.subdir, rel))]));
+    const read = (rel: string) => sources.get(rel) ?? '';
+    const readable = [...sources.keys()].filter(isAnalysisFile);
+    const detected = detectFramework(readable, read);
     const framework = useGenericAnalysis(readable, detected) ? 'generic' : detected;
 
     const extractDir = parsed.subdir ? join(workDir, parsed.subdir) : workDir;
     opts.onStage?.('extracting');
     try {
       const fragment = framework === 'generic'
-        ? extractGeneric(scoped, (rel) => readSafe(workDir, joinDir(parsed.subdir, rel)), { pathPrefix: parsed.subdir })
-        : framework === 'spring-boot' ? await deps.extractSpringBoot(extractDir) : await deps.extractFastApi(extractDir);
+        ? extractGeneric(scoped, read, { pathPrefix: parsed.subdir })
+        : framework === 'spring-boot' ? await deps.extractSpringBoot(extractDir, sources) : await deps.extractFastApi(extractDir, sources);
       return { ok: true, sha: pinned.sha, framework, fragment, gaps: [...gaps, ...fragment.gaps], filesScanned: scoped.length };
     } catch (e) {
       return { ok: false, reason: 'extraction-failed', message: e instanceof Error ? e.message : String(e) };

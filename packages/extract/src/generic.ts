@@ -23,13 +23,23 @@ const source = (path: string) => SOURCE.test(path);
 
 /** Shared before-read allowlist. Unknown binary/config files and sensitive names
  * never enter the source inventory or snippets. The input paths are untrusted. */
-export function isAnalysisFile(path: string): boolean {
+function isSafeSourcePath(path: string): boolean {
   if (!path || path.startsWith('/') || path.includes('\\') || /^[A-Za-z]:/.test(path)) return false;
   const parts = path.split('/');
   if (parts.some((part) => part === '..' || part === '.' || NOISE.has(part.toLowerCase()) || part.startsWith('.'))) return false;
   const name = base(path);
   if (SENSITIVE.test(name) || /\.(?:test|spec|generated|min)\.[^.]+$/i.test(name) || /^(?:test_.+|.+_test)\.(?:py|go)$/i.test(name)) return false;
-  return source(path) || manifest(path) || DOC.test(name);
+  return true;
+}
+
+export function isAnalysisFile(path: string): boolean {
+  return isSafeSourcePath(path) && (source(path) || manifest(path) || DOC.test(base(path)));
+}
+
+/** Framework extraction additionally reads application datasource configuration.
+ * Keep the same path/name exclusions as the general source inventory. */
+export function isExtractionFile(path: string): boolean {
+  return isAnalysisFile(path) || (isSafeSourcePath(path) && /^application(?:-[\w-]+)?\.(?:ya?ml|properties)$/i.test(base(path)));
 }
 
 const idFor = (path: string): string => `module.${path.toLowerCase().replace(/[^a-z0-9]+/g, '.').replace(/^\.|\.$/g, '').slice(0, 65)}.${createHash('sha256').update(path).digest('hex').slice(0, 8)}`;

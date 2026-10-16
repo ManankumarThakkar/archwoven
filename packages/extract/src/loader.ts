@@ -1,9 +1,14 @@
 import { createRequire } from 'node:module';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, lstatSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { Parser, Language } from 'web-tree-sitter';
 import type { Node as SyntaxNode } from 'web-tree-sitter';
 import type { Evidence } from '@archwoven/model';
+import { isExtractionFile } from './generic';
+
+/** Accepted, captured text keyed by analysis-root-relative path. Supplying even
+ * an empty inventory disables filesystem discovery in framework parsers. */
+export type SourceInventory = ReadonlyMap<string, string>;
 
 const require = createRequire(import.meta.url);
 
@@ -31,19 +36,31 @@ export function walkFiles(dir: string, ext: string): string[] {
   for (const entry of readdirSync(dir)) {
     if (entry === 'node_modules' || entry.startsWith('.')) continue;
     const full = join(dir, entry);
-    if (statSync(full).isDirectory()) out.push(...walkFiles(full, ext));
-    else if (entry.endsWith(ext)) out.push(full);
+    const stat = lstatSync(full);
+    if (stat.isSymbolicLink()) continue;
+    if (stat.isDirectory()) out.push(...walkFiles(full, ext));
+    else if (stat.isFile() && entry.endsWith(ext)) out.push(full);
   }
   return out;
 }
 
-export async function parseSource(parser: Parser, filePath: string, rootDir: string) {
-  const source = readFileSync(filePath, 'utf8');
+export function loadSources(dir: string, extensions: string[], inventory?: SourceInventory): SourceInventory {
+  if (inventory !== undefined) return new Map([...inventory].filter(([path]) => extensions.some((ext) => path.endsWith(ext))));
+  // Standalone fixture/probe callers retain directory-based extraction. Ingest
+  // always supplies captured text and never takes this discovery path.
+  const files = extensions.flatMap((ext) => walkFiles(dir, ext));
+  return new Map(files.flatMap((file) => {
+    const rel = relative(dir, file).split('\\').join('/');
+    return isExtractionFile(rel) ? [[rel, readFileSync(file, 'utf8')] as const] : [];
+  }));
+}
+
+export async function parseSource(parser: Parser, source: string, relPath: string) {
   const tree = await parser.parse(source);
-  if (!tree) throw new Error(`parse failed: ${filePath}`);
+  if (!tree) throw new Error(`parse failed: ${relPath}`);
   return {
     source,
-    relPath: relative(rootDir, filePath).split('\\').join('/'),
+    relPath,
     tree,
   };
 }

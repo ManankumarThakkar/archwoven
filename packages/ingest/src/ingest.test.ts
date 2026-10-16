@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
-import type { Fragment } from '@archwoven/extract';
+import { extractFastApi, extractSpringBoot, type Fragment } from '@archwoven/extract';
 import { ingestRepo, type IngestDeps } from './ingest';
 import { tarEntry, tar } from './tar-fixtures';
 
@@ -31,6 +31,27 @@ const SPRING_TAR = [
 ];
 
 describe('ingestRepo (pin → fetch → unpack → detect → extract)', () => {
+  it.each(['fastapi', 'spring-boot'] as const)('%s public ingestion uses the approved inventory with real parsers', async (framework) => {
+    const ext = framework === 'fastapi' ? '.py' : '.java';
+    const source = (name: string) => framework === 'fastapi'
+      ? `from fastapi import FastAPI\n${name} = FastAPI()`
+      : `@SpringBootApplication @RestController class ${name} {}`;
+    const result = await ingestRepo({ owner: 'foo', repo: 'app' }, {
+      fetcher: cannedFetcher([
+        tarEntry(`app-main/main${ext}`, source('Approved')),
+        tarEntry(`app-main/credentials${ext}`, source('Credentials')),
+        tarEntry(`app-main/target/Vendor${ext}`, source('Vendor')),
+      ]),
+      extractFastApi,
+      extractSpringBoot,
+      tmpRoot: tmp(),
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.framework).toBe(framework);
+    expect(result.fragment.nodes.map((node) => node.label)).toEqual(['Approved']);
+  });
+
   it('happy spring-boot path: fragment + pinned sha + gap list', async () => {
     let extractedDir: string | null = null;
     const deps: IngestDeps = {
