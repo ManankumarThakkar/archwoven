@@ -17,7 +17,7 @@
  */
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { execSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -38,9 +38,9 @@ const p = (s) => (isAbsolute(s) ? s : resolve(here, s));
 const manifest = JSON.parse(readFileSync(join(here, 'manifest.json'), 'utf8'));
 const FIXTURES = { 'valid-full-extended': join(repoRoot, 'packages/model/src/fixtures/valid-full-extended.json') };
 
-async function loadValidator() {
+async function loadValidator({ rebuild = false } = {}) {
   const dist = join(repoRoot, 'packages/model/dist/index.js');
-  if (!existsSync(dist)) execSync('pnpm --filter @archwoven/model build', { cwd: repoRoot, stdio: 'inherit' });
+  if (rebuild || !existsSync(dist)) execSync('pnpm --filter @archwoven/model build', { cwd: repoRoot, stdio: 'inherit' });
   return import(pathToFileURL(dist).href);
 }
 
@@ -120,16 +120,38 @@ function rulesOnlyRepair(model, diagnostics) {
   return { repaired: m, applied };
 }
 
+// Stable Suite B codes derived from validator output, independently of the case.
+// Unrecognized output remains unmatched so diagnostic drift cannot silently pass.
+function diagnosticCode(error) {
+  const rules = [
+    [/^edge "[^"]+" to unknown node:/, 'edge-to-unknown-node'],
+    [/^duplicate node id:/, 'duplicate-node-id'],
+    [/^[^:]+: Invalid input: expected string, received undefined$/, 'required-string'],
+    [/^[^:]+: Invalid option: expected one of /, 'invalid-enum'],
+    [/^parentId \d+ must equal revision - 1 /, 'parent-revision-mismatch'],
+    [/^requiredPath unreachable:/, 'required-path-unreachable'],
+    [/^node has no incoming edge but is not in allowedRoots:/, 'orphan-not-in-allowed-roots'],
+    [/^node in two boundaries:/, 'node-in-two-boundaries'],
+    [/^view "[^"]+" message seq must be consecutive/, 'seq-not-consecutive'],
+  ];
+  return rules.find(([pattern]) => pattern.test(error))?.[1] ?? null;
+}
+
 function runCase(c, { validateModel, SystemModelSchema }) {
   const base = JSON.parse(readFileSync(FIXTURES[c.base], 'utf8'));
   const mutated = applyOps(base, c.mutation.ops);
   const r1 = validateModel(mutated);
   const detected = !r1.ok;
-  // expected diagnostics must match reality exactly: every expected substring
-  // hits a real error AND no unexpected errors appear (drift fails the case).
+  // Match each expectation to a distinct error by both code and wording.
+  const unmatched = [...(r1.errors ?? [])];
   const expectedMatch = detected
-    && r1.errors.length === c.expectedDiagnostics.length
-    && c.expectedDiagnostics.every((d) => r1.errors.some((e) => e.includes(d.contains)));
+    && unmatched.length === c.expectedDiagnostics.length
+    && c.expectedDiagnostics.every((d) => {
+      const i = unmatched.findIndex((e) => diagnosticCode(e) === d.code && e.includes(d.contains));
+      if (i < 0) return false;
+      unmatched.splice(i, 1);
+      return true;
+    });
   const firstDisclosure = detected && c.mutation.subjects.some((s) => r1.errors[0].includes(s));
   const stage = SystemModelSchema.safeParse(mutated).success ? 'graph' : 'schema';
   // rounds: 1 = detection. 2 = rules-only stub attempt from diagnostics alone.
@@ -178,18 +200,36 @@ function checkReceiptIntegrity() {
 async function verify() {
   const tampered = checkReceiptIntegrity();
   if (tampered.length) { console.error(`verify: TAMPERED receipts, evidence untrusted: ${tampered.join(', ')}`); process.exit(1); }
-  const v = await loadValidator();
-  const results = manifest.cases.map((name) => runCase(readCase(join(here, 'cases', `${name}.case.json`)), v));
+  const scratch = argv.includes('--scratch');
   let repositoryCommit = 'unknown';
-  try { repositoryCommit = execSync('git rev-parse HEAD', { cwd: repoRoot, encoding: 'utf8' }).trim(); } catch { /* not a git checkout */ }
+  let sourceState = 'unknown';
+  try {
+    repositoryCommit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+    // Results are outputs, so existing receipts do not dirty the source revision.
+    const changes = execFileSync('git', ['status', '--porcelain', '--untracked-files=all', '--', '.', ':(exclude)benchmarks/repair-rounds/results/**'], { cwd: repoRoot, encoding: 'utf8' });
+    execFileSync('git', ['cat-file', '-e', `${repositoryCommit}:benchmarks/repair-rounds/harness.mjs`], { cwd: repoRoot, stdio: 'pipe' });
+    sourceState = changes.trim() ? 'dirty' : 'clean';
+  } catch { /* source commit cannot be established */ }
+  if (!scratch && sourceState !== 'clean') {
+    console.error(`verify: source checkout is ${sourceState}; commit the source changes and use a clean checkout for pinned evidence, or use --scratch --results-dir <temporary-directory> for an ineligible diagnostic run`);
+    process.exit(1);
+  }
+  // A pinned run must not silently consume stale ignored dist/ output.
+  const v = await loadValidator({ rebuild: !scratch });
+  const results = manifest.cases.map((name) => runCase(readCase(join(here, 'cases', `${name}.case.json`)), v));
   const dist = join(repoRoot, 'packages/model/dist/index.js');
   const packageSha256 = existsSync(dist) ? createHash('sha256').update(readFileSync(dist)).digest('hex') : 'unbuilt';
-  const doc = { kind: 'repair-rounds-receipts', suite: manifest.suite, ts: new Date().toISOString(), runner, repositoryCommit, packageSha256, results };
+  const distDir = dirname(dist);
+  const builtFiles = readdirSync(distDir, { recursive: true }).filter((name) => name.endsWith('.js')).sort();
+  const validatorSha256 = fingerprint(builtFiles.map((name) => [name, readFileSync(join(distDir, name), 'utf8')]));
+  const provenance = { mode: scratch ? 'scratch' : 'pinned', sourceState, validatorSha256 };
+  const doc = { provenance, kind: 'repair-rounds-receipts', suite: manifest.suite, ts: new Date().toISOString(), runner, repositoryCommit, packageSha256, results };
   doc.fingerprint = fingerprint(doc);
   if (!existsSync(resultsDir)) mkdirSync(resultsDir, { recursive: true });
   const file = join(resultsDir, `${doc.ts.slice(0, 10)}-${runner}.json`);
   writeFileSync(file, JSON.stringify(doc, null, 2) + '\n');
   const failed = results.filter((r) => !r.pass);
+  console.log(`receipt provenance: ${provenance.mode} (source ${sourceState})`);
   console.log(`verify: ${results.length - failed.length}/${results.length} cases pass → ${file}`);
   for (const f of failed) console.error(`FAIL ${f.case}`);
   process.exit(failed.length ? 1 : 0);
@@ -206,7 +246,7 @@ function report() {
     .map((f) => JSON.parse(readFileSync(join(resultsDir, f), 'utf8')))
     .sort((a, b) => String(a.ts).localeCompare(String(b.ts)));
   const latest = new Map(); // last receipt per case wins
-  for (const doc of docs) for (const r of doc.results ?? []) latest.set(r.case, { ...r, ts: doc.ts, repositoryCommit: doc.repositoryCommit });
+  for (const doc of docs) for (const r of doc.results ?? []) latest.set(r.case, { ...r, ts: doc.ts, repositoryCommit: doc.repositoryCommit, provenance: doc.provenance });
 
   let fails = 0;
   for (const name of manifest.cases) {
@@ -215,18 +255,24 @@ function report() {
     if (!r.pass) fails++;
     console.log(`${name}: ${r.pass ? 'pass' : 'FAIL'} (rounds ${r.roundsToPass}, first-disclosure ${r.firstDisclosure}, stage ${r.stage}, stub ${r.stubRepaired ? 'fixed' : 'cannot'})`);
   }
-  const covered = [...latest.values()];
-  const pct = (n) => (covered.length ? `${Math.round((n / covered.length) * 100)}%` : 'n/a');
+  const covered = manifest.cases.flatMap((name) => latest.has(name) ? [latest.get(name)] : []);
+  const total = manifest.cases.length;
+  const pct = (n) => (total ? `${Math.round((n / total) * 100)}%` : 'n/a');
   const fd = covered.filter((r) => r.firstDisclosure).length;
   const act = covered.filter((r) => r.stubRepaired).length;
   const stages = covered.reduce((a, r) => ({ ...a, [r.stage]: (a[r.stage] ?? 0) + 1 }), {});
   console.log(`rounds-to-pass: ${covered.map((r) => r.roundsToPass ?? 'never').join(', ')}`);
-  console.log(`first-disclosure-rate: ${fd}/${covered.length} (${pct(fd)})`);
+  console.log(`first-disclosure-rate: ${fd}/${total} (${pct(fd)})`);
   console.log(`first-detection-stage: ${JSON.stringify(stages)}`);
-  console.log(`actionability (rules-only stub): ${act}/${covered.length} (${pct(act)})`);
+  console.log(`actionability (rules-only stub): ${act}/${total} (${pct(act)})`);
   const missing = manifest.cases.filter((c) => !latest.has(c));
+  console.log(`coverage: ${covered.length}/${total}${missing.length ? ` (missing: ${missing.join(', ')})` : ''}`);
   if (fails) { console.log(`evidenceEligible: false (${fails} failed)`); process.exit(1); }
   if (missing.length) { console.log(`evidenceEligible: false (missing: ${missing.join(', ')})`); process.exit(2); }
+  const unpinned = covered.filter((r) => r.provenance?.mode !== 'pinned'
+    || r.provenance.sourceState !== 'clean'
+    || !/^[a-f0-9]{64}$/.test(r.provenance.validatorSha256 ?? ''));
+  if (unpinned.length) { console.log(`evidenceEligible: false (scratch or missing clean-source provenance: ${unpinned.map((r) => r.case).join(', ')})`); process.exit(2); }
   console.log('evidenceEligible: true (deterministic validator round-trips only — see README limits)');
   process.exit(0);
 }

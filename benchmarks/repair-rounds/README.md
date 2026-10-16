@@ -28,8 +28,8 @@ Note on "unbound evidence commit": `EvidenceSchema.commit` is a free-form
 string — the validator does **not** check commit format, so a malformed
 evidence commit is invisible to this harness. The dangling-edge-ref case
 therefore uses a 40-hex commit string as a dangling edge `to` — the nearest
-damage shape the validator actually catches. Expected diagnostics are exact:
-extra unexpected errors fail the case (drift detection).
+damage shape the validator actually catches. Expected diagnostics match distinct errors by both a text-derived Suite B code
+and the expected substring. Extra unexpected errors fail the case (drift detection).
 
 ## Repair rounds and metrics
 
@@ -46,29 +46,76 @@ Reported metrics: **rounds-to-pass** (2 = stub-fixable, 3 = oracle-only),
 location — Zod reports schema errors by path index, not id, so those cases
 honestly score false), **first-detection-stage** (`schema` vs `graph`), and
 **actionability** (fraction the stub could fix from the diagnostic alone).
-Current run: first-disclosure 6/8, stage graph 6 / schema 2, actionability 4/8.
+The denominator is always the 8 manifest cases, including missing coverage;
+unknown receipt case IDs contribute to neither coverage nor metrics. The
+historical run recorded first-disclosure 6/8, stage graph 6 / schema 2, and
+actionability 4/8, but its receipt is not valid pinned evidence (see below).
 
 ## Commands (exit codes: 0 pass · 1 failure · 2 incomplete)
 
 ```bash
 node benchmarks/repair-rounds/harness.mjs check cases/dangling-edge-ref.case.json
-node benchmarks/repair-rounds/harness.mjs verify
+node benchmarks/repair-rounds/harness.mjs verify   # requires clean committed source
 node benchmarks/repair-rounds/harness.mjs report
 node benchmarks/repair-rounds/harness.selftest.mjs   # CI gate
 ```
 
-`verify` runs all cases and writes `results/<UTC-date>-<runner>.json` pinning
-`repositoryCommit` + `packageSha256` (built via `pnpm --filter @archwoven/model
-build` if `dist/` is missing) and a self-`fingerprint`; `verify` and `report`
-reject tampered receipts (exit 1) before trusting any evidence. No new deps:
-plain `node` importing the built `packages/model/dist/index.js`, like Suite A.
+`verify` requires a clean Git checkout (existing Suite B result files are
+excluded from the source cleanliness check), rebuilds the model package,
+and writes `results/<UTC-date>-<runner>.json`. The receipt pins
+`repositoryCommit`, the built entry point's `packageSha256`, and
+`provenance.validatorSha256` over every built JavaScript file. Provenance
+records `mode: "pinned"` and `sourceState: "clean"`. `verify` and `report`
+reject receipts whose self-fingerprint no longer matches their content
+(exit 1). This fingerprint detects accidental changes, not malicious
+rewriting or proof of authorship.
+
+For development, use a temporary results directory:
+
+```bash
+scratch_dir=$(mktemp -d)
+node benchmarks/repair-rounds/harness.mjs verify --scratch --results-dir "$scratch_dir"
+node benchmarks/repair-rounds/harness.mjs report --results-dir "$scratch_dir"
+# verify exits 0 when all cases pass; report exits 2 because scratch is ineligible.
+rm -rf "$scratch_dir"
+```
+
+`--scratch` permits dirty sources and can reuse existing built output. It
+always records scratch provenance, so a successful selftest or diagnostic
+run cannot be presented as pinned evidence. `report` also marks legacy
+receipts without clean-source provenance ineligible (exit 2).
+
+## Historical receipt and regeneration
+
+`results/2026-10-15-manan.json` is retained unchanged as history. Its
+`repositoryCommit` is `46fd40f070013e9ff15947afc95aba31c6a5bcb0`, which predates
+the committed Suite B harness. It cannot reproduce the harness from that
+revision and has no clean-source provenance. Its numbers are historical
+observations, not eligible release evidence.
+
+Regenerate only after the harness, cases, manifest, and validator changes
+are committed. Use a clean checkout of that revision with dependencies
+installed, then run:
+
+```bash
+node benchmarks/repair-rounds/harness.selftest.mjs
+node benchmarks/repair-rounds/harness.mjs verify --runner release-<short-commit>
+node benchmarks/repair-rounds/harness.mjs report
+```
+
+Choose a new runner name so the historical receipt is never overwritten.
+Check that all 8 cases pass and the new receipt names the actual clean
+source commit, then commit only the new receipt in a follow-up evidence PR.
+Its source revision should be the preceding implementation commit; the
+receipt cannot pin a commit that already contains itself. No new pinned
+receipt is generated while these source fixes remain uncommitted.
 
 ## What this can and cannot claim
 
-**Can claim:** `validateModel` deterministically detects these 8 failure
-classes against this fixture; the exact diagnostic wording and detection stage
-are pinned receipts; the first-disclosure and actionability numbers above are
-reproducible against the pinned commit + package hash.
+**Can claim after eligible regeneration:** `validateModel` deterministically
+detects these 8 failure classes against this fixture; diagnostic codes,
+wording, stages, first-disclosure, and actionability are reproducible against
+the clean source commit and built validator hashes.
 
 **Cannot claim:** anything about live model repair quality or rounds — no LLM
 participates here. The rules-only stub is a lower bound on mechanical

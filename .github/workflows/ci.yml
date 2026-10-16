@@ -24,6 +24,8 @@ jobs:
       # so the parity scope is model/extract/ingest/llm + web lib/render.
       - run: ARCHWOVEN_MODE=local pnpm vitest run packages apps/web/lib apps/web/app/lib apps/web/probes
       - run: pnpm bench:selftest
+      # Suite B repair-rounds: deterministic detector round-trips (needs built model dist).
+      - run: node benchmarks/repair-rounds/harness.selftest.mjs
 
   deploy-image:
     runs-on: ubuntu-latest

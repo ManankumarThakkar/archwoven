@@ -17,6 +17,6 @@
   "repairer": "rules-only-stub",
   "receipt": {
     "format": "json",
-    "pins": ["repositoryCommit", "packageSha256", "fingerprint"]
+    "pins": ["repositoryCommit", "packageSha256", "provenance", "fingerprint"]
   }
 }
