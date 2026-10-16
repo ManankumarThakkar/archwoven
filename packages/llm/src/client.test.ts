@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { generateModel, makeAnthropic, MAX_REPAIRS, MAX_TOKENS, STABLE_SYSTEM, faithfulSchema } from './client';
+import { generateModel, makeAnthropic, MAX_REPAIRS, MAX_TOKENS, STABLE_SYSTEM, faithfulSchema, MODEL_JSON_CONTRACT } from './client';
 import type { StructuredClient } from './client';
 import validFull from '@archwoven/model/src/fixtures/valid-full.json';
 import dangling from '@archwoven/model/src/fixtures/invalid-dangling-edge.json';
@@ -36,6 +36,15 @@ function fakeClient(canned: (unknown | null)[], opts: { countedTokens?: number; 
 }
 
 describe('generateModel (mocked SDK)', () => {
+  it('gives hosted generation the complete sequence value contract despite its string wire encoding', () => {
+    const nested = MODEL_JSON_CONTRACT.match(/<sequence-json-schema>\n([\s\S]+?)\n<\/sequence-json-schema>/);
+    expect(nested).not.toBeNull();
+    const schema = JSON.parse(nested![1]!);
+    const message = schema.properties.messages.items;
+    expect(message.properties).toHaveProperty('fragment');
+    expect(JSON.stringify(message.properties.fragment)).toContain('covers');
+    expect(JSON.stringify(message.properties.fragment)).toContain('opt');
+  });
   it('decodes hosted wire evidence, ER fields and complete sequence metadata before validation', async () => {
     const wire = {
       schemaVersion: '1', revision: 1, title: 'Hosted sequence',

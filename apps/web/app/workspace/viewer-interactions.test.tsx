@@ -380,12 +380,12 @@ describe('Canvas interaction state', () => {
     expect(host.querySelectorAll('[data-animated="true"]')).toHaveLength(0);
   });
 
-  it('hash writes preserve encoded commas in other keys while keeping lens commas readable', async () => {
+  it('hash writes preserve encoded commas in unrelated keys while clearing invalid focus', async () => {
     history.replaceState(null, '', '#note=keep%2Cencoded&focus=a%2Cb&lens=service%2Cqueue');
     await renderCanvas();
     await click(host.querySelector('[data-edge="ab"]'));
     expect(location.hash).toContain('note=keep%2Cencoded');
-    expect(location.hash).toContain('focus=a%2Cb');
+    expect(location.hash).not.toContain('focus=');
     expect(location.hash).toContain('lens=service,queue');
   });
 });
@@ -408,5 +408,55 @@ describe('NodeFinder keyboard visibility', () => {
     await key(input, 'ArrowUp');
     expect((scroll.mock.contexts.at(-1) as Element)?.textContent).toContain('n24');
     expect(document.activeElement).toBe(input);
+  });
+});
+
+describe('sequence workspace viewer', () => {
+  const sequenceModel: SystemModel = { ...model, views: [{ id: 'sequence', type: 'sequence', nodes: ['a', 'b', 'c'], edges: ['ab', 'bc'], sequence: { participants: ['a', 'b', 'c'], messages: [
+    { seq: 1, from: 'a', to: 'b', label: 'Enqueue work', kind: 'async' },
+    { seq: 2, from: 'b', to: 'b', label: 'Validate job', kind: 'call', fragment: { type: 'loop', covers: [2] } },
+    { seq: 3, from: 'b', to: 'a', label: 'Accepted', kind: 'return' },
+  ] } }] };
+  const show = async (current = sequenceModel) => act(async () => root.render(<Canvas model={current} modelId="sequence-model" viewId="sequence" onSelect={selected} onDeselect={deselected} />));
+  const selected = vi.fn(), deselected = vi.fn();
+  beforeEach(() => { selected.mockClear(); deselected.mockClear(); });
+  it('uses lifelines and ordered messages with a readable text alternative, without graph controls', async () => {
+    await show();
+    expect(host.querySelectorAll('[data-lifeline]')).toHaveLength(3);
+    expect(host.querySelectorAll('[data-message]')).toHaveLength(3);
+    expect(host.querySelector('[data-self-call]')).toBeTruthy();
+    expect(host.querySelector('[data-flow-theme]')).toBeNull();
+    expect(host.querySelector('[aria-label="route from"]')).toBeNull();
+    expect(host.querySelector('ol')?.textContent).toContain('API → Queue: Enqueue work');
+    expect(host.querySelector('ol')?.textContent).toContain('return');
+    expect(host.querySelector('[data-participant="b"]')?.textContent).toContain('inferred');
+    expect(host.querySelector('button[aria-label="Inspect Storage"]')?.textContent).toContain('code');
+  });
+  it('supports participant inspection, permalink restoration and fit/zoom controls', async () => {
+    history.replaceState(null, '', '/workspace#model=sequence-model&view=sequence&focus=b&route=a~b&lens=service');
+    await show();
+    expect(selected).toHaveBeenLastCalledWith('b');
+    expect(window.location.hash).not.toContain('route=');
+    expect(window.location.hash).not.toContain('lens=');
+    await click(host.querySelector('button[aria-label="Inspect Storage"]'));
+    expect(selected).toHaveBeenLastCalledWith('c');
+    expect(window.location.hash).toContain('focus=c');
+    await click(host.querySelector('button[aria-label="Zoom in timeline"]'));
+    expect(host.querySelector('[aria-label="Timeline zoom"]')?.textContent).not.toBe('Fit');
+    await click(button('Fit'));
+    expect(host.querySelector('[aria-label="Timeline zoom"]')?.textContent).toBe('Fit');
+  });
+  it('shows an honest missing-timeline state for legacy views instead of a node graph', async () => {
+    await show({ ...sequenceModel, views: [{ ...sequenceModel.views[0]!, sequence: null }] });
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('no message timeline');
+    expect(host.querySelector('[data-flow-theme]')).toBeNull();
+  });
+  it('clears an invisible sequence selection when returning to an architecture view', async () => {
+    const mixed: SystemModel = { ...sequenceModel, views: [...sequenceModel.views, { id: 'architecture', type: 'architecture', nodes: ['a', 'b'], edges: ['ab'] }] };
+    await show(mixed); await click(host.querySelector('button[aria-label="Inspect Storage"]'));
+    deselected.mockClear();
+    await act(async () => root.render(<Canvas model={mixed} modelId="sequence-model" viewId="architecture" onSelect={selected} onDeselect={deselected} />));
+    expect(deselected).toHaveBeenCalled();
+    expect(new URLSearchParams(window.location.hash.slice(1)).get('focus')).toBeNull();
   });
 });

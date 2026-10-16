@@ -16,7 +16,7 @@ describe('sequenceSvg', () => {
 
   it('renders one arrow per message and the alt fragment band', () => {
     const s = svg();
-    const arrows = s.match(/marker-end="url\(#arrow\)"/g) ?? [];
+    const arrows = s.match(/marker-end="url\(#sequence-(?:call|open|return)\)"/g) ?? [];
     expect(arrows).toHaveLength(validFullModel.views[1]!.sequence!.messages.length);
     expect(s).toContain('ALT');
   });
@@ -31,6 +31,6 @@ describe('sequenceSvg', () => {
   });
 
   it('throws on a non-sequence view instead of emitting garbage', () => {
-    expect(() => sequenceSvg(validFullModel, 'view.er')).toThrow(/not a sequence view/);
+    expect(() => sequenceSvg(validFullModel, 'view.er')).toThrow(/sequence view/);
   });
 });

@@ -79,7 +79,7 @@ export default function WorkspacePage() {
     window.history.replaceState(null, '', `#${hash}`);
   };
 
-  const loadModel = async (id: string, gaps?: string[]) => {
+  const loadModel = async (id: string, gaps?: string[], preferredView?: ViewType) => {
     const sequence = ++loadSequence.current;
     try {
       const res = await fetch(`/api/models/${encodeURIComponent(id)}`);
@@ -93,8 +93,12 @@ export default function WorkspacePage() {
       setModelId(id);
       setHistory([m]);
       setSelected(null);
-      setActiveView(m.views.find((v) => v.id === hashView)?.id ?? m.views[0]?.id ?? '');
+      const chosen = (preferredView ? m.views.find(v => v.type === preferredView) : m.views.find(v => v.id === hashView))?.id ?? m.views[0]?.id ?? '';
+      setActiveView(chosen);
       rememberModel(id);
+      const hash = new URLSearchParams(window.location.hash.slice(1));
+      if (chosen) hash.set('view', chosen);
+      window.history.replaceState(null, '', `#${hash}`);
       dispatch({ type: 'RESTORED', modelId: id, revision: m.revision, gaps: gaps ?? m.openQuestions.map((q) => q.text) });
     } catch (err) {
       if (sequence !== loadSequence.current) return;
@@ -127,7 +131,7 @@ export default function WorkspacePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const poll = async (jobId: string) => {
+  const poll = async (jobId: string, preferredView?: ViewType) => {
     let runningSince: number | null = null;
     let misses = 0;
     for (;;) {
@@ -165,7 +169,7 @@ export default function WorkspacePage() {
       if (job.status === 'cancelled') { setQueuedPos(null); dispatch({ type: 'CANCEL' }); return; }
       if (job.status === 'succeeded') {
         setQueuedPos(null);
-        await loadModel(job.modelId, job.gaps);
+        await loadModel(job.modelId, job.gaps, preferredView);
         return;
       }
       dispatch({ type: 'ERROR', message: job.error ?? 'generation failed' });
@@ -173,7 +177,7 @@ export default function WorkspacePage() {
     }
   };
 
-  const submitGeneration = async (url: string, body: object) => {
+  const submitGeneration = async (url: string, body: object, preferredView: ViewType = 'architecture') => {
     setCancelError(null);
     try {
       const res = await fetch(url, {
@@ -189,7 +193,7 @@ export default function WorkspacePage() {
       if (typeof jobId !== 'string' || !jobId) throw new Error('Missing job ID');
       if (typeof remaining === 'number') setRemaining(remaining);
       jobIdRef.current = jobId;
-      void poll(jobId);
+      void poll(jobId, preferredView);
     } catch {
       dispatch({ type: 'ERROR', message: 'Could not start generation. Check your connection and try again; retrying the same input will reconnect to any job already started.' });
     }
@@ -197,7 +201,7 @@ export default function WorkspacePage() {
 
   const generate = async (prompt: string, view: ViewType) => {
     dispatch({ type: 'GENERATE' });
-    await submitGeneration('/api/generate', { prompt, view, idempotencyKey: idempotencyKeyFor(prompt, view) });
+    await submitGeneration('/api/generate', { prompt, view, idempotencyKey: idempotencyKeyFor(prompt, view) }, view);
   };
 
   const generateRepo = async (form: RepoForm) => {

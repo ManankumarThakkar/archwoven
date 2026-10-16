@@ -1,5 +1,6 @@
 import type { SystemModel } from '@archwoven/model';
 import { layoutModel, nodeSize } from './layout';
+import { sequenceSvg } from './sequence';
 
 /**
  * Render a view's subgraph to a standalone SVG string from ELK positions.
@@ -7,8 +8,9 @@ import { layoutModel, nodeSize } from './layout';
  * renders anywhere; renderPng() rasterizes it when fonts are supplied.
  */
 export async function buildSvg(model: SystemModel, viewId: string): Promise<string> {
-  const placed = await layoutModel(model, viewId);
   const view = model.views.find((v) => v.id === viewId);
+  if (view?.type === 'sequence') return sequenceSvg(model, viewId);
+  const placed = await layoutModel(model, viewId);
   const pos = new Map(placed.nodes.map((n) => [n.id, n]));
 
   const edges = (view?.edges ?? []).flatMap((id) => {

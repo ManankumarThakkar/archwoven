@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 
 // Layout is covered separately in Canvas tests and the real-browser pass.
-vi.mock('./Canvas', () => ({ Canvas: () => null }));
+vi.mock('./Canvas', () => ({ Canvas: ({ viewId }: { viewId: string }) => <output aria-label="Rendered view">{viewId}</output> }));
 const rasterizer = vi.hoisted(() => ({ ensureResvg: vi.fn(), renderPng: vi.fn() }));
 vi.mock('../../probes/render/export', () => rasterizer);
 
@@ -72,6 +72,16 @@ async function click(label: string) {
 }
 
 describe('saved diagram restoration', () => {
+  it('opens the requested sequence view after generation and preserves it in the reload link', async () => {
+    transport = (input) => {
+      if (input === '/api/generate') return Response.json({ jobId: 'sequence-job', remaining: 5 }, { status: 202 });
+      if (input === '/api/jobs/sequence-job') return Response.json({ status: 'succeeded', modelId: 'sequence-model', revision: 1 });
+      return undefined;
+    };
+    await mount(); await click('Sequence'); await fill('#system-description', 'User signs in and receives a response'); await click('Generate diagram');
+    expect(container.querySelector('[aria-label="Rendered view"]')?.textContent).toBe('view.sequence');
+    expect(new URLSearchParams(window.location.hash.slice(1)).get('view')).toBe('view.sequence');
+  });
   it('shows a failed cancellation without abandoning the active job', async () => {
     vi.useFakeTimers();
     transport = (input) => {
