@@ -1,6 +1,6 @@
 # TRACEABILITY — living doc (SPEC.md → code → tests)
 
-Updated per milestone. M3 rows added 2026-10-09.
+Updated per milestone. M6 working-tree rows added 2026-10-15; verification scope and limits are recorded in M6-CHECKS.md.
 
 | Req | Requirement (SPEC ref) | Implementation | Tests / evidence |
 |---|---|---|---|
@@ -33,4 +33,20 @@ Updated per milestone. M3 rows added 2026-10-09.
 | R26 | Quotas compile out in local mode; parity suite runs both modes (§15) | `quota.ts` `localMode()` early-return; CI parity job `ARCHWOVEN_MODE=local`; mode-aware route assertions (`hostedOnly`) | `pnpm test` 312/312 hosted · 297+15-skip local M5-CHECKS §7 |
 | R27 | Exports cannot carry executable markup or evidence (§6, Review Focus 4) | `export-svg.ts`/`card.ts` escaping + privacy-surface | `export-svg.test.ts` + card suites on malicious labels; live PNG opened + SVG parsed M5-CHECKS §6 |
 
-Pending rows (blocked on live direct key): live-model extraction precision/recall (M3-MATRIX pending), Probe B first-pass validity.
+| R28 | Search current view and focus via keyboard/touch (§6) | `NodeFinder.tsx`, Canvas shared focus; active result scrolls into view | `finder.test.ts`, `viewer-interactions.test.tsx`; real 37-node list scrolling in M6-CHECKS |
+| R29 | Semantic lens remains coherent with node focus (§6) | Canvas reconciles incompatible lens on finder/outline focus and hash restoration; compatible kinds preserved | `lens.test.ts`, interaction tests; opacity 1 browser observation |
+| R30 | Relationship passport and route selection agree (§6) | `passport.ts`, inspector; route start clears relation/hash/inspector | `passport.test.ts`, interaction tests; browser edge → route walkthrough |
+| R31 | Outline reflects active view and supports focus (§6) | `OutlineRail.tsx`, shared Canvas handler | `viewer-interactions.test.tsx`; desktop outline browser check |
+| R32 | Flow pulses are visible-channel-only and respect Still (§6) | `pulses.ts`, Canvas dim/lens gating, defensive pulse CSS | `pulses.test.ts`, `motion.test.ts`, interaction tests; Still zero pulses/animated edges |
+| R33 | Reload/link restores model before viewer state without bypassing ownership (§6, §11) | Workspace RESTORED/RESTORE_FAILED; model/view hash; existing API owner check | `page.test.tsx`, `states.test.ts`, model route tests; reload/fresh authorized tab/no-owner 404 in M6-CHECKS |
+| R34 | Repo drift repairs or fails explicitly; all attempts metered (§10, §11, §15) | Schema-derived hosted prompt contract, strict validation, bounded repair, cancel-completion usage settlement | Synthetic drift fixture; LLM repo/client and repo-route repair/exhaustion/cancel tests; live descriptions and three public repositories passed; see LIVE-CHECKS |
+| R35 | Local generate/repo/refine prompt matches native schema (§8, §10) | Native model/EditOp contracts and shared prompt builders; local parsing uses native values | `local.test.ts` request-contract/defaults/native value regressions; live local rerun unverified |
+| R36 | Honest repair-round reporting/evidence eligibility (§11) | Suite B distinct diagnostic-code matching; manifest denominator; clean-source provenance and scratch mode | Suite B 36-check selftest; 8/8 scratch round trips; clean pinned receipt pending |
+| R37 | Responsive, understandable workspace and coherent view changes (§6) | Border-box panels, wrapped header/toolbar/refine controls, labels/help/examples, empty-state guidance; Canvas reconciles invalid destination context | Six view rerender regressions; Chrome desktop + 390px empty/generated no-overflow evidence in M6-CHECKS; full accessibility audit not run |
+
+Pending rows: live-model extraction precision/recall (M3-MATRIX), first-pass validity and latency improvements, live native-local convergence after the latest changes, and clean committed-source Suite B receipt regeneration. M6 deterministic/browser verification and limits: `M6-CHECKS.md`, `M6-MATRIX.md`; incremental delivery: `M6-PR-PLAN.md`.
+
+| R38 | Broader public repository support (approved scope expansion) | Generic bounded source sampler; specialized and mixed-language routing; core-before-example priority; static import bindings | `generic.test.ts`, ingest hosted/local tests; MCP Observatory and Express real imports in LIVE-CHECKS |
+| R39 | Generic evidence is bounded and honest in both modes | Shared source evidence/identity/import validation; server-preserved limitations; commit-pinned evidence | Hosted/local adversarial assembly tests; actual MCP source link in LIVE-CHECKS |
+| R40 | Source examples and ordinary archive directories do not become findings | Lexical masking for comments/templates; directory headers ignored after safety checks | Generic false-import regression; unpack directory/traversal tests; live final imports have no type:5 noise |
+| R41 | Real workspace mode, transport recovery and readable PNG export | Config-authoritative demo warning; request/poll/refine error handling; bundled Inter buffers and honest fallback status | Page regressions; real browser refinement/undo/SVG/PNG, final downloaded PNG visually inspected |

@@ -2,15 +2,16 @@
 
 **Turn ideas and code into clear architecture.**
 
-AI-assisted architecture workspace: plain-English requirements or GitHub repositories (Spring Boot / FastAPI) become clear, interactive, editable architecture diagrams — generated from one typed system model with provenance, controlled edits, and an enforceable choice of where processing happens.
+AI-assisted architecture workspace: plain-English requirements or public GitHub repositories become clear, interactive, editable architecture diagrams — generated from one typed system model with provenance, controlled edits, and an enforceable choice of where processing happens.
 
 > Early-stage portfolio project. See `docs/SPEC.md` for the working specification and honest scope; nothing here is production-ready or enterprise-grade.
 
 ## Status
 
-- **M0 (this branch):** monorepo scaffold + the versioned system-model schema and referential-integrity validator that every later milestone writes against.
+- **M0:** monorepo scaffold + the versioned system-model schema and referential-integrity validator that every later milestone writes against.
 - **M1:** technical probes (rendering, structured-output validity/cost, tree-sitter extraction, local model on Apple Silicon).
 - **M2+:** plain-English vertical slice → public repo analysis → private/local mode → evaluations & hardening.
+- **M6 working batch:** saved-diagram restoration, viewer interaction fixes, responsive workspace, schema-consistent generation and benchmark evidence hardening. Verification and limitations: [M6 checks](docs/M6-CHECKS.md). Incremental review order: [PR plan](docs/M6-PR-PLAN.md).
 
 ## Layout
 
@@ -18,7 +19,7 @@ AI-assisted architecture workspace: plain-English requirements or GitHub reposit
 apps/web            Next.js app (UI + /api routes; same code hosted & local)
 packages/model      Zod system-model schema, validator, fixtures  ← the contract
 packages/llm        Claude client + local-model adapter + egress policy (M1+)
-packages/extract    tree-sitter Spring Boot / FastAPI extractors (M1+)
+packages/extract    Spring Boot / FastAPI extractors + bounded source analysis
 packages/jobs       durable job records, cancellation, idempotency (M1+)
 docs/               SPEC.md + milestone plans + probe memos
 ```
@@ -32,6 +33,42 @@ pnpm test              # vitest
 pnpm typecheck         # tsc across workspaces
 pnpm dev               # Next.js dev server (localhost smoke page)
 ```
+
+## Workspace walkthrough
+
+1. Choose **Describe a system**, select a diagram type, and write a description or choose an example. Examples fill the editor; generation starts only when you select **Generate diagram**.
+2. Or choose **Import repository** for a public GitHub repository. Spring Boot and FastAPI retain framework-specific extraction; other and mixed repositories use bounded source sampling to map modules and static imports. Coverage limits and unknown runtime behavior are shown as gaps. An optional subdirectory narrows analysis; evidence is pinned to the selected commit.
+3. Use **Find node /** or the outline to focus a component. Lenses filter component kinds. Select a connection to inspect its provenance and evidence, or choose route endpoints to follow a path.
+4. Select a chapter for guided context. **Still** stops edge animation. Switch views, refine in words, undo a refinement, or export SVG/PNG.
+5. Copy the address to return to the saved model and viewer context. A link works only in an authorized browser session; it does not grant another session access. Missing or inaccessible models show recovery guidance.
+
+## Run with your real API key
+
+Next loads `apps/web/.env.local`; keep your existing `ANTHROPIC_API_KEY` there. Run from the repository root:
+
+```bash
+pnpm install
+ARCHWOVEN_MODE=hosted ARCHWOVEN_FAKE=0 pnpm dev
+# open http://localhost:3000/workspace
+curl -s http://localhost:3000/api/config
+```
+
+The config response must contain `"mode":"hosted"`, `"fake":false`, and `"llmReady":true`. A demo warning means fixed sample data is enabled; that mode deliberately repeats the same sample. Real generation consumes provider tokens and application credits. Restart an already running server after changing environment variables.
+
+Compare two unrelated descriptions (for example a library and a greenhouse), then import your public repository. Inspect labels and connection evidence; refinement should modify only the requested parts, and undo should restore them. [Live verification](docs/LIVE-CHECKS.md) records the exercised cases and limitations.
+
+```bash
+pnpm test
+ARCHWOVEN_MODE=local pnpm test
+pnpm typecheck
+pnpm build
+```
+
+The root `pnpm dev` command rebuilds internal packages before starting Next, so extraction uses current source rather than stale `dist` files. Development output defaults to `.next-dev`, production to `.next`, so a build does not overwrite a running development server. To test another instance, use a sibling output directory and separate port, for example `ARCHWOVEN_MODE=hosted ARCHWOVEN_FAKE=0 ARCHWOVEN_NEXT_DIST_DIR=.next-review pnpm dev --port 3001`.
+
+If an import previously failed, submit it again after updating the app. Failed/cancelled jobs release their input key on retry; active and successful jobs still reuse the original attempt. Job history and saved diagrams remain intact.
+
+A fixture walkthrough is available explicitly with `ARCHWOVEN_FAKE=1 pnpm dev`; it is labeled as a demo and does not establish real-provider behavior.
 
 ## Run Archwoven fully offline on your own machine (private mode, §8)
 
