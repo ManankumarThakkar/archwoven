@@ -9,32 +9,33 @@ const defaultLimit = () => {
   return Number.isFinite(n) && n > 0 ? n : 2;
 };
 
-let limit = defaultLimit();
-let running = 0;
-const waiters: { id: string; run: () => void }[] = [];
+interface LimiterState { limit: number; running: number; waiters: { id: string; run: () => void }[] }
+// One process-wide queue across independently bundled API routes.
+const processState = globalThis as typeof globalThis & { __archwovenLimiter?: LimiterState };
+const state = processState.__archwovenLimiter ??= { limit: defaultLimit(), running: 0, waiters: [] };
 
 export function withSlot<T>(id: string, fn: () => Promise<T>): Promise<T> {
   const start = () => {
-    running++;
+    state.running++;
     return fn().finally(() => {
-      running--;
-      const next = waiters.shift();
+      state.running--;
+      const next = state.waiters.shift();
       if (next) next.run();
     });
   };
-  if (running + waiters.length < limit) return start();
-  return new Promise<void>((resolve) => waiters.push({ id, run: resolve })).then(start);
+  if (state.running + state.waiters.length < state.limit) return start();
+  return new Promise<void>((resolve) => state.waiters.push({ id, run: resolve })).then(start);
 }
 
 /** 1-based queue position for a waiting job, or null if it is not waiting. */
 export function slotPosition(id: string): number | null {
-  const i = waiters.findIndex((w) => w.id === id);
+  const i = state.waiters.findIndex((w) => w.id === id);
   return i < 0 ? null : i + 1;
 }
 
 /** Test seam: reset the singleton between tests. */
 export function resetSlots(newLimit?: number): void {
-  limit = newLimit ?? defaultLimit();
-  running = 0;
-  waiters.length = 0;
+  state.limit = newLimit ?? defaultLimit();
+  state.running = 0;
+  state.waiters.length = 0;
 }

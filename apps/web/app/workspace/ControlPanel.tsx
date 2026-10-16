@@ -131,6 +131,7 @@ export function ControlPanel({ running, remaining, mode, prefill, onMode, onGene
             style={{ padding: '10px 14px', borderRadius: 8, border: 'none', background: '#5eead4', color: '#04211f', fontWeight: 600, cursor: 'pointer', opacity: running || !prompt.trim() || overBudget ? 0.5 : 1 }}>
             {running ? 'Creating your diagram…' : 'Generate diagram  →'}
           </button>
+          {running && <button onClick={onCancel} style={{ padding: '10px 14px', borderRadius: 8, border: '1px solid #f87171', background: 'transparent', color: '#f87171', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>}
         </>
       ) : (
         <>

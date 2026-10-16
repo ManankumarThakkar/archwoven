@@ -6,8 +6,8 @@ Completed foundation: PR #11 clean-download instructions; PR #12 authoritative e
 
 | Order | Deliverable | Status |
 |---|---|---|
-| 1 | Reliable generic repository assembly | Implemented/verified on `fix/repository-assembly-contract`; awaiting review/merge |
-| 2 | Native deadlines, cancellation and coherent recovery | Pending |
+| 1 | Reliable generic repository assembly | PR #13; verified; awaiting merge |
+| 2 | Native deadlines, cancellation and coherent recovery | Verified; focused PR publication |
 | 3 | Sequence renderer in workspace and exports | Pending |
 | 4 | ER fields, keys and cardinalities | Pending |
 | 5 | SVG/PNG direction and label readability | Pending |

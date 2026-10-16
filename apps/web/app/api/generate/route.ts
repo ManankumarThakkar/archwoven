@@ -8,6 +8,7 @@ import {
 } from '../../lib/server';
 import { withSlot, slotPosition } from '../../lib/llm-limiter';
 import { deployMode, privacyForMode } from '../../lib/mode';
+import { jobRegistry, startJobDeadline, JOB_TIMEOUT_COPY } from '../../lib/job-registry';
 
 export const runtime = 'nodejs';
 
@@ -62,31 +63,46 @@ export async function POST(req: Request) {
     throw e;
   }
 
+  const entry = { controller: new AbortController(), settled: false };
+  jobRegistry.set(jobId, entry);
   // Durable fire-and-forget job behind the §15 concurrency slot; stages and the
   // queue position are surfaced by /api/jobs polling.
   void withSlot(jobId, async () => {
     const day = new Date().toISOString().slice(0, 10);
+    const claim = () => { if (entry.settled) return false; entry.settled = true; return true; };
     const fail = (error: string, usage?: { inputTokens: number; cacheWriteTokens: number; cacheReadTokens: number; outputTokens: number }, retries = 0) => {
+      if (usage) recordUsage(serverDeps.store, { sessionId, tier, action: 'generate', usage, retries, outcome: 'failed' });
+      if (!claim()) return;
       serverDeps.store.updateJob(jobId, { status: 'failed', error });
       refundCredits(serverDeps.store, sessionId, day, 1);
-      if (usage) recordUsage(serverDeps.store, { sessionId, tier, action: 'generate', usage, retries, outcome: 'failed' });
     };
+    if (entry.controller.signal.aborted) { jobRegistry.delete(jobId); return; }
+    const stopDeadline = startJobDeadline(entry, () => fail(JOB_TIMEOUT_COPY));
     try {
       serverDeps.store.updateJob(jobId, { status: 'running', stage: 'validating' });
       serverDeps.store.updateJob(jobId, { stage: 'generating' });
-      const out = await serverDeps.generateModel(prompt, view);
-      serverDeps.store.updateJob(jobId, { stage: 'validating-output' });
+      const out = await serverDeps.generateModel(prompt, view, { signal: entry.controller.signal });
+      if (!entry.settled) serverDeps.store.updateJob(jobId, { stage: 'validating-output' });
       if (!out.ok) return fail(out.errors.join('; '), out.usage, out.usage.repairs);
       const checked = validateModel(out.model);
       if (!checked.ok) return fail(checked.errors.join('; '), out.usage, out.usage.repairs);
+      if (entry.settled) {
+        recordUsage(serverDeps.store, { sessionId, tier, action: 'generate', usage: out.usage, retries: out.usage.repairs, outcome: 'failed' });
+        return;
+      }
       // §9: privacy is server-stamped from deploy mode — model self-report never wins.
       const stamped = { ...checked.model, privacy: privacyForMode(deployMode()) };
       serverDeps.store.saveRevision(jobId, stamped, sessionId);
       serverDeps.store.updateJob(jobId, { stage: 'saving' });
       recordUsage(serverDeps.store, { sessionId, tier, action: 'generate', usage: out.usage, retries: out.usage.repairs, outcome: out.usage.repairs > 0 ? 'repaired' : 'ok' });
       serverDeps.store.updateJob(jobId, { status: 'succeeded' });
+      // These persistence operations are synchronous: no cancel/deadline can interleave.
+      // Claim only after they finish so a thrown write still follows failure/refund.
+      claim();
     } catch (e) {
       fail(e instanceof Error ? e.message : 'unknown error');
+    } finally {
+      stopDeadline(); jobRegistry.delete(jobId);
     }
   });
 

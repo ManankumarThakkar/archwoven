@@ -29,8 +29,8 @@ export const llmNotConfigured = (): boolean =>
  */
 export const serverDeps: {
   store: Store;
-  generateModel: (prompt: string, view: ViewType) => Promise<GenerateOutcome>;
-  generateRefinement: (instruction: string, model: SystemModel, view: ViewType) => Promise<RefineOutcome>;
+  generateModel: (prompt: string, view: ViewType, opts?: { signal?: AbortSignal }) => Promise<GenerateOutcome>;
+  generateRefinement: (instruction: string, model: SystemModel, view: ViewType, opts?: { signal?: AbortSignal }) => Promise<RefineOutcome>;
   ingestRepo: (parsed: { owner: string; repo: string; ref?: string; subdir?: string }, opts?: { signal?: AbortSignal; onStage?: (stage: 'fetching' | 'extracting') => void }) => Promise<IngestResult>;
   ingestLocal: (dir: string, opts?: { subdir?: string; signal?: AbortSignal; onStage?: (stage: 'fetching' | 'extracting') => void }) => Promise<IngestResult>;
   assembleRepoModel: (fragment: Fragment, meta: { owner: string; repo: string; sha: string; framework: string }, opts?: { signal?: AbortSignal }) => Promise<GenerateOutcome>;
@@ -39,14 +39,14 @@ export const serverDeps: {
   // §8/§9 routing: fake first (canned, zero network); local mode goes to Ollama
   // behind the egress guard — a private job can never reach a hosted provider,
   // not even by accident in a repair or failure path.
-  generateModel: (prompt, view) =>
+  generateModel: (prompt, view, opts) =>
     fakeMode() ? generateModel(prompt, view)
-      : deployMode() === 'local' ? generateModelLocal(prompt, view, { fetchImpl: egressFetch })
-        : generateModel(prompt, view),
-  generateRefinement: (instruction, model, view) =>
+      : deployMode() === 'local' ? generateModelLocal(prompt, view, { fetchImpl: egressFetch, signal: opts?.signal })
+        : generateModel(prompt, view, opts),
+  generateRefinement: (instruction, model, view, opts) =>
     fakeMode() ? generateRefinement(instruction, model, view)
-      : deployMode() === 'local' ? generateRefinementLocal(instruction, model, view, { fetchImpl: egressFetch })
-        : generateRefinement(instruction, model, view),
+      : deployMode() === 'local' ? generateRefinementLocal(instruction, model, view, { fetchImpl: egressFetch, signal: opts?.signal })
+        : generateRefinement(instruction, model, view, opts),
   // §14: URLs reaching this seam are already parseRepoUrl-validated (github.com only);
   // repo content is untrusted data, never executed — extraction is static analysis only.
   ingestRepo: (parsed, opts) => ingestRepo(parsed, { fetcher: (url, init) => egressFetch(url, init), extractSpringBoot, extractFastApi }, opts),

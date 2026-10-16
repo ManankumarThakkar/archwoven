@@ -63,6 +63,7 @@ export default function WorkspacePage() {
   const [deploy, setDeploy] = useState<'hosted' | 'local'>('hosted');
   const [llmReady, setLlmReady] = useState(true);
   const [queuedPos, setQueuedPos] = useState<number | null>(null);
+  const [cancelError, setCancelError] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>('describe');
   const [restoring, setRestoring] = useState(true);
   const loadSequence = useRef(0);
@@ -127,10 +128,10 @@ export default function WorkspacePage() {
   }, []);
 
   const poll = async (jobId: string) => {
-    const deadline = Date.now() + 120_000;
+    let runningSince: number | null = null;
     let misses = 0;
     for (;;) {
-      let job: { status: string; stage?: Stage | null; modelId: string; revision: number; queuePosition?: number | null; gaps?: string[]; error?: string | null } | null = null;
+      let job: { status: string; stage?: Stage | null; modelId: string; revision: number; queuePosition?: number | null; deadlineAt?: number | null; gaps?: string[]; error?: string | null } | null = null;
       try {
         const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}`);
         if (res.status === 404) { dispatch({ type: 'ERROR', message: 'This generation no longer exists — please try again.' }); return; }
@@ -153,9 +154,11 @@ export default function WorkspacePage() {
         continue;
       }
       if (job.status === 'running') {
+        runningSince ??= Date.now();
         setQueuedPos(null);
         if (job.stage) dispatch({ type: 'STAGE', stage: job.stage });
-        if (Date.now() > deadline) { dispatch({ type: 'ERROR', message: 'This is taking longer than expected — try again in a moment.' }); return; }
+        const deadline = typeof job.deadlineAt === 'number' ? job.deadlineAt : runningSince + 180_000;
+        if (Date.now() > deadline + 10_000) { dispatch({ type: 'ERROR', message: 'The server has not confirmed completion. Retry the same input to reconnect to the job.' }); return; }
         await new Promise((r) => setTimeout(r, 400));
         continue;
       }
@@ -171,6 +174,7 @@ export default function WorkspacePage() {
   };
 
   const submitGeneration = async (url: string, body: object) => {
+    setCancelError(null);
     try {
       const res = await fetch(url, {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
@@ -204,7 +208,13 @@ export default function WorkspacePage() {
   const cancelJob = async () => {
     const id = jobIdRef.current;
     if (!id) return;
-    await fetch(`/api/jobs/${id}/cancel`, { method: 'POST' }).catch(() => undefined);
+    setCancelError(null);
+    try {
+      const res = await fetch(`/api/jobs/${id}/cancel`, { method: 'POST' });
+      if (!res.ok) setCancelError(await responseMessage(res, 'Could not cancel. The job is still being checked; try Cancel again.'));
+    } catch {
+      setCancelError('Could not reach the server to cancel. The job is still being checked; try Cancel again.');
+    }
     // the poll observes `cancelled` and dispatches CANCEL — no double transition here
   };
 
@@ -326,6 +336,7 @@ export default function WorkspacePage() {
       {fake && <div role="status" style={{ padding: '10px 16px', background: '#3b2f0d', color: '#fde68a', fontSize: 13 }}>
         Demo mode: generation and refinement return fixed sample data, not diagrams based on your input. Disable ARCHWOVEN_FAKE and configure a generation provider to create real diagrams.
       </div>}
+      {cancelError && state.kind === 'running' && <div role="alert" style={{ padding: '10px 16px', color: '#fda4af' }}>{cancelError}</div>}
       <div className="workspace-shell" style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         <ControlPanel
           running={state.kind === 'running' || restoring}

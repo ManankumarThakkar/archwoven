@@ -51,11 +51,11 @@ export async function POST(req: Request) {
   }
 
   const view: ViewType = VALID_VIEWS.includes(body.view as ViewType) ? (body.view as ViewType) : 'architecture';
-  const out = await withSlot(`refine:${modelId}:${baseRevision}`, () => serverDeps.generateRefinement(instruction, latest, view));
-  if (!out.ok) {
+  const out = await withSlot(`refine:${modelId}:${baseRevision}`, () => serverDeps.generateRefinement(instruction, latest, view, { signal: req.signal }));
+  if (!out.ok || req.signal.aborted) {
     refundCredits(serverDeps.store, sessionId, day, 0.25);
     recordUsage(serverDeps.store, { sessionId, tier, action: 'refine', usage: out.usage, retries: out.usage.repairs, outcome: 'failed' });
-    return Response.json({ reason: 'refine-failed', errors: out.errors }, { status: 502, headers });
+    return Response.json({ reason: 'refine-failed', errors: !out.ok ? out.errors : ['Refinement cancelled. Your previous diagram is unchanged.'] }, { status: 502, headers });
   }
 
   const applied = applyEditOps(latest, out.ops);

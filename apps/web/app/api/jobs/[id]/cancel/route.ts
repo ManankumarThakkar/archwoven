@@ -15,8 +15,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     return Response.json({ status: job.status });
   }
 
-  // only registry-backed (repo) jobs are cancellable: they alone have abort
-  // plumbing. Refunding a generate job whose body cannot abort is a free generation.
+  // Only registry-backed jobs have abort/settlement plumbing. Legacy or
+  // externally created jobs cannot safely be refunded while still running.
   const entry = repoJobRegistry.get(id);
   if (!entry) return Response.json({ error: 'job is not cancellable' }, { status: 409 });
   if (entry.settled) return Response.json({ status: serverDeps.store.getJob(id)?.status ?? 'cancelled' });

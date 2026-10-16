@@ -65,7 +65,7 @@ export type RawUsage = {
 /** Minimal surface we need — lets tests inject a fake. */
 export interface StructuredClient {
   messages: {
-    countTokens(params: { model: string; system: unknown; messages: unknown[] }): Promise<{ input_tokens: number }>;
+    countTokens(params: { model: string; system: unknown; messages: unknown[] }, options?: { signal?: AbortSignal }): Promise<{ input_tokens: number }>;
   };
   beta: {
     messages: {
@@ -285,9 +285,10 @@ const textOf = (content: { type: string; text?: string }[]) =>
 export async function generateModel(
   prompt: string,
   view: ViewType,
-  opts: { client?: StructuredClient; effort?: Effort } = {},
+  opts: { client?: StructuredClient; effort?: Effort; signal?: AbortSignal } = {},
 ): Promise<GenerateOutcome> {
   const effort: Effort = opts.effort ?? 'medium';
+  if (opts.signal?.aborted) return { ok: false, errors: ['Generation cancelled.'], usage: usageFrom({}, effort, 0, 0) };
   if (!opts.client && fakeMode()) return { ok: true, model: structuredClone(validFullModelExtended), usage: fakeUsage(effort) };
   const client: StructuredClient =
     opts.client ?? (makeAnthropic(resolveApiKey()) as unknown as StructuredClient);
@@ -299,7 +300,7 @@ export async function generateModel(
   // §15 per-request gate: exact token count before send. Fail closed — an
   // uncounted send is exactly the oversized context the gate exists to stop.
   try {
-    const counted = await client.messages.countTokens({ model: MODEL, system, messages });
+    const counted = await client.messages.countTokens({ model: MODEL, system, messages }, { signal: opts.signal });
     if (counted.input_tokens > CONTEXT_TOKEN_LIMIT) {
       return { ok: false, errors: ['assembled context exceeds the 25k token limit — scope the description down to one system or flow'], usage: usageFrom({}, effort, Date.now() - t0, 0) };
     }
@@ -320,6 +321,7 @@ export async function generateModel(
   };
 
   for (let attempt = 0; attempt <= MAX_REPAIRS; attempt++) {
+    if (opts.signal?.aborted) { lastErrors = ['Generation cancelled.']; break; }
     let response: Awaited<ReturnType<StructuredClient['beta']['messages']['create']>>;
     try {
       // No structured-output grammar on hosted generate: the full
@@ -332,9 +334,10 @@ export async function generateModel(
         max_tokens: MAX_TOKENS,
         system,
         messages,
-      });
+      }, { signal: opts.signal });
     } catch (e) {
       lastErrors = [`request failed: ${e instanceof Error ? e.message : String(e)}`];
+      if (opts.signal?.aborted) break;
       continue; // transient/transport failure — retry within budget
     }
     addUsage(response.usage);
