@@ -10,7 +10,7 @@ Completed foundation: PR #11 clean-download instructions; PR #12 authoritative e
 | 2 | Native deadlines, cancellation and coherent recovery | Merged to main as PR #16; verified |
 | 3 | Sequence renderer in workspace and exports | Merged to main as PR #16; verified |
 | 4 | ER fields, keys and cardinalities | Merged to main as PR #17; verified |
-| 5 | SVG/PNG routing, self-relations and label readability | Verified; focused PR pending |
+| 5 | SVG/PNG routing, self-relations and label readability | PR #18 open; verified |
 | 6 | Direct rename/drag and persistent manual positions | Pending |
 | 7 | Clarification answer/skip flow | Pending |
 | 8 | Architecture orientation control | Pending |
