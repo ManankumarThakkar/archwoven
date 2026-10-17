@@ -1,0 +1,6 @@
+{"ts":"2026-10-17T18:17:32.192Z","runner":"oracle-v2-recheck","case":"todo-api","gate":"semantic","pass":true,"missing":[]}
+{"ts":"2026-10-17T18:17:32.233Z","runner":"oracle-v2-recheck","case":"todo-api","gate":"validate","pass":true,"errors":[]}
+{"ts":"2026-10-17T18:17:32.274Z","runner":"oracle-v2-recheck","case":"checkout","gate":"semantic","pass":true,"missing":[]}
+{"ts":"2026-10-17T18:17:32.314Z","runner":"oracle-v2-recheck","case":"checkout","gate":"validate","pass":true,"errors":[]}
+{"ts":"2026-10-17T18:17:32.354Z","runner":"oracle-v2-recheck","case":"boring-crud","gate":"semantic","pass":true,"missing":[]}
+{"ts":"2026-10-17T18:17:32.392Z","runner":"oracle-v2-recheck","case":"boring-crud","gate":"validate","pass":true,"errors":[]}

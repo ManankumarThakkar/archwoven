@@ -14,15 +14,14 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync } from
 import { createHash } from 'node:crypto';
 import { execSync } from 'node:child_process';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { validateModel } from '../../packages/model/dist/index.js';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
 const flag = (name, dflt) => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : dflt; };
 const args = [];
 for (let i = 0; i < argv.length; i++) {
-  if (argv[i] === '--results-dir' || argv[i] === '--runner') { i++; continue; }
+  if (argv[i] === '--results-dir' || argv[i] === '--runner' || argv[i] === '--validator') { i++; continue; }
   if (argv[i].startsWith('--')) continue;
   args.push(argv[i]);
 }
@@ -30,6 +29,8 @@ const [cmd, ...rest] = args;
 const resultsDir = flag('--results-dir', join(here, 'results'));
 const runner = flag('--runner', process.env.USER ?? 'local');
 const p = (s) => (isAbsolute(s) ? s : resolve(here, s));
+// `--validator <file>` uses a fixed copy of the validator bundle (selftests), so a concurrent build cannot be read half-written.
+const { validateModel } = await import(pathToFileURL(flag('--validator') ? p(flag('--validator')) : join(here, '../../packages/model/dist/index.js')).href);
 const manifest = JSON.parse(readFileSync(join(here, 'manifest.json'), 'utf8'));
 
 const receiptFile = () => join(resultsDir, `${new Date().toISOString().slice(0, 10)}-${runner}.jsonl`);
@@ -43,13 +44,29 @@ const readReceipts = () => {
   return readdirSync(resultsDir).filter((f) => f.endsWith('.jsonl')).flatMap((f) => readFileSync(join(resultsDir, f), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)));
 };
 
+/** Comparable form of a name: case, punctuation and a plural `s` on each word are not meaningful. */
+const normalize = (name) => String(name).toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ').trim()
+  .split(' ').map((w) => (w.length > 3 && w.endsWith('s') && !w.endsWith('ss') ? w.slice(0, -1) : w)).join(' ');
+/** A label's whole names: the label, the label without parentheticals, and each parenthetical ("Catalog DB (PostgreSQL)"). */
+const namesOf = (label) => {
+  const text = String(label);
+  return new Set([text, text.replace(/\([^)]*\)/g, ' '), ...[...text.matchAll(/\(([^)]*)\)/g)].map((m) => m[1])].map(normalize).filter(Boolean));
+};
+/** Whole-name match only: "User Service" never satisfies "User", "PostgreSQL Replica" never satisfies "PostgreSQL". */
+const labelMatches = (label, aliases) => {
+  const names = namesOf(label);
+  return aliases.some((a) => names.has(normalize(a)));
+};
+
 function check(casePath, modelPath) {
   const c = JSON.parse(readFileSync(p(casePath), 'utf8'));
   const model = JSON.parse(readFileSync(p(modelPath), 'utf8'));
   const missing = [];
   const bound = new Map();
   for (const req of c.requirements.nodes) {
-    const hit = model.nodes.find((n) => n.kind === req.type && req.labels.some((l) => l.toLowerCase() === String(n.label).toLowerCase()));
+    // One node satisfies at most one requirement.
+    const taken = new Set(bound.values());
+    const hit = model.nodes.find((n) => n.kind === req.type && !taken.has(n.id) && labelMatches(n.label, req.labels));
     if (hit) bound.set(req.key, hit.id);
     else missing.push(`node "${req.key}" (labels: ${req.labels.join('|')}, type: ${req.type})`);
   }
