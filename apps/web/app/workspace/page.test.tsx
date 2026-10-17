@@ -342,3 +342,80 @@ describe('diagram export', () => {
     expect(container.textContent).toMatch(/PNG.*unavailable.*SVG/i);
   });
 });
+
+
+describe('clarification answer and skip',()=>{
+  const prompt='Store orders. Store nothing.';
+  const questions=['Should orders persist?','Who can submit orders?'];
+  let continuations: Record<string,unknown>[];
+  function clarify(fail=false){
+    continuations=[];
+    transport=(input,init)=>{
+      if(input==='/api/generate'){
+        const body=JSON.parse(String(init?.body));
+        if(body.clarification){continuations.push(body);return fail?Response.json({error:'Provider unavailable'},{status:502}):Response.json({jobId:'continued',remaining:5},{status:202});}
+        return Response.json({jobId:'ask',remaining:5},{status:202});
+      }
+      if(input==='/api/jobs/ask')return Response.json({status:'clarifying',questions,remaining:6});
+      if(input==='/api/jobs/continued')return Response.json({status:'succeeded',modelId:'clarified-model',revision:1});
+      return undefined;
+    };
+  }
+  it('answers real job questions without losing the description and opens the generated diagram',async()=>{
+    clarify();await mount();await fill('#system-description',prompt);await click('Generate diagram');
+    expect(container.textContent).toContain(questions[0]);
+    await fill('#clarification-answer-0','Keep orders transient.');await click('Continue with answers');
+    expect(continuations[0]).toMatchObject({clarification:{jobId:'ask',answers:['Keep orders transient.','']}});
+    expect(container.querySelector<HTMLTextAreaElement>('#system-description')!.value).toBe(prompt);
+    expect(window.location.hash).toContain('model=clarified-model');
+  });
+  it('skip sends no invented answers, and editing returns to the original description',async()=>{
+    clarify();await mount();await fill('#system-description',prompt);await click('Generate diagram');
+    await click('Edit description');expect(container.querySelector<HTMLTextAreaElement>('#system-description')!.value).toBe(prompt);
+    await click('Generate diagram');await click('Skip for now');expect(continuations[0]).toMatchObject({clarification:{jobId:'ask',skip:true}});
+  });
+  it('retains answers on continuation error so retry uses the same request',async()=>{
+    clarify(true);await mount();await fill('#system-description',prompt);await click('Generate diagram');
+    await fill('#clarification-answer-0','Transient.');await click('Continue with answers');
+    expect(container.textContent).toContain('Provider unavailable');expect(container.querySelector<HTMLTextAreaElement>('#clarification-answer-0')!.value).toBe('Transient.');
+    await click('Continue with answers');expect(continuations).toHaveLength(2);expect(continuations[0]).toEqual(continuations[1]);
+  });
+});
+
+
+it('keeps clarification answers if the saved diagram cannot yet be fetched',async()=>{
+  transport=(input,init)=>{
+    if(input==='/api/generate')return Response.json({jobId:JSON.parse(String(init?.body)).clarification?'done':'ask'},{status:202});
+    if(input==='/api/jobs/ask')return Response.json({status:'clarifying',questions:['Persist orders?']});
+    if(input==='/api/jobs/done')return Response.json({status:'succeeded',modelId:'unavailable-model'});
+    if(input==='/api/models/unavailable-model')return Response.json({error:'unavailable'},{status:503});
+  };
+  await mount();await fill('#system-description','Store orders. No storage.');await click('Generate diagram');
+  await fill('#clarification-answer-0','No persistence.');await click('Continue with answers');
+  expect(container.querySelector<HTMLTextAreaElement>('#clarification-answer-0')?.value).toBe('No persistence.');
+  expect(container.textContent).toContain('Could not open the saved diagram');
+});
+
+
+it('shows skipped clarification gaps immediately when the job has an empty gaps array',async()=>{
+  const model=structuredClone(validFullModelExtended);model.openQuestions=[{id:'q.unanswered',text:'Who can submit orders?'}];
+  transport=(input,init)=>{
+    if(input==='/api/generate')return Response.json({jobId:JSON.parse(String(init?.body)).clarification?'done':'ask'},{status:202});
+    if(input==='/api/jobs/ask')return Response.json({status:'clarifying',questions:['Who can submit orders?']});
+    if(input==='/api/jobs/done')return Response.json({status:'succeeded',modelId:'clarified',gaps:[]});
+    if(input==='/api/models/clarified')return Response.json({model});
+  };
+  await mount();await fill('#system-description','An order service');await click('Generate diagram');await click('Skip for now');
+  expect(container.querySelector('[title="Who can submit orders?"]')).not.toBeNull();
+});
+
+
+it.each(['Sequence','ER · data model'])('keeps the requested %s view after clarification continuation',async(label)=>{
+  transport=(input,init)=>{
+    if(input==='/api/generate')return Response.json({jobId:JSON.parse(String(init?.body)).clarification?'done':'ask'},{status:202});
+    if(input==='/api/jobs/ask')return Response.json({status:'clarifying',questions:['Which flow?']});
+    if(input==='/api/jobs/done')return Response.json({status:'succeeded',modelId:'clarified',gaps:[]});
+  };
+  await mount();await click(label);await fill('#system-description','Order system');await click('Generate diagram');await click('Skip for now');
+  expect(container.querySelector('[aria-label="Rendered view"]')?.textContent).toBe(label==='Sequence'?'view.sequence':'view.er');
+});

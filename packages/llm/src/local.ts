@@ -1,3 +1,4 @@
+import { ClarificationSchema, CLARIFICATION_SYSTEM, CLARIFICATION_SCHEMA, type DescriptionOutcome } from './clarification';
 import { generatedViewErrors } from './generated-view';
 import { z } from 'zod';
 import type { Fragment } from '@archwoven/extract';
@@ -169,14 +170,16 @@ export async function ollamaChat(
  * Generate a full SystemModel locally (§8 private flow): streamed, schema-
  * constrained, validated, repaired within the same budget as the hosted path.
  */
+export function generateModelLocal(prompt: string, view: ViewType, opts?: LocalInferenceOptions & { allowClarification?: false }): Promise<GenerateOutcome>;
+export function generateModelLocal(prompt: string, view: ViewType, opts: LocalInferenceOptions & { allowClarification: boolean }): Promise<DescriptionOutcome>;
 export async function generateModelLocal(
   prompt: string,
   view: ViewType,
-  opts: LocalInferenceOptions = {},
-): Promise<GenerateOutcome> {
+  opts: LocalInferenceOptions & { allowClarification?: boolean } = {},
+): Promise<DescriptionOutcome> {
   opts = { ...opts, signal: taskSignal(opts) };
   const messages: { role: string; content: string }[] = [
-    { role: 'system', content: LOCAL_MODEL_SYSTEM },
+    { role: 'system', content: (opts.allowClarification ? CLARIFICATION_SYSTEM + '\nThe system-model contract below applies only when the requirements are compatible and no clarification is necessary.\n' : '') + LOCAL_MODEL_SYSTEM + (opts.allowClarification ? CLARIFICATION_SYSTEM : '') },
     { role: 'user', content: `View: ${view}\n\n${prompt}` },
   ];
   const format = structuredClone(NATIVE_MODEL_JSON_SCHEMA);
@@ -193,7 +196,7 @@ export async function generateModelLocal(
   let usage = zeroUsage(opts.model ?? LOCAL_MODEL);
 
   for (let attempt = 0; attempt <= MAX_REPAIRS; attempt++) {
-    const r = await ollamaChat(messages, format, opts);
+    const r = await ollamaChat(messages, opts.allowClarification ? { anyOf: [CLARIFICATION_SCHEMA, format] } : format, opts);
     usage = addLocalUsage(usage, r.usage, repairs);
     if (r.error) {
       lastErrors = [r.error];
@@ -207,6 +210,8 @@ export async function generateModelLocal(
       parsed = undefined;
     }
     if (parsed !== undefined) {
+      const decision = opts.allowClarification ? ClarificationSchema.safeParse(parsed) : null;
+      if (decision?.success) return { ok: true, questions: decision.data.clarificationQuestions, usage };
       const result = validateModel(parsed);
       lastErrors = result.ok ? generatedViewErrors(result.model, view) : result.errors;
       if (result.ok && !lastErrors.length) return { ok: true, model: result.model, usage };

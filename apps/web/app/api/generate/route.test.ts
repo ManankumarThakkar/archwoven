@@ -249,3 +249,65 @@ describe('GET /api/jobs/:id', () => {
     expect(leak.status).toBe(404);
   });
 });
+
+
+describe('clarification lifecycle', () => {
+  async function questionJob() {
+    serverDeps.generateModel = async () => ({ ok: true as const, questions: ['Store orders or keep them transient?', 'Who can submit orders?'], usage });
+    const res = await POST(req({ prompt: 'Store orders. Store nothing.', view: 'architecture', idempotencyKey: 'questions' }));
+    const { jobId } = await res.json();
+    const job = await waitJob(jobId);
+    expect(job.status).toBe('clarifying');
+    return jobId as string;
+  }
+  it('persists owner-only questions, releases the slot, records usage and refunds the question-only credit', async () => {
+    const id = await questionJob();
+    const body = await (await GET(new Request('http://localhost/api/jobs/'+id, { headers: { cookie: 'aw_sid=test-sess' } }), { params: Promise.resolve({ id }) })).json();
+    expect(body.questions).toEqual(['Store orders or keep them transient?', 'Who can submit orders?']);
+    expect(body.remaining).toBe(QUOTA ? 6 : null);
+    expect(body).not.toHaveProperty('prompt');
+    expect(serverDeps.store.getRevision(id)).toBeNull();
+    expect(serverDeps.store.todayCost()).toBeGreaterThan(0);
+    const leak = await GET(new Request('http://localhost/api/jobs/'+id, { headers: { cookie: 'aw_sid=other' } }), { params: Promise.resolve({ id }) });
+    expect(leak.status).toBe(404);
+  });
+  it('continues using the stored prompt/view, keeps unanswered questions and marks supplied answers clarified', async () => {
+    const id = await questionJob();
+    let received = ''; let allowed: boolean | undefined; let receivedView: string | undefined;
+    serverDeps.generateModel = async (prompt, view, opts) => { received=prompt;receivedView=view;allowed=opts?.allowClarification;return { ok: true as const, model: validFullModel, usage }; };
+    const res=await POST(req({ clarification: { jobId: id, answers: ['Keep orders transient.', ''] } }));
+    expect(res.status).toBe(202);const {jobId}=await res.json();expect((await waitJob(jobId)).status).toBe('succeeded');
+    expect(received).toContain('Store orders. Store nothing.');expect(received).toContain('Keep orders transient.');expect(receivedView).toBe('architecture');expect(allowed).toBe(false);
+    const model=serverDeps.store.getRevision(jobId)!;
+    expect(model.requirements.some(r=>r.status==='clarified' && r.text.includes('Keep orders transient.'))).toBe(true);
+    expect(model.openQuestions.some(q=>q.text==='Who can submit orders?')).toBe(true);
+    const duplicate=await POST(req({ clarification: { jobId: id, answers: ['Keep orders transient.', ''] } }));
+    expect((await duplicate.json()).jobId).toBe(jobId);
+    expect(serverDeps.store.creditsUsed('test-sess',new Date().toISOString().slice(0,10))).toBe(QUOTA?1:0);
+  });
+  it('skip retains every unanswered question in the saved model and never asks again', async () => {
+    const id=await questionJob();serverDeps.generateModel=async()=>({ok:true as const,model:validFullModel,usage});
+    const res=await POST(req({clarification:{jobId:id,skip:true}}));expect(res.status).toBe(202);
+    const {jobId}=await res.json();await waitJob(jobId);
+    expect(serverDeps.store.getRevision(jobId)!.openQuestions.map(q=>q.text)).toEqual(expect.arrayContaining(['Store orders or keep them transient?', 'Who can submit orders?']));
+  });
+  it('rejects foreign challenges and invalid answers before any reservation', async () => {
+    const id=await questionJob();
+    expect((await POST(req({clarification:{jobId:id,skip:true}},'aw_sid=other'))).status).toBe(404);
+    for(const clarification of [{jobId:id,answers:['x'.repeat(1001),'']},{jobId:id,answers:['one']},{jobId:id,skip:true,answers:['a','b']},{jobId:id,answers:['','']}]) {
+      expect((await POST(req({clarification}))).status).toBe(400);
+    }
+    expect(serverDeps.store.creditsUsed('test-sess',new Date().toISOString().slice(0,10))).toBe(0);
+  });
+});
+
+
+it('a concurrent duplicate acceptance refunds the losing reservation',async()=>{
+  const store=serverDeps.store, originalFind=store.findJobByIdempotencyKey.bind(store);
+  let reads=0;
+  store.findJobByIdempotencyKey=(key,owner)=>++reads<=2?null:originalFind(key,owner);
+  const a=await POST(req({prompt:'Shop',view:'architecture',idempotencyKey:'race'}));
+  const b=await POST(req({prompt:'Shop',view:'architecture',idempotencyKey:'race'}));
+  const first=await a.json();expect((await b.json()).jobId).toBe(first.jobId);await waitJob(first.jobId);
+  expect(store.creditsUsed('test-sess',new Date().toISOString().slice(0,10))).toBe(QUOTA?1:0);
+});

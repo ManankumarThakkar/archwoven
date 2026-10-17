@@ -11,7 +11,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const { id } = await ctx.params;
   const job = serverDeps.store.getJob(id);
   if (!job || job.sessionId !== sessionId) return Response.json({ error: 'job not found' }, { status: 404 });
-  if (job.status === 'succeeded' || job.status === 'failed' || job.status === 'cancelled') {
+  if (job.status === 'succeeded' || job.status === 'failed' || job.status === 'cancelled' || job.status === 'clarifying') {
     return Response.json({ status: job.status });
   }
 

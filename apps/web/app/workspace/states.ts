@@ -58,7 +58,7 @@ export function next(state: WorkspaceState, event: Event): WorkspaceState {
     case 'GENERATE':
       return running('validating');
     case 'CLARIFY':
-      return state.kind === 'running' ? state : { kind: 'clarifying', questions: event.questions };
+      return { kind: 'clarifying', questions: event.questions };
     case 'STAGE':
       return state.kind === 'running' ? running(event.stage) : state;
     case 'SUCCESS':

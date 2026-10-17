@@ -370,3 +370,14 @@ describe('scenario 10: injected repo text stays data (local)', () => {
     await expect(guard('http://evil.example/x')).rejects.toThrow(/evil\.example/);
   });
 });
+
+
+it('native description returns bounded questions in the local-only constrained decision', async () => {
+  let format: unknown;
+  const out = await generateModelLocal('Store orders. Store nothing.', 'architecture', { allowClarification: true, fetchImpl: (async (_url, init) => {
+    format = JSON.parse(String(init?.body)).format;
+    return ndjsonResponse([JSON.stringify({ clarificationQuestions: ['Should orders be stored?'] })]);
+  }) as typeof fetch });
+  expect(out).toMatchObject({ ok: true, questions: ['Should orders be stored?'], usage: { outputTokens: 800 } });
+  expect(format).toHaveProperty('anyOf');
+});

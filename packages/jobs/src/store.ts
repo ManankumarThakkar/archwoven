@@ -1,10 +1,16 @@
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { SystemModelSchema, type SystemModel } from '@archwoven/model';
+import { SystemModelSchema, type SystemModel, type ViewType } from '@archwoven/model';
 
-export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'clarifying';
 export type Tier = 'anonymous' | 'github';
+
+export interface Clarification {
+  prompt: string;
+  view: ViewType;
+  questions: string[];
+}
 
 export interface Job {
   id: string;
@@ -15,6 +21,7 @@ export interface Job {
   stage?: string;
   error?: string;
   gaps?: string[];
+  clarification?: Clarification;
   sessionId?: string;
   createdAt: string;
 }
@@ -95,6 +102,7 @@ export function openStore(path = 'data/archwoven.db') {
   `);
   // dev-scratch DBs created before the gaps column: add it in place
   try { db.exec('ALTER TABLE jobs ADD COLUMN gaps TEXT'); } catch { /* column exists */ }
+  try { db.exec('ALTER TABLE jobs ADD COLUMN clarification TEXT'); } catch { /* column exists */ }
 
   // NOTE: the orphan sweep does NOT live here. openStore is re-evaluated per
   // route bundle in dev (Next compiles each route separately, separate realms —
@@ -160,13 +168,14 @@ export function openStore(path = 'data/archwoven.db') {
       const r = db.prepare("SELECT * FROM jobs WHERE idempotency_key = ? AND session_id = ? AND status NOT IN ('failed', 'cancelled')").get(key, sessionId) as SqlRow | undefined;
       return r ? rowToJob(r) : null;
     },
-    updateJob(id: string, patch: { status?: JobStatus; stage?: string; error?: string; gaps?: string[] }): void {
+    updateJob(id: string, patch: { status?: JobStatus; stage?: string; error?: string; gaps?: string[]; clarification?: Clarification }): void {
       const sets: string[] = [];
       const args: (string | number)[] = [];
       if (patch.status) { sets.push('status = ?'); args.push(patch.status); }
       if (patch.stage) { sets.push('stage = ?'); args.push(patch.stage); }
       if (patch.error !== undefined) { sets.push('error = ?'); args.push(patch.error); }
       if (patch.gaps !== undefined) { sets.push('gaps = ?'); args.push(JSON.stringify(patch.gaps)); }
+      if (patch.clarification !== undefined) { sets.push('clarification = ?'); args.push(JSON.stringify(patch.clarification)); }
       if (!sets.length) return;
       db.prepare(`UPDATE jobs SET ${sets.join(', ')} WHERE id = ?`).run(...args, id);
     },
@@ -248,6 +257,7 @@ const rowToJob = (r: SqlRow): Job => ({
   stage: r.stage == null ? undefined : String(r.stage),
   error: r.error == null ? undefined : String(r.error),
   gaps: r.gaps == null ? undefined : (JSON.parse(String(r.gaps)) as string[]),
+  clarification: r.clarification == null ? undefined : JSON.parse(String(r.clarification)) as Clarification,
   sessionId: r.session_id == null ? undefined : String(r.session_id),
   createdAt: String(r.created_at),
 });

@@ -103,3 +103,15 @@ describe('bounded cancellable generation jobs', () => {
     expect(serverDeps.store.getRevision(queued)).toBeNull();
   });
 });
+
+
+it('cancelled clarification work cannot resurrect questions or double-refund',async()=>{
+  let release!:()=>void;const waiting=new Promise<void>(r=>{release=r;});
+  serverDeps.generateModel=async()=>{await waiting;return {ok:true as const,questions:['Persist orders?'],usage};};
+  const id=await post('generate');
+  try{await CANCEL(req(`jobs/${id}/cancel`,{}),ctx(id));}finally{release();await delay(5);}
+  const job=serverDeps.store.getJob(id)!;
+  expect(job.status).toBe('cancelled');expect(job.clarification).toBeUndefined();expect(repoJobRegistry.has(id)).toBe(false);
+  expect(serverDeps.store.getRevision(id)).toBeNull();expect(serverDeps.store.creditsUsed('lifecycle',day())).toBe(0);
+  expect(serverDeps.store.listCalls('lifecycle')).toHaveLength(1);
+});
