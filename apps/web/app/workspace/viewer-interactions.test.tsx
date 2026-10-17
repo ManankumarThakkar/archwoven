@@ -88,6 +88,56 @@ async function renderCanvas() {
   await act(async () => root.render(<Workspace />));
 }
 
+describe('camera after the canvas is resized', () => {
+  const observers: { callback: ResizeObserverCallback; target?: Element }[] = [];
+  beforeEach(() => {
+    observers.length = 0;
+    vi.stubGlobal('ResizeObserver', class { constructor(callback: ResizeObserverCallback) { observers.push({ callback }); } observe(target: Element) { observers.at(-1)!.target = target; } unobserve() {} disconnect() {} });
+  });
+  afterEach(() => vi.unstubAllGlobals());
+  const resize = async (width: number, height: number) => {
+    const observer = observers.find((o) => o.target?.classList.contains('aw-flow-area'))!;
+    await act(async () => { observer.callback([{ contentRect: { width, height } } as ResizeObserverEntry], {} as ResizeObserver); await new Promise((r) => setTimeout(r, 150)); });
+  };
+
+  it('refits the whole diagram instantly when the canvas shrinks and the camera was not moved', async () => {
+    await renderCanvas();
+    await resize(1000, 600);
+    camera.requests = [];
+    await resize(390, 500);
+    expect(camera.requests).toHaveLength(1);
+    expect(camera.requests[0]!.options.duration).toBe(0);
+    expect(camera.requests[0]!.bounds).toBeDefined();
+  });
+
+  it('does nothing when the reported size is unchanged', async () => {
+    await renderCanvas();
+    await resize(1000, 600);
+    camera.requests = [];
+    await resize(1000, 600);
+    expect(camera.requests).toHaveLength(0);
+  });
+
+  it('keeps a camera the user moved, while programmatic moves do not count as the user moving it', async () => {
+    await renderCanvas();
+    await resize(1000, 600);
+    camera.requests = [];
+    const events = flow.events as unknown as { onMoveStart: (event: unknown) => void };
+    await act(async () => events.onMoveStart(null));
+    await resize(800, 600);
+    expect(camera.requests).toHaveLength(1);
+    camera.requests = [];
+    await act(async () => events.onMoveStart({ type: 'wheel' }));
+    await resize(390, 500);
+    expect(camera.requests).toHaveLength(0);
+    await click(button('Fit View'));
+    expect(camera.requests).toHaveLength(1);
+    camera.requests = [];
+    await resize(600, 500);
+    expect(camera.requests, 'an explicit Fit View hands the camera back to automatic fitting').toHaveLength(1);
+  });
+});
+
 describe('persisted graph dragging',()=>{
   it('uses lightweight geometry during pointer movement and routes on completion',async()=>{
     const save=vi.fn(async(_positions:unknown)=>true),routing=vi.spyOn(manualRouting,'manualLayout');

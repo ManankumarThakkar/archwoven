@@ -26,8 +26,9 @@ Completed foundation: PR #11 clean-download instructions; PR #12 authoritative e
 | 17 | Threat model and before-egress content secret scanning | Merged to main as PR #30; verified |
 | 18 | Public abuse controls and honest exhausted-credit copy | Merged to main as PR #33; verified |
 | 19 | Evaluation oracle, representative real-provider results and human-review handoff | Merged to main as PR #35; verified (named visual reviews await the owner) |
-| 19b | Hosted first-pass validity: give the model the evidence shape | PR #36 open against main; verified |
+| 19b | Hosted first-pass validity: give the model the evidence shape | Merged to main as PR #36; verified |
 | 20 | Cross-browser/accessibility/device acceptance, clean-install rerun and documented cleanup | Pending |
+| 20a | Workspace fixes: refusal text, camera on resize, 44 px controls, pasted links | PR open against main; verified |
 
 Known gaps not yet fixed are tracked in one place: [OPEN-GAPS.md](OPEN-GAPS.md). Update it in every PR that finds or fixes a gap.
 

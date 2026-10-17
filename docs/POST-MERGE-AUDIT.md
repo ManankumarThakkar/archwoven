@@ -814,3 +814,43 @@ Final checks:
 - **Spend:** $0.97 metered, plus about $0.21 estimated.
 
 Artifacts outside version control are in the session scratchpad (`eval`, `eval2`, `eval3`). Committed results contain prompts, model shapes, usage and diagrams only.
+
+## Task 20a — workspace fixes from earlier acceptance passes
+
+2026-10-17, America/Chicago. Branch `fix/ui-acceptance-gaps`, based on merged PR #36 at `5ca77c8`. Four gaps recorded during tasks 8–10b are closed.
+
+**Changes.**
+- **Refinement status:** the full reason is a live `role="status"` region that wraps at any width. Before, it was cut to one 260 px line, with the rest only in a hover title.
+- **Touch targets:** every refine-bar control (input, Refine, Undo, SVG, PNG, JSON, Delete) is at least 44 px tall. Before, they were 34–36 px.
+- **Camera on resize:** when the canvas changes size, the diagram refits instantly, keeping any chapter focus, unless the user has panned or zoomed since the last fit. A user-placed camera stays put, and Fit View hands control back to automatic fitting. React Flow reports user moves with an event and programmatic fits without one, so the two are told apart reliably.
+- **Pasted links:** a `#model=` link pasted into an open tab opens that diagram without a reload. The workspace records the id each load asks for, so hash updates it makes itself never trigger a reload, regardless of render timing.
+
+**Tests.**
+- 8 new tests:
+  - camera: refit on shrink, ignore an unchanged size, keep a user camera, programmatic moves don't count, Fit View resumes auto-fitting
+  - pasted links: a different diagram loads, the same diagram doesn't reload
+  - status: a live status region with no truncation
+- These failed before the change. Removing the hash listener, or the same-diagram guard, fails the link tests.
+- **Test bugs fixed along the way:**
+  - the first link test checked the model `title`, which the workspace does not display; it now checks content unique to the second diagram
+  - the first browser driver zoomed with the canvas below the fold at phone width, so the wheel scrolled the page
+- **First implementation flaw:** it compared against a ref that updates only on re-render, and repeated hash events caused four loads of one diagram. It now compares against the requested id.
+
+**Final checks:**
+- 1,086 hosted tests passed; local 1,062 passed with 24 expected skips
+- typechecks and selftests passed
+- the isolated production build succeeded
+
+**Browser acceptance** (`apps/web/e2e/ui-acceptance.mjs`: Playwright 1.63 Chromium and WebKit, Safari's engine, against a fake-model server; the same driver was also run against an unmodified `main` build):
+
+| check (Chromium and WebKit) | main | this branch |
+|---|---|---|
+| refine-bar controls ≥ 44 px at 1440 and 390 px | 34–36 px | pass |
+| refusal is a live status, complete and wrapped at 390 px | not a status, 1 line, cut off | 4 lines, complete |
+| diagram stays in view after shrinking 1440 → 390 px | 7 of 7 nodes off-screen | 0 off-screen |
+| a user-zoomed camera is kept on resize | pass | pass |
+| a pasted `#model=` link opens that diagram | fail | pass |
+
+**Gaps list.** The four rows are removed from `OPEN-GAPS.md`. One related gap is added: a pasted link to the same diagram that changes only `view`, `focus`, `lens`, `route` or `chapter` is not applied until reload.
+
+Firefox, real Safari, physical touch and screen readers are not covered here; they belong to task 20b. Artifacts are in the session scratchpad (`ui`, `pw`).

@@ -36,7 +36,7 @@ export function RefineBar({
         style={{ flex: 1, padding: '8px 12px', borderRadius: 8, background: '#0b1220', color: '#e5e7eb', border: '1px solid #334155' }} />
       <button onClick={() => { void submit(); }} disabled={busy || !instruction.trim()}
         style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#5eead4', color: '#04211f', fontWeight: 600, cursor: 'pointer', opacity: busy || !instruction.trim() ? 0.5 : 1 }}>Refine</button>
-      {summary && <span style={{ fontSize: 12, color: '#93c5fd', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={summary}>{summary}</span>}
+      {summary && <span role="status" className="aw-refine-status">{summary}</span>}
       <button onClick={onUndo} disabled={busy || !canUndo} title="Undo last change"
         style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #334155', background: 'transparent', color: '#e5e7eb', cursor: canUndo ? 'pointer' : 'default', opacity: canUndo ? 1 : 0.4 }}>↶ Undo</button>
       <button disabled={busy} onClick={() => onExport('svg')} style={exportButton}>SVG</button>

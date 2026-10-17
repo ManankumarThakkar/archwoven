@@ -80,6 +80,8 @@ export default function WorkspacePage() {
   const [mode, setMode] = useState<Mode>('describe');
   const [restoring, setRestoring] = useState(true);
   const loadSequence = useRef(0);
+  /** The diagram most recently asked for, so hash updates the workspace makes itself never reload it. */
+  const requestedModelRef = useRef<string | null>(null);
   const jobIdRef = useRef<string | null>(null);
   const mutationRef = useRef(false);
   const generationRef = useRef(false);
@@ -129,6 +131,7 @@ export default function WorkspacePage() {
   /** Gaps come only from the saved model, so a first load and every reload show the same list. */
   const loadModel = async (id: string, preferredView?: ViewType) => {
     const sequence = ++loadSequence.current;
+    requestedModelRef.current = id;
     try {
       const res = await fetch(`/api/models/${encodeURIComponent(id)}`);
       if (!res.ok) throw new Error(res.status === 404
@@ -177,6 +180,18 @@ export default function WorkspacePage() {
     })();
     return () => { cancelled = true; ++loadSequence.current; ++usageSequence.current; ++usageWatch.current; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // A link pasted into an open tab changes only the hash: open the diagram it names.
+  const loadModelRef = useRef(loadModel);
+  loadModelRef.current = loadModel;
+  useEffect(() => {
+    const onHashChange = () => {
+      const id = new URLSearchParams(window.location.hash.slice(1)).get('model');
+      if (id && id !== requestedModelRef.current) void loadModelRef.current(id);
+    };
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
   }, []);
 
   const poll = async (jobId: string, preferredView?: ViewType) => {
@@ -272,7 +287,7 @@ export default function WorkspacePage() {
       if (!res.ok && res.status !== 404) { setSummary(await responseMessage(res, 'Could not delete the diagram. Try again.')); return; }
       try { sessionStorage.removeItem('aw_modelId'); } catch { /* storage can be disabled */ }
       window.history.replaceState(null, '', window.location.pathname + window.location.search);
-      setModel(null); setModelId(null); setHistory([]); setSelected(null); setActiveView(''); setSummary('');
+      setModel(null); setModelId(null); requestedModelRef.current = null; setHistory([]); setSelected(null); setActiveView(''); setSummary('');
       dispatch({ type: 'RESET' });
       setNotice('Diagram deleted.');
     } catch {
