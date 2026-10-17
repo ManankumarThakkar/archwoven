@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyEditOps, undoTo } from './edit';
+import { applyEditOps, undoTo, orientArchitecture } from './edit';
 import type { EditOp, SystemModel } from './schema';
 
 const mkModel = (): SystemModel => ({
@@ -107,5 +107,23 @@ describe('undoTo', () => {
     expect(undone.parentId).toBe(2);
     expect(undone.nodes).toEqual(prev.nodes);
     expect(undone.layout).toEqual(prev.layout);
+  });
+});
+
+
+describe('architecture orientation',()=>{
+  it('reflows only member positions, preserves semantics and can restore the exact manual layout with undo',()=>{
+    const m=mkModel();m.layout!['outside']={x:111,y:222};m.views.push({id:'v.shared',type:'component-detail',focus:'svc.api',nodes:['svc.api'],edges:[]});
+    const out=orientArchitecture(m,'v.arch','LR');expect(out.ok).toBe(true);if(!out.ok)return;
+    const expected=structuredClone(m);expected.revision=2;expected.parentId=1;expected.views[0]!.orientation='LR';expected.layout={outside:{x:111,y:222}};
+    expect(out.model).toEqual(expected);expect(m.layout!['svc.api']).toEqual({x:0,y:0});
+    const restored=undoTo(out.model,m);expect(restored.layout).toEqual(m.layout);expect(restored.views).toEqual(m.views);
+  });
+  it('same effective direction is a no-op that preserves pinned positions',()=>{
+    const m=mkModel();const out=orientArchitecture(m,'v.arch','TB');expect(out).toEqual({ok:true,model:m});
+  });
+  it('rejects absent and non-architecture views',()=>{
+    const m=mkModel();m.views.push({id:'v.er',type:'er',nodes:[],edges:[]});
+    expect(orientArchitecture(m,'v.er','LR').ok).toBe(false);expect(orientArchitecture(m,'missing','LR').ok).toBe(false);
   });
 });

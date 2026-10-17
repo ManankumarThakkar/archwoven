@@ -419,3 +419,45 @@ it.each(['Sequence','ER · data model'])('keeps the requested %s view after clar
   await mount();await click(label);await fill('#system-description','Order system');await click('Generate diagram');await click('Skip for now');
   expect(container.querySelector('[aria-label="Rendered view"]')?.textContent).toBe(label==='Sequence'?'view.sequence':'view.er');
 });
+
+
+describe('architecture orientation controls',()=>{
+  it('saves the current view direction, supports undo and restores the saved direction on reload',async()=>{
+    window.history.replaceState(null,'','/workspace#model=m1');let stored=structuredClone(validFullModelExtended);const original=structuredClone(stored);
+    transport=(input,init)=>{
+      if(input==='/api/models/m1'&&!init)return Response.json({model:stored});
+      if(input==='/api/models/m1/edit'){
+        const body=JSON.parse(String(init?.body));expect(body).toEqual({baseRevision:stored.revision,action:{type:'orient',viewId:'view.architecture',orientation:'LR'}});
+        stored=structuredClone(stored);stored.parentId=stored.revision;stored.revision++;stored.views[0]!.orientation='LR';return Response.json({model:stored});
+      }
+      if(input==='/api/models/m1/undo'){stored={...original,parentId:stored.revision,revision:stored.revision+1};return Response.json({model:stored});}
+    };
+    await mount();expect(container.querySelector('button[aria-label="Vertical architecture layout"]')?.getAttribute('aria-pressed')).toBe('true');
+    await click('Horizontal');expect(container.querySelector('button[aria-label="Horizontal architecture layout"]')?.getAttribute('aria-pressed')).toBe('true');
+    await click('↶ Undo');expect(container.querySelector('button[aria-label="Vertical architecture layout"]')?.getAttribute('aria-pressed')).toBe('true');
+    await click('Horizontal');await act(async()=>root.unmount());root=createRoot(container);await mount();
+    expect(container.querySelector('button[aria-label="Horizontal architecture layout"]')?.getAttribute('aria-pressed')).toBe('true');expect(requests).not.toContain('/api/refine');
+  });
+  it('keeps the accepted direction and surfaces failed saves',async()=>{
+    window.history.replaceState(null,'','/workspace#model=m1');
+    transport=input=>input.endsWith('/edit')?Response.json({error:'Save unavailable'},{status:503}):undefined;
+    await mount();await click('Horizontal');expect(container.textContent).toContain('Save unavailable');expect(container.querySelector('button[aria-label="Vertical architecture layout"]')?.getAttribute('aria-pressed')).toBe('true');
+  });
+  it('explains rearrangement for manual positions and hides controls on sequence/ER views',async()=>{
+    const m=structuredClone(validFullModelExtended);m.layout={'gateway.api':{x:400,y:50}};
+    window.history.replaceState(null,'','/workspace#model=m1');transport=input=>input==='/api/models/m1'?Response.json({model:m}):undefined;
+    await mount();expect(container.textContent).toMatch(/manual.*positions|manually placed/i);
+    await act(async()=>[...container.querySelectorAll<HTMLButtonElement>('.aw-view-tabs button')].find(b=>b.textContent==='sequence')!.click());
+    expect(container.querySelector('[aria-label="Architecture orientation"]')).toBeNull();
+    await act(async()=>[...container.querySelectorAll<HTMLButtonElement>('.aw-view-tabs button')].find(b=>b.textContent==='Data model')!.click());
+    expect(container.querySelector('[aria-label="Architecture orientation"]')).toBeNull();
+  });
+});
+
+
+it('discloses when auto-arranging pinned nodes also affects another graph view',async()=>{
+  const m=structuredClone(validFullModelExtended);m.layout={'gateway.api':{x:400,y:50}};
+  m.views.push({id:'view.detail',type:'component-detail',focus:'gateway.api',nodes:['gateway.api'],edges:[]});
+  window.history.replaceState(null,'','/workspace#model=m1');transport=input=>input==='/api/models/m1'?Response.json({model:m}):undefined;
+  await mount();expect(container.querySelector('#orientation-help')?.textContent).toContain('shared nodes in other views');
+});

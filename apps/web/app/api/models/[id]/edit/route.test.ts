@@ -66,3 +66,32 @@ describe('direct edits', () => {
         expect(serverDeps.store.getRevision('m1')?.revision).toBe(1);
     });
 });
+
+
+describe('saved architecture orientation',()=>{
+  it('saves direction and automatic arrangement without inference or credits and reads it back',async()=>{
+    const m=structuredClone(validFullModel);m.revision=2;m.parentId=1;m.layout={'gateway.api':{x:900,y:800},'entity.user':{x:80,y:60}};serverDeps.store.saveRevision('m1',m,'owner');
+    const res=await POST(request({type:'orient',viewId:'view.architecture',orientation:'LR'},2),ctx);expect(res.status).toBe(200);
+    const expected=structuredClone(m);expected.revision=3;expected.parentId=2;expected.views[0]!.orientation='LR';expected.layout={'entity.user':{x:80,y:60}};
+    expect((await res.json()).model).toEqual(expected);expect(serverDeps.store.getRevision('m1')).toEqual(expected);
+    expect(serverDeps.generateModel).not.toHaveBeenCalled();expect(serverDeps.generateRefinement).not.toHaveBeenCalled();expect(serverDeps.store.listCalls('owner')).toEqual([]);
+    expect(serverDeps.store.creditsUsed('owner',new Date().toISOString().slice(0,10))).toBe(0);
+    const stale=await POST(request({type:'orient',viewId:'view.architecture',orientation:'TB'},2),ctx);expect(stale.status).toBe(409);
+    expect((await stale.json()).model).toEqual(expected);
+    expect((await POST(request({type:'orient',viewId:'view.architecture',orientation:'TB'},3,'aw_sid=other'),ctx)).status).toBe(404);
+  });
+  it('does not create an extra revision for the selected effective direction',async()=>{
+    expect((await POST(request({type:'orient',viewId:'view.architecture',orientation:'TB'}),ctx)).status).toBe(200);
+    expect(serverDeps.store.getRevision('m1')?.revision).toBe(1);
+  });
+  it.each([
+    {type:'orient',viewId:'view.sequence',orientation:'LR'},
+    {type:'orient',viewId:'view.er',orientation:'LR'},
+    {type:'orient',viewId:'missing',orientation:'LR'},
+    {type:'orient',viewId:'view.architecture',orientation:'DOWN'},
+    {type:'orient',viewId:'view.architecture',orientation:null},
+    {type:'orient',viewId:'view.architecture',orientation:'LR',nodes:[]},
+  ])('rejects invalid orientation actions without mutating a revision: %j',async action=>{
+    expect((await POST(request(action),ctx)).status).toBe(400);expect(serverDeps.store.getRevision('m1')?.revision).toBe(1);
+  });
+});

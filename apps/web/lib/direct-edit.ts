@@ -11,6 +11,10 @@ export type DirectEdit = {
 } | {
     type: 'move';
     positions: Record<string, Point>;
+} | {
+    type: 'orient';
+    viewId: string;
+    orientation: 'LR' | 'TB';
 };
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 const keys = (value: Record<string, unknown>, allowed: string[]) => Object.keys(value).every(key => allowed.includes(key));
@@ -33,6 +37,13 @@ export function directEditOps(raw: unknown, model: SystemModel): EditOp[] | null
     }
     return null;
 }
+export function orientationEdit(raw: unknown, model: SystemModel): Extract<DirectEdit, { type: 'orient' }> | null {
+    if (!object(raw) || !keys(raw, ['baseRevision', 'action']) || raw.baseRevision !== model.revision || !object(raw.action)) return null;
+    const action = raw.action;
+    if (action.type !== 'orient' || !keys(action, ['type', 'viewId', 'orientation']) || typeof action.viewId !== 'string' || (action.orientation !== 'LR' && action.orientation !== 'TB')) return null;
+    return { type: 'orient', viewId: action.viewId, orientation: action.orientation };
+}
+
 /** Read a bounded body rather than trusting Content-Length or buffering arbitrary input. */
 export async function readDirectEdit(req: Request): Promise<unknown> {
     const reader = req.body?.getReader();

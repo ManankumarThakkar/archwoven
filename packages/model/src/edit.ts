@@ -115,3 +115,19 @@ export function undoTo(_model: SystemModel, prev: SystemModel): SystemModel {
   next.parentId = _model.revision;
   return next;
 }
+
+/** Orientation is an explicit layout action, separate from semantic refinement.
+ * Manual coordinates use schema v1's global node-id map: reset member keys so
+ * auto-layout can take effect, retaining all nonmember positions for other views.
+ */
+export function orientArchitecture(model: SystemModel, viewId: string, orientation: 'LR' | 'TB'): ReturnType<typeof applyEditOps> {
+  const view = model.views.find(v => v.id === viewId);
+  if (!view || view.type !== 'architecture' || !['LR', 'TB'].includes(orientation))
+    return { ok: false, errors: ['Choose an architecture view and a horizontal or vertical direction.'] };
+  if ((view.orientation ?? 'TB') === orientation) return { ok: true, model };
+  const next = structuredClone(model);
+  next.views.find(v => v.id === viewId)!.orientation = orientation;
+  if (next.layout) for (const id of view.nodes) delete next.layout[id];
+  const checked = validateModel({ ...next, revision: model.revision + 1, parentId: model.revision });
+  return checked.ok ? { ok: true, model: checked.model } : { ok: false, errors: checked.errors };
+}

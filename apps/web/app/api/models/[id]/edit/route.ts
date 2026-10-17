@@ -1,6 +1,6 @@
-import { applyEditOps } from '@archwoven/model';
+import { applyEditOps, orientArchitecture } from '@archwoven/model';
 import { serverDeps, readOrCreateSession } from '../../../../lib/server';
-import { directEditOps, readDirectEdit } from '../../../../../lib/direct-edit';
+import { directEditOps, orientationEdit, readDirectEdit } from '../../../../../lib/direct-edit';
 export const runtime = 'nodejs';
 export async function POST(req: Request, ctx: {
     params: Promise<{
@@ -15,7 +15,7 @@ export async function POST(req: Request, ctx: {
         body = await readDirectEdit(req);
     }
     catch {
-        return Response.json({ error: 'Invalid edit. Use a name up to 500 characters or finite node positions.' }, { status: 400 });
+        return Response.json({ error: 'Invalid edit. Choose a name, node positions, or an architecture direction.' }, { status: 400 });
     }
     const latest = serverDeps.store.getRevision(id);
     if (!latest)
@@ -24,12 +24,13 @@ export async function POST(req: Request, ctx: {
         return Response.json({ error: 'baseRevision is required' }, { status: 400 });
     if (body.baseRevision !== latest.revision)
         return Response.json({ reason: 'stale-revision', message: 'The diagram changed elsewhere. Review the latest version and try again.', model: latest }, { status: 409 });
-    const ops = directEditOps(body, latest);
-    if (!ops || req.signal.aborted)
-        return Response.json({ error: 'Invalid edit. Choose an existing element, a name of 1–500 characters, or node positions within ±100000.' }, { status: 400 });
-    const applied = applyEditOps(latest, ops);
+    const orientation = orientationEdit(body, latest);
+    const ops = orientation ? null : directEditOps(body, latest);
+    if ((!ops && !orientation) || req.signal.aborted)
+        return Response.json({ error: 'Invalid edit. Choose an existing element, a name of 1–500 characters, node positions within ±100000, or a horizontal/vertical architecture direction.' }, { status: 400 });
+    const applied = orientation ? orientArchitecture(latest, orientation.viewId, orientation.orientation) : applyEditOps(latest, ops!);
     if (!applied.ok)
         return Response.json({ errors: applied.errors }, { status: 400 });
-    serverDeps.store.saveRevision(id, applied.model, sessionId);
+    if (applied.model.revision !== latest.revision) serverDeps.store.saveRevision(id, applied.model, sessionId);
     return Response.json({ model: applied.model, revision: applied.model.revision });
 }
