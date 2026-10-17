@@ -518,3 +518,41 @@ Artifacts, provider receipts and screenshots remain in temporary storage; no dat
 **New finding (pre-existing, not addressed here).** Subdirectory selection rejects path segments containing `@` (route `safeSubdir` and the URL parser both use `[\w.-]`), so scoped-package folders common in JavaScript monorepos (`packages/@scope/name`) cannot be imported. The live import above was refused with "subdir must be a simple relative path" — this was the ninth Chrome check. Recommended for task 15 alongside extraction coverage.
 
 **Residual risks** are listed in the threat model: novel or split credential formats, a user's own proprietary text by design, and retention (task 16, next). Artifacts are in the session scratchpad (`live6`); no databases, credentials or cookies are published.
+
+## Task 16 — retention, expiration and user deletion
+
+2026-10-17, America/Chicago. Branch `feat/retention-deletion`, based on merged PR #30 at `2fc0168`. Policy follows the recorded release decision: implement SPEC §1 ("anonymous projects live 30 days, swept nightly; deletion honored on request").
+
+**Before.** Nothing was ever deleted. Diagrams, every revision and every job lived indefinitely. That included unanswered clarification jobs, which store the user's original description.
+
+**Implementation.**
+- **Store:** `deleteModel(id)` removes every revision and job of a diagram in one transaction. `sweepExpired()` removes, in one transaction:
+  - diagrams whose last change is older than 30 days, with their whole history and jobs
+  - finished jobs older than 30 days (running and queued are never touched)
+  - content-free metering rows after 90 days
+  - burst counters after a day
+- **Testability:** an optional store clock stamps revisions, jobs and call rows explicitly, so retention tests use real ages.
+- **Hosted sweep:** the boot hook sweeps at startup and every 24 hours on a short-lived connection. Failures are logged and retried, and the timer never keeps the process alive. Local deployments never expire diagrams.
+- **`DELETE /api/models/:id`:** owner-checked in both modes. In-flight refinements, expansions and direct edits already re-read the model before saving, so they cannot resurrect a deleted diagram.
+- **Workspace:** **Delete diagram** asks for confirmation, then clears the diagram, the remembered id and the address, and shows "Diagram deleted." A diagram that has already expired is cleared the same way. The control is described by a visible retention note: "Kept for 30 days after the last change." (hosted) or "Stored on this machine until you delete it." (local).
+
+**Edge cases found and fixed.**
+- **A clarification's stored description outlived its diagram.** The continuation creates a new job and diagram, so deleting that diagram left the original job's prompt in place. Once a clarified diagram is saved, the original description and questions are now scrubbed. A failed continuation keeps them so the user can retry.
+- **Scrubbing broke an existing idempotency contract**: a replayed continuation must return its original job, and the existing test failed. Replay lookup now runs before the "no pending clarification" refusal, through one shared helper.
+- **A redundant `OR id = ?` clause** in job deletion survived a mutation because every job's id equals its model id; the clause was removed.
+
+**Tests: 23 new** (8 store retention, 3 delete route, 3 sweeper, 2 boot hook, 5 page, 2 clarification scrub). Mutations disabling each of the following were all caught: expiry by last change (switched to first change), exclusion of running jobs, the 30-day boundary, the owner check, hosted-only sweeping, clearing the remembered diagram, closing the sweep connection, the scrub, and replay after scrub. Final checks: 1,030 hosted tests passed; local 1,014 passed / 16 expected skips; all typechecks, an isolated production build and the 18/36 benchmark selftests passed.
+
+**Live acceptance** (fake=false, isolated loopback servers). Databases were seeded through the store clock with an expired diagram (last change 40 days ago), an abandoned clarification job holding a "Confidential payroll architecture" prompt, and a recent diagram.
+- **Hosted boot sweep:** logged "retention sweep removed 1 diagram(s) and 2 job(s)". Only the recent diagram remained, and no stored prompt remained.
+- **Local boot:** everything was kept.
+- **Local deletion (curl):** another session got 404, a cross-site Origin got 403 (local guard), the owner got 200 `{"deleted":true}`, and a repeat got 404.
+- **Hosted Chrome, real generation, 9/9:**
+  - retention note shown
+  - the real confirmation dialog was accepted via DevTools
+  - every revision and job was removed from the database
+  - address and remembered id cleared; API 404
+  - reload restores nothing; an old link shows the existing recovery guidance
+- Two driver issues occurred and are not product defects: the old-link check first used a hash-only navigation (a known task 20 gap), then a fixed 2.5 s wait shorter than restore. The product behaviour was confirmed in a fresh browser, and the driver now waits for the message.
+
+The gap list (`OPEN-GAPS.md`, PR #31) still holds the retention row; it is removed once #31 merges and this branch is rebased. Artifacts are in the session scratchpad (`live7`); no databases, credentials or cookies are published.
