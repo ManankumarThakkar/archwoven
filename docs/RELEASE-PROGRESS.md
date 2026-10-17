@@ -35,7 +35,7 @@ Completed foundation: PR #11 clean-download instructions; PR #12 authoritative e
 | 20e | Apply live same-diagram links and clear stale interaction state | Merged to main via PR #43 (reviewed as PR #41); regressions and real browser view/focus/lens/route checks passed |
 | 20f | Prevent misleading boundary enclosures, including edit previews and rollback | Merged to main via PR #43 (reviewed as PR #42); geometry/raster/viewer tests passed; bounded warning disclosure |
 | 20g | Clean-install acceptance, current setup/docs and the already selected MIT license | Merged to main as PR #44; clean install reproduced independently; record in RELEASE-ACCEPTANCE.md |
-| 20h | Cross-browser and accessibility acceptance: downloads, axe and keyboard in Chromium and WebKit | PR open against main; Firefox could not launch here, Safari app and assistive technology remain |
+| 20h | Cross-browser and accessibility acceptance: downloads, axe and keyboard in Chromium and WebKit | PR #45 open against main; Firefox could not launch here, Safari app and assistive technology remain |
 
 Known gaps not yet fixed are tracked in one place: [OPEN-GAPS.md](OPEN-GAPS.md). Update it in every PR that finds or fixes a gap.
 
