@@ -556,3 +556,75 @@ Artifacts, provider receipts and screenshots remain in temporary storage; no dat
 - Two driver issues occurred and are not product defects: the old-link check first used a hash-only navigation (a known task 20 gap), then a fixed 2.5 s wait shorter than restore. The product behaviour was confirmed in a fresh browser, and the driver now waits for the message.
 
 The retention row is removed from `OPEN-GAPS.md` in this PR. Artifacts are in the session scratchpad (`live7`); no databases, credentials or cookies are published.
+
+## Task 18 — abuse controls and honest quota copy
+
+2026-10-17, America/Chicago. Branch `fix/abuse-controls-copy`, based on merged PR #32 at `52cd469`. Scope follows the recorded release decision: narrow SPEC §15 to what ships, and make every refusal message true.
+
+**Before.**
+- **Misleading copy:** the exhausted-credit message offered "Sign in with GitHub for 30/day", but no sign-in exists in this release.
+- **Unbounded session minting:** a client that drops its cookie got a fresh session, and fresh credits, on every request. The only daily bound was the $15 stop-loss, which one script could spend for everyone.
+- **Spoofable address:** the "IP" was the whole raw `X-Forwarded-For` header. Every spoofed prefix created a new burst bucket, and every request without the header shared a single `unknown` bucket.
+- **Spec drift:** SPEC §15 described anomaly challenges and bans that are deliberately deferred.
+
+**Implementation.**
+- **Client address:** `clientIp` takes only the last `X-Forwarded-For` entry, the one appended by the nearest proxy, and validates it with `isIP`. An unknown or invalid address returns `null`, which never forms a shared bucket. Generate, repo, refine, expand and share-card all use it.
+- **Network pool:** each address gets a daily pool of 24 credits, four anonymous sessions' worth, so a shared office or household still works. `reserveCredits` charges the session and checks the network sum inside one `BEGIN IMMEDIATE` transaction. If the network is over its pool, the transaction rolls back, so the refused session is not charged. The refusal is a new reason, `network-credits-exhausted`.
+- **Remaining credits:** `creditsRemaining` reports whichever is lower, the session's or the network's remaining credits. It feeds `/api/quota`, the workspace header and replayed responses, so the header never shows credits that would be refused.
+- **Copy:** `quotaMessage` produces one message per refusal reason and never offers sign-in.
+  - Session refusal: "You've used today's free credits. They reset in Xh Ym."
+  - Network refusal: "Today's free credits for your network are used up. They reset in Xh Ym."
+  - Both refusals add that the user can still view, rearrange, rename and export.
+  - The workspace titles are "Daily free credits used up" and "Daily free credits for your network used up".
+- **SPEC §15 and threat model T15:** the tier table now includes the network pool. The GitHub tier and the abuse escalation ladder are marked deferred, with revisit triggers:
+  - stop-loss trips on more than one day a week
+  - one network exhausts its pool on most days
+  - burst refusals exceed 5%
+
+  The proxy requirement is recorded as a residual risk.
+
+**Edge cases found and fixed during verification.**
+- **Header overstated remaining credits:** on an exhausted network the header still showed 6/6, because it counted only the session pool. Fixed with `creditsRemaining`, which now also feeds the replay paths.
+- **Test bug, not a product bug:** a network-pool test failed because reservations in the same millisecond tripped the per-session burst limit. The test now spaces reservations by 2 ms.
+
+**Tests: 20 new; existing copy assertions updated.**
+- New coverage:
+  - the network pool and the "lower pool wins" rule
+  - `clientIp`, including spoofed prefixes, invalid addresses and a missing header
+  - `quotaMessage`
+  - a spoofed-prefix route test
+  - quota-route remaining credits
+  - workspace refusal headings
+- Updated assertions: the existing "GitHub" copy assertion is inverted to forbid any sign-in offer.
+- Mutations, all caught:
+  - removing the network pool
+  - charging the refused credit
+  - letting unknown addresses share a burst bucket
+  - using the first (spoofable) `X-Forwarded-For` entry
+  - skipping address validation
+  - restoring the sign-in offer
+  - reporting session-only remaining credits
+
+Final checks:
+- 1,050 hosted tests passed; local 1,026 passed with 24 expected skips
+- all typechecks and an isolated production build passed
+- 18/36 benchmark selftests passed
+
+**Live acceptance** (isolated loopback server on port 3030, fake generation, with `ARCHWOVEN_DEMO_ACK=1` and a 1 s burst window). Fake mode is used because the checks exercise metering, not model output; it also confirmed that the production boot guard refuses to start fake mode without the acknowledgement. `X-Forwarded-For` was set on each request to emulate a proxy.
+- **curl:**
+  - 24 cookie-less requests with rotating spoofed prefixes were accepted.
+  - The 25th returned 429 `network-credits-exhausted` with the new message.
+  - Another network and a request with no header returned 202.
+  - The database showed 24 credits spread across 24 sessions. The refused session was not charged.
+- **Remaining credits on the second server run:** a fresh session reported 6, then 2 after the network spent 22, then 0 at 24. A different network still reported 6.
+- **Chrome, 8/8:**
+  - network refusal: heading and message correct, no sign-in offer
+  - session refusal after six credits: heading and message correct, no sign-in offer
+  - header on the exhausted network: 0/6, with "0 credits left"
+  - header on a fresh network: 6/6
+
+Two gaps are added to `OPEN-GAPS.md`:
+- IP limits depend on one proxy appending `X-Forwarded-For`
+- the deferred escalation ladder
+
+The two task-18 rows are removed. Artifacts are in the session scratchpad (`live8`); no databases, credentials or cookies are published.
