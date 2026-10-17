@@ -53,7 +53,7 @@ export async function POST(req: Request) {
     const existing = serverDeps.store.findJobByIdempotencyKey(key, sessionId);
     if (existing) {
       const used = serverDeps.store.creditsUsed(sessionId, new Date().toISOString().slice(0, 10));
-      return Response.json({ jobId: existing.id, remaining: Math.max(0, TIERS[tier].pool - used) }, { status: 202, headers });
+      return Response.json({ jobId: existing.id, remaining: deployMode() === 'local' ? null : Math.max(0, TIERS[tier].pool - used) }, { status: 202, headers });
     }
   }
 

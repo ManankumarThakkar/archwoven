@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { reserve, refundCredits, recordUsage, TIERS, WEIGHTS } from '@archwoven/jobs';
-import { validateModel } from '@archwoven/model';
+import { validateModel, appendDisclosures } from '@archwoven/model';
 import { parseRepoUrl, type ParsedRepoUrl } from '@archwoven/ingest';
 import {
   serverDeps, readOrCreateSession, sessionCookie, tierOf,
@@ -9,7 +9,9 @@ import {
 } from '../../lib/server';
 import { withSlot } from '../../lib/llm-limiter';
 import { deployMode, privacyForMode } from '../../lib/mode';
-import { basename, resolve } from 'node:path';
+import { basename, isAbsolute, join, resolve } from 'node:path';
+import { homedir } from 'node:os';
+import { LOCAL_PATH_HINT } from '../../../lib/local-path';
 import { repoJobRegistry } from '../../lib/repo-registry';
 import { startJobDeadline, JOB_TIMEOUT_COPY } from '../../lib/job-registry';
 
@@ -32,12 +34,17 @@ export async function POST(req: Request) {
 
   // §8: localPath is the private-clone import — accepted ONLY in local mode,
   // and rejected before any filesystem touch on a hosted deploy.
-  const localPath = body.localPath !== undefined && body.localPath !== null && body.localPath !== '' ? String(body.localPath) : null;
+  let localPath = body.localPath !== undefined && body.localPath !== null && body.localPath !== '' ? String(body.localPath) : null;
   let parsed: ParsedRepoUrl | null = null;
   if (localPath !== null) {
     if (deployMode() !== 'local') {
       return Response.json({ error: 'Private repo import from a local path is available in local deployments only.' }, { status: 400, headers });
     }
+    // Relative paths would resolve against the server's working directory, which the user cannot see.
+    const trimmed = localPath.trim();
+    localPath = trimmed === '~' || trimmed.startsWith('~/') ? join(homedir(), trimmed.slice(2)) : trimmed;
+    if (!isAbsolute(localPath))
+      return Response.json({ error: LOCAL_PATH_HINT }, { status: 400, headers });
   } else {
     // URL validation BEFORE quota — a malformed/SSRF-shaped URL must not spend credits.
     const p = parseRepoUrl(String(body.url ?? ''));
@@ -57,7 +64,7 @@ export async function POST(req: Request) {
     const existing = serverDeps.store.findJobByIdempotencyKey(key, sessionId);
     if (existing) {
       const used = serverDeps.store.creditsUsed(sessionId, new Date().toISOString().slice(0, 10));
-      return Response.json({ jobId: existing.id, remaining: Math.max(0, TIERS[tier].pool - used) }, { status: 202, headers });
+      return Response.json({ jobId: existing.id, remaining: deployMode() === 'local' ? null : Math.max(0, TIERS[tier].pool - used) }, { status: 202, headers });
     }
   }
 
@@ -132,7 +139,8 @@ export async function POST(req: Request) {
         return;
       }
       // §9: privacy is server-stamped from deploy mode — model self-report never wins.
-      const stamped = { ...checked.model, privacy: privacyForMode(deployMode()) };
+      // Ingest disclosures live with the model, so a reload shows exactly what the first load did.
+      const stamped = { ...appendDisclosures(checked.model, ingest.gaps), privacy: privacyForMode(deployMode()) };
       serverDeps.store.saveRevision(jobId, stamped, sessionId);
       serverDeps.store.updateJob(jobId, { stage: 'laying-out' });
       recordUsage(serverDeps.store, { sessionId, tier, action: 'repo', usage: out.usage, retries: out.usage.repairs, outcome: out.usage.repairs > 0 ? 'repaired' : 'ok' });

@@ -311,3 +311,17 @@ it('a concurrent duplicate acceptance refunds the losing reservation',async()=>{
   const first=await a.json();expect((await b.json()).jobId).toBe(first.jobId);await waitJob(first.jobId);
   expect(store.creditsUsed('test-sess',new Date().toISOString().slice(0,10))).toBe(QUOTA?1:0);
 });
+
+describe('local mode job replay', () => {
+  it('reports no credit count when replaying a local job', async () => {
+    const prevMode = process.env.ARCHWOVEN_MODE;
+    process.env.ARCHWOVEN_MODE = 'local';
+    try {
+      await POST(req({ prompt: 'shop', view: 'architecture', idempotencyKey: 'local-replay' }));
+      const again = await POST(req({ prompt: 'shop', view: 'architecture', idempotencyKey: 'local-replay' }));
+      expect(((await again.json()) as { remaining: unknown }).remaining).toBeNull();
+    } finally {
+      if (prevMode === undefined) delete process.env.ARCHWOVEN_MODE; else process.env.ARCHWOVEN_MODE = prevMode;
+    }
+  });
+});

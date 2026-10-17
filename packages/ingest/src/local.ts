@@ -6,6 +6,7 @@ import { extractGeneric, isAnalysisFile, isExtractionFile, type Fragment, type S
 import { detectFramework, useGenericAnalysis } from './detect';
 import { isVendor, type UnpackCaps } from './unpack';
 import type { IngestResult } from './ingest';
+import { summarizeSkipped } from './disclosures';
 
 /**
  * Local-clone ingest (§8 private flow): reads the user's own directory — no
@@ -117,7 +118,7 @@ export async function ingestLocal(
 
   opts.onStage?.('fetching'); // local read stands in for the hosted fetch stage
   const { files, skipped } = await walkLocal(abs, caps);
-  const gaps: string[] = skipped.map((s) => `${s.path}: ${s.reason}`);
+  const gaps: string[] = summarizeSkipped(skipped);
   if (files.length === 0) return { ok: false, reason: 'empty-repository', message: 'The directory has no analyzable source files after safety filtering.' };
 
   const scoped = opts.subdir ? files.filter((f) => f.startsWith(opts.subdir + '/')).map((f) => f.slice(opts.subdir!.length + 1)) : files;

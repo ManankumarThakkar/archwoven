@@ -4,3 +4,4 @@ export { unpackTarball, cleanupDir, type UnpackResult, type UnpackCaps } from '.
 export { detectFramework, type Framework } from './detect';
 export { ingestRepo, type IngestDeps, type IngestResult } from './ingest';
 export { ingestLocal, walkLocal, gitRevParse, type LocalIngestDeps } from './local';
+export * from './disclosures';

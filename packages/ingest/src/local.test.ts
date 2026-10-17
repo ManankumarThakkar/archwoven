@@ -90,3 +90,19 @@ describe('ingestLocal (private clone import, §8)', () => {
     expect(gitCalled).toBe(false);
   });
 });
+
+describe('ingestLocal disclosures', () => {
+  it('summarizes skipped files and never reports the clone\'s .git folder', async () => {
+    const d = tmp();
+    mkdirSync(join(d, '.git/objects'), { recursive: true });
+    writeFileSync(join(d, '.git/HEAD'), 'ref: refs/heads/main');
+    writeFileSync(join(d, 'main.go'), 'package main\nfunc main() {}');
+    writeFileSync(join(d, 'go.sum'), 'example.com/x v1.0.0 h1:abc=');
+    writeFileSync(join(d, 'package-lock.json'), '{}');
+    const r = await ingestLocal(d, { revParse: cannedRev, extractSpringBoot: async () => emptyFragment(), extractFastApi: async () => emptyFragment() });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.gaps.join('\n')).not.toMatch(/\.git\b(?!\w)/);
+    expect(r.gaps.filter(g => g.startsWith('Skipped'))).toEqual(['Skipped 2 vendored, generated or lock files and folders: go.sum, package-lock.json.']);
+  });
+});

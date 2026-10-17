@@ -5,6 +5,7 @@ import { extractGeneric, isAnalysisFile, isExtractionFile, type Fragment, type S
 import { pinCommit, fetchTarball, type GithubApiFetch } from './fetch';
 import { unpackTarball, cleanupDir, type UnpackCaps } from './unpack';
 import { detectFramework, useGenericAnalysis } from './detect';
+import { summarizeSkipped } from './disclosures';
 
 /**
  * Repo ingest orchestration: pin → fetch → unpack → detect → extract.
@@ -50,7 +51,7 @@ export async function ingestRepo(
   const workDir = mkdtempSync(join(deps.tmpRoot ?? tmpdir(), 'aw-ingest-'));
   try {
     const { files, skipped } = await unpackTarball(tarball, workDir, caps);
-    const gaps: string[] = skipped.map((s) => `${s.path}: ${s.reason}`);
+    const gaps: string[] = summarizeSkipped(skipped);
 
     if (files.length === 0) return { ok: false, reason: 'empty-repository', message: 'The repository has no analyzable source files after safety filtering.' };
 
