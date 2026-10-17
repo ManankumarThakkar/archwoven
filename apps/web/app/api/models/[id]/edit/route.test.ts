@@ -95,3 +95,80 @@ describe('saved architecture orientation',()=>{
     expect((await POST(request(action),ctx)).status).toBe(400);expect(serverDeps.store.getRevision('m1')?.revision).toBe(1);
   });
 });
+
+describe('component detail views', () => {
+  const noInferenceOrCredits = () => {
+    expect(serverDeps.generateModel).not.toHaveBeenCalled();
+    expect(serverDeps.generateRefinement).not.toHaveBeenCalled();
+    expect(serverDeps.store.listCalls('owner')).toEqual([]);
+    expect(serverDeps.store.creditsUsed('owner', new Date().toISOString().slice(0, 10))).toBe(0);
+  };
+
+  it('opens a detail view as a saved revision without inference or credits', async () => {
+    const response = await POST(request({ type: 'detail', target: 'svc.orders' }), ctx);
+    expect(response.status).toBe(200);
+    const { model, revision } = await response.json();
+    expect(revision).toBe(2);
+    expect(model.views.at(-1)).toEqual({ id: 'detail:svc.orders', type: 'component-detail', focus: 'svc.orders', orientation: 'TB', nodes: ['svc.orders', 'gateway.api', 'datastore.postgres', 'external.stripe'], edges: ['e.api-orders', 'e.orders-pg', 'e.orders-stripe'] });
+    expect(serverDeps.store.getRevision('m1')).toEqual(model);
+    noInferenceOrCredits();
+  });
+
+  it('reopening an existing detail view writes nothing', async () => {
+    await POST(request({ type: 'detail', target: 'svc.orders' }), ctx);
+    const again = await POST(request({ type: 'detail', target: 'svc.orders' }, 2), ctx);
+    expect(again.status).toBe(200);
+    expect((await again.json()).revision).toBe(2);
+    expect(serverDeps.store.getRevision('m1')?.revision).toBe(2);
+  });
+
+  it('closes a detail view as a saved revision', async () => {
+    await POST(request({ type: 'detail', target: 'svc.orders' }), ctx);
+    const response = await POST(request({ type: 'close-detail', viewId: 'detail:svc.orders' }, 2), ctx);
+    expect(response.status).toBe(200);
+    expect(serverDeps.store.getRevision('m1')?.revision).toBe(3);
+    expect(serverDeps.store.getRevision('m1')?.views.map(v => v.id)).toEqual(['view.architecture', 'view.sequence', 'view.er']);
+    noInferenceOrCredits();
+  });
+
+  it('rejects a stale open with the latest model and another owner with 404', async () => {
+    await POST(request({ type: 'rename', target: 'svc.orders', label: 'Orders' }), ctx);
+    const stale = await POST(request({ type: 'detail', target: 'svc.orders' }), ctx);
+    expect(stale.status).toBe(409);
+    expect((await stale.json()).model.revision).toBe(2);
+    expect((await POST(request({ type: 'detail', target: 'svc.orders' }, 2, 'aw_sid=other'), ctx)).status).toBe(404);
+    expect(serverDeps.store.getRevision('m1')?.revision).toBe(2);
+  });
+
+  it.each([
+    { type: 'detail', target: 'entity.order' },
+    { type: 'detail', target: 'svc.missing' },
+    { type: 'detail', target: 7 },
+    { type: 'detail' },
+    { type: 'detail', target: 'svc.orders', viewId: 'detail:svc.orders' },
+    { type: 'close-detail', viewId: 'view.architecture' },
+    { type: 'close-detail', viewId: 'detail:svc.orders' },
+    { type: 'close-detail', viewId: null },
+    { type: 'close-detail', viewId: 'detail:svc.orders', target: 'svc.orders' },
+  ])('rejects invalid detail actions without writing: %j', async (action) => {
+    expect((await POST(request(action), ctx)).status).toBe(400);
+    expect(serverDeps.store.getRevision('m1')?.revision).toBe(1);
+  });
+
+  it('rejects closing an open detail view when the action carries extra fields', async () => {
+    await POST(request({ type: 'detail', target: 'svc.orders' }), ctx);
+    expect((await POST(request({ type: 'close-detail', viewId: 'detail:svc.orders', target: 'svc.orders' }, 2), ctx)).status).toBe(400);
+    expect(serverDeps.store.getRevision('m1')?.views.some(v => v.id === 'detail:svc.orders')).toBe(true);
+  });
+
+  it('reports the detail-view limit as a readable error', async () => {
+    const m = structuredClone(validFullModel);
+    for (let i = 0; i < 13; i++) m.nodes.push({ id: `svc.n${i}`, kind: 'service', label: `N${i}`, provenance: 'proposed', evidence: [] });
+    m.revision = 2; m.parentId = 1;
+    serverDeps.store.saveRevision('m1', m, 'owner');
+    for (let i = 0; i < 12; i++) expect((await POST(request({ type: 'detail', target: `svc.n${i}` }, i + 2), ctx)).status).toBe(200);
+    const full = await POST(request({ type: 'detail', target: 'svc.n12' }, 14), ctx);
+    expect(full.status).toBe(400);
+    expect((await full.json()).errors.join(' ')).toMatch(/at most 12 detail views/);
+  });
+});

@@ -549,3 +549,22 @@ describe('shared routed graph scene', () => {
     expect(edge.getAttribute('data-end')).toContain('graph-arrow');
   });
 });
+
+describe('component detail focus', () => {
+  const detailModel: SystemModel = { ...model, views: [...model.views, { id: 'detail:b', type: 'component-detail', focus: 'b', nodes: ['b', 'a', 'c'], edges: ['ab', 'bc'] }] };
+  const mount = (m: SystemModel, viewId: string) => act(async () => root.render(<Canvas model={m} modelId="m" viewId={viewId} onSelect={() => {}} onDeselect={() => {}} />));
+
+  it('outlines the focus component in its detail view only', async () => {
+    await mount(detailModel, 'detail:b');
+    expect(host.querySelector('[data-node="b"]')!.className).toBe('aw-detail-focus');
+    expect(host.querySelector('[data-node="a"]')!.className).toBe('');
+    await mount(detailModel, 'v');
+    expect(host.querySelector('[data-node="b"]')!.className).toBe('');
+  });
+
+  it('does not outline the focus of a generated component-detail view', async () => {
+    const generated: SystemModel = { ...model, views: [...model.views, { id: 'view.component', type: 'component-detail', focus: 'b', nodes: ['b', 'a'], edges: ['ab'] }] };
+    await mount(generated, 'view.component');
+    expect(host.querySelector('[data-node="b"]')!.className).toBe('');
+  });
+});

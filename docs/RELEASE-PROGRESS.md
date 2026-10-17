@@ -14,8 +14,8 @@ Completed foundation: PR #11 clean-download instructions; PR #12 authoritative e
 | 6 | Direct rename/drag and persistent manual positions | Merged to main as PR #19; verified |
 | 7 | Clarification answer/skip flow | Merged to main as PR #20; verified |
 | 8 | Architecture orientation control | Merged to main as PR #21; verified |
-| 9 | Privacy-aware model JSON download | PR open against main; verified |
-| 10 | Existing-model component drill-down | Pending |
+| 9 | Privacy-aware model JSON download | Merged to main as PR #22; verified |
+| 10 | Existing-model component drill-down | Step 1 detail views: PR open against main; verified. Step 2 expand internals: pending |
 | 11 | Local-clone UI, accurate credits copy and stable warnings | Pending |
 | 12 | Subdirectory-first scanning and generated-file exclusions | Pending |
 | 13 | Truthful working-tree/commit evidence | Pending |

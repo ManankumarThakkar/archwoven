@@ -1,5 +1,6 @@
 import { NodeSchema, EdgeSchema, type EditOp, type SystemModel } from './schema';
 import { validateModel } from './validate';
+import { syncDetailViewsInPlace } from './detail';
 
 /**
  * §7 controlled edits: every op is checked against baseRevision, the batch is
@@ -103,6 +104,7 @@ export function applyEditOps(
 
   if (errors.length > 0) return { ok: false, errors };
 
+  syncDetailViewsInPlace(m);
   const checked = validateModel({ ...m, revision: m.revision + 1, parentId: m.revision });
   if (!checked.ok) return { ok: false, errors: checked.errors };
   return { ok: true, model: checked.model };
@@ -128,6 +130,7 @@ export function orientArchitecture(model: SystemModel, viewId: string, orientati
   const next = structuredClone(model);
   next.views.find(v => v.id === viewId)!.orientation = orientation;
   if (next.layout) for (const id of view.nodes) delete next.layout[id];
+  syncDetailViewsInPlace(next);
   const checked = validateModel({ ...next, revision: model.revision + 1, parentId: model.revision });
   return checked.ok ? { ok: true, model: checked.model } : { ok: false, errors: checked.errors };
 }

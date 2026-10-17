@@ -1,10 +1,11 @@
 'use client';
 
+import { MAX_DETAIL_VIEWS } from '@archwoven/model';
 import type { InspectorPayload } from './inspector';
 import type { Passport } from './passport';
 import { RenameForm } from './RenameForm';
 
-export function Inspector({ payload, gaps, passport, busy=false, onRename }: { payload: InspectorPayload | null; gaps?: string[]; passport?: Passport | null; busy?:boolean; onRename?:(id:string,label:string)=>void }) {
+export function Inspector({ payload, gaps, passport, busy=false, onRename, detail }: { payload: InspectorPayload | null; gaps?: string[]; passport?: Passport | null; busy?:boolean; onRename?:(id:string,label:string)=>void; detail?: { onOpen: () => void; limitReached: boolean } | null }) {
   if (!payload) {
     if (gaps && gaps.length > 0) {
       return (
@@ -37,6 +38,10 @@ export function Inspector({ payload, gaps, passport, busy=false, onRename }: { p
         </div>
       )}
       {payload.role && <p style={{ fontSize: 13, color: '#8b98b8' }}>{payload.role}</p>}
+      {detail && <div>
+        <button onClick={detail.onOpen} disabled={busy || detail.limitReached} style={{ minHeight: 44, padding: '8px 12px', borderRadius: 8, border: '1px solid #334155', background: 'transparent', color: '#e5e7eb', cursor: 'pointer' }}>Open detail</button>
+        {detail.limitReached && <p style={{ margin: '6px 0 0', fontSize: 12, color: '#94a3b8' }}>Close a detail view to open another (limit {MAX_DETAIL_VIEWS}).</p>}
+      </div>}
       {onRename && <RenameForm key={`${payload.id}:${payload.label}`} id={payload.id} label={payload.label} busy={busy} onRename={onRename}/>}
       {payload.fields && <div style={{ fontSize: 12, overflowWrap: 'anywhere' }}>
         <strong>Fields</strong>

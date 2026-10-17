@@ -2,13 +2,13 @@
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { validFullModelExtended } from '@archwoven/model';
+import { applyEditOps, closeDetailView, openDetailView, undoTo, validFullModelExtended, type SystemModel } from '@archwoven/model';
 import WorkspacePage from './page';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 
 // Layout is covered separately in Canvas tests and the real-browser pass.
-vi.mock('./Canvas', () => ({ Canvas: ({ viewId, model, onSelect }: { viewId: string; model: typeof validFullModelExtended; onSelect: (id: string) => void }) => <><output aria-label="Rendered view">{viewId}</output><output aria-label="Rendered API">{model.nodes.find(n=>n.id==='gateway.api')?.label}</output><button onClick={()=>onSelect('gateway.api')}>Inspect API</button></> }));
+vi.mock('./Canvas', () => ({ Canvas: ({ viewId, model, onSelect, onMove }: { viewId: string; model: typeof validFullModelExtended; onSelect: (id: string) => void; onMove?: unknown }) => <><output aria-label="Rendered view">{viewId}</output><output aria-label="Rendered API">{model.nodes.find(n=>n.id==='gateway.api')?.label}</output><output aria-label="Can move">{String(!!onMove)}</output><button onClick={()=>onSelect('gateway.api')}>Inspect API</button><button onClick={()=>onSelect('entity.user')}>Inspect entity</button><button onClick={()=>onSelect('e.user-api')}>Inspect connection</button></> }));
 const rasterizer = vi.hoisted(() => ({ ensureResvg: vi.fn(), renderPng: vi.fn() }));
 vi.mock('../../probes/render/export', () => rasterizer);
 
@@ -563,4 +563,188 @@ it('discloses when auto-arranging pinned nodes also affects another graph view',
   m.views.push({id:'view.detail',type:'component-detail',focus:'gateway.api',nodes:['gateway.api'],edges:[]});
   window.history.replaceState(null,'','/workspace#model=m1');transport=input=>input==='/api/models/m1'?Response.json({model:m}):undefined;
   await mount();expect(container.querySelector('#orientation-help')?.textContent).toContain('shared nodes in other views');
+});
+
+describe('component detail views', () => {
+  const ok = (r: { ok: true; model: SystemModel } | { ok: false; errors: string[] }) => { if (!r.ok) throw new Error(r.errors.join('; ')); return r.model; };
+  /** Fake server backed by the real model edit functions. */
+  function detailServer(initial: SystemModel = structuredClone(validFullModelExtended)) {
+    let stored = initial;
+    const revisions = new Map([[stored.revision, stored]]);
+    const actions: { type: string }[] = [];
+    let stale: SystemModel | null = null;
+    transport = (input, init) => {
+      if (input === '/api/models/m1' && !init) return Response.json({ model: stored });
+      if (input === '/api/models/m1/edit') {
+        const body = JSON.parse(String(init?.body));
+        actions.push(body.action);
+        if (stale) { stored = stale; stale = null; revisions.set(stored.revision, stored); return Response.json({ reason: 'stale-revision', message: 'The diagram changed elsewhere. Review the latest version and try again.', model: stored }, { status: 409 }); }
+        const a = body.action;
+        const r = a.type === 'detail' ? openDetailView(stored, a.target) : a.type === 'close-detail' ? closeDetailView(stored, a.viewId)
+          : applyEditOps(stored, [{ op: 'update', target: a.target, patch: { label: a.label }, baseRevision: stored.revision, summary: 'rename' }]);
+        if (!r.ok) return Response.json({ errors: r.errors }, { status: 400 });
+        stored = r.model; revisions.set(stored.revision, stored);
+        return Response.json({ model: stored, revision: stored.revision });
+      }
+      if (input === '/api/models/m1/undo') {
+        const body = JSON.parse(String(init?.body));
+        stored = undoTo(stored, revisions.get(body.prevRevision)!); revisions.set(stored.revision, stored);
+        return Response.json({ model: stored });
+      }
+      return undefined;
+    };
+    return { actions, stored: () => stored, staleNext: (m: SystemModel) => { stale = m; } };
+  }
+  const rendered = () => container.querySelector('[aria-label="Rendered view"]')!.textContent;
+  const hashView = () => new URLSearchParams(window.location.hash.slice(1)).get('view');
+  const tabs = () => [...container.querySelectorAll('.aw-view-tabs > button[aria-pressed], .aw-view-tabs > .aw-detail-tab > button[aria-pressed]')].map(b => b.textContent);
+  const button = (text: string) => [...container.querySelectorAll('button')].find(b => b.textContent?.trim() === text);
+  const labelled = (label: string) => container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
+  const press = async (b: HTMLButtonElement | null | undefined) => { expect(b).toBeTruthy(); await act(async () => b!.click()); };
+  beforeEach(() => window.history.replaceState(null, '', '/workspace#model=m1'));
+
+  it('opens a saved detail tab from the inspector and switches to it without inference', async () => {
+    const server = detailServer();
+    await mount();
+    expect(container.querySelector('[aria-label="Can move"]')!.textContent).toBe('true');
+    await click('Inspect API');
+    await press(button('Open detail'));
+    expect(server.actions).toEqual([{ type: 'detail', target: 'gateway.api' }]);
+    expect(rendered()).toBe('detail:gateway.api');
+    expect(hashView()).toBe('detail:gateway.api');
+    expect(tabs()).toEqual(['architecture', 'sequence', 'Data model', 'API Gateway · detail']);
+    expect(container.querySelector('[role="note"].aw-detail-caption')?.textContent).toBe('API Gateway and its direct connections · arranged automatically');
+    expect(container.querySelector('[aria-label="Can move"]')!.textContent).toBe('false');
+    expect(container.textContent).toContain('Detail view opened.');
+    // The canvas keeps its selection when the node is in the new view; the inspector must agree.
+    expect(container.querySelector('input[aria-label="Element name"]')).toBeTruthy();
+    expect(button('Open detail')).toBeUndefined();
+    expect(requests).not.toContain('/api/refine');
+  });
+
+  it('switches to an existing detail tab without writing', async () => {
+    const server = detailServer(ok(openDetailView(structuredClone(validFullModelExtended), 'gateway.api')));
+    window.history.replaceState(null, '', '/workspace#model=m1&view=view.architecture');
+    await mount();
+    await click('Inspect API');
+    await press(button('Open detail'));
+    expect(server.actions).toEqual([]);
+    expect(rendered()).toBe('detail:gateway.api');
+    expect(hashView()).toBe('detail:gateway.api');
+    expect(container.querySelector('input[aria-label="Element name"]')).toBeTruthy();
+  });
+
+  it('offers no detail action for the component whose detail is already showing', async () => {
+    detailServer(ok(openDetailView(structuredClone(validFullModelExtended), 'gateway.api')));
+    window.history.replaceState(null, '', '/workspace#model=m1&view=detail:gateway.api');
+    await mount();
+    await click('Inspect API');
+    expect(container.querySelector('input[aria-label="Element name"]')).toBeTruthy();
+    expect(button('Open detail')).toBeUndefined();
+  });
+
+  it('offers no detail action for data entities or connections', async () => {
+    detailServer();
+    await mount();
+    await click('Inspect entity');
+    expect(button('Open detail')).toBeUndefined();
+    await click('Inspect connection');
+    expect(button('Open detail')).toBeUndefined();
+  });
+
+  it('closes the active detail tab and returns to the first view', async () => {
+    const server = detailServer(ok(openDetailView(structuredClone(validFullModelExtended), 'gateway.api')));
+    window.history.replaceState(null, '', '/workspace#model=m1&view=detail:gateway.api');
+    await mount();
+    expect(rendered()).toBe('detail:gateway.api');
+    await press(labelled('Close API Gateway detail'));
+    expect(server.actions).toEqual([{ type: 'close-detail', viewId: 'detail:gateway.api' }]);
+    expect(rendered()).toBe('view.architecture');
+    expect(hashView()).toBe('view.architecture');
+    expect(tabs()).toEqual(['architecture', 'sequence', 'Data model']);
+  });
+
+  it('falls back to the first view when undo removes the active detail tab', async () => {
+    detailServer();
+    await mount();
+    await click('Inspect API');
+    await press(button('Open detail'));
+    await click('↶ Undo');
+    expect(rendered()).toBe('view.architecture');
+    expect(hashView()).toBe('view.architecture');
+  });
+
+  it('restores a detail tab from the link and falls back when it no longer exists', async () => {
+    detailServer(ok(openDetailView(structuredClone(validFullModelExtended), 'gateway.api')));
+    window.history.replaceState(null, '', '/workspace#model=m1&view=detail:gateway.api');
+    await mount();
+    expect(rendered()).toBe('detail:gateway.api');
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    detailServer();
+    await mount();
+    expect(rendered()).toBe('view.architecture');
+    expect(hashView()).toBe('view.architecture');
+  });
+
+  it('adopts the latest diagram when the open is stale', async () => {
+    const server = detailServer();
+    await mount();
+    const latest = structuredClone(validFullModelExtended);
+    latest.revision = 2; latest.parentId = 1; latest.nodes.find(n => n.id === 'gateway.api')!.label = 'Edge API';
+    server.staleNext(latest);
+    await click('Inspect API');
+    await press(button('Open detail'));
+    expect(rendered()).toBe('view.architecture');
+    expect(container.querySelector('[aria-label="Rendered API"]')!.textContent).toBe('Edge API');
+    expect(container.textContent).toContain('The diagram changed elsewhere');
+  });
+
+  it('relabels the tab and caption when the component is renamed', async () => {
+    detailServer(ok(openDetailView(structuredClone(validFullModelExtended), 'gateway.api')));
+    window.history.replaceState(null, '', '/workspace#model=m1&view=detail:gateway.api');
+    await mount();
+    await click('Inspect API');
+    await fill('input[aria-label="Element name"]', 'Edge Gateway');
+    await click('Save name');
+    expect(tabs().at(-1)).toBe('Edge Gateway · detail');
+    expect(labelled('Close Edge Gateway detail')).toBeTruthy();
+    expect(container.querySelector('.aw-detail-caption')?.textContent).toMatch(/^Edge Gateway and its direct connections/);
+  });
+
+  it('says when a component has no direct connections', async () => {
+    const m = structuredClone(validFullModelExtended);
+    m.semanticChecks = null;
+    m.nodes.push({ id: 'svc.lonely', kind: 'service', label: 'Lonely', provenance: 'proposed', evidence: [] });
+    detailServer(ok(openDetailView(m, 'svc.lonely')));
+    window.history.replaceState(null, '', '/workspace#model=m1&view=detail:svc.lonely');
+    await mount();
+    expect(container.querySelector('.aw-detail-caption')?.textContent).toBe('Lonely and its direct connections · arranged automatically · no direct connections');
+  });
+
+  it('disables opening at the detail-view limit and explains why', async () => {
+    let m = structuredClone(validFullModelExtended);
+    m.semanticChecks = null;
+    for (let i = 0; i < 12; i++) { m.nodes.push({ id: `svc.n${i}`, kind: 'service', label: `N${i}`, provenance: 'proposed', evidence: [] }); m = ok(openDetailView(m, `svc.n${i}`)); }
+    const server = detailServer(m);
+    window.history.replaceState(null, '', '/workspace#model=m1&view=view.architecture');
+    await mount();
+    await click('Inspect API');
+    expect(button('Open detail')?.disabled).toBe(true);
+    expect(container.textContent).toContain('Close a detail view to open another (limit 12).');
+    expect(server.actions).toEqual([]);
+  });
+
+  it('names detail exports with characters every file system accepts', async () => {
+    detailServer(ok(openDetailView(structuredClone(validFullModelExtended), 'gateway.api')));
+    window.history.replaceState(null, '', '/workspace#model=m1&view=detail:gateway.api');
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:detail');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const names: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) { names.push(this.download); });
+    await mount();
+    await click('SVG');
+    await act(async () => { await vi.waitFor(() => expect(names).toHaveLength(1)); });
+    expect(names[0]).toBe('archwoven-detail-gateway.api.svg');
+  });
 });

@@ -1,4 +1,4 @@
-import type { SystemModel, View } from '@archwoven/model';
+import { isDetailView, type SystemModel, type View } from '@archwoven/model';
 import type { LayoutResult, PlacedNode, RoutedEdge } from './layout';
 import { validPosition, type Point } from './direct-edit';
 type Box = Point & {
@@ -119,6 +119,9 @@ function placeCaption(route: RoutedEdge, boxes: Box[]): RoutedEdge['label'] {
     return { ...route.label, ...position };
 }
 export function manualLayout(model: SystemModel, view: View, auto: LayoutResult): LayoutResult {
+    // Positions are a global node-id map (schema v1); detail views never inherit overview placement.
+    if (isDetailView(view))
+        return auto;
     const entries = auto.nodes.filter(node => model.layout && Object.hasOwn(model.layout, node.id));
     if (!entries.length)
         return auto;

@@ -115,6 +115,11 @@ textarea::placeholder, input::placeholder { color: #8290aa; opacity: 1; }
 .aw-route-current { box-shadow: 0 0 0 3px #5eead4; }
 .aw-route-future { box-shadow: 0 0 0 2px rgba(94, 234, 212, 0.25); }
 .aw-chapter-focus { box-shadow: 0 0 0 3px #c4b5fd; }
+.aw-detail-focus { box-shadow: 0 0 0 2px #5eead4; }
+.aw-detail-caption { margin: 0; padding: 4px 12px 8px; font-size: 12px; color: #94a3b8; }
+.aw-detail-tab { display: inline-flex; align-items: stretch; }
+.aw-view-tabs .aw-detail-tab button { text-transform: none; }
+.aw-detail-tab .aw-detail-close { min-width: 44px; min-height: 44px; }
 .react-flow__edge.aw-edge-focus .react-flow__edge-path { stroke-width: 2.5; }
 
 /* M6 node finder palette (§2) */

@@ -15,6 +15,12 @@ export type DirectEdit = {
     type: 'orient';
     viewId: string;
     orientation: 'LR' | 'TB';
+} | {
+    type: 'detail';
+    target: string;
+} | {
+    type: 'close-detail';
+    viewId: string;
 };
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 const keys = (value: Record<string, unknown>, allowed: string[]) => Object.keys(value).every(key => allowed.includes(key));
@@ -42,6 +48,14 @@ export function orientationEdit(raw: unknown, model: SystemModel): Extract<Direc
     const action = raw.action;
     if (action.type !== 'orient' || !keys(action, ['type', 'viewId', 'orientation']) || typeof action.viewId !== 'string' || (action.orientation !== 'LR' && action.orientation !== 'TB')) return null;
     return { type: 'orient', viewId: action.viewId, orientation: action.orientation };
+}
+
+export function detailEdit(raw: unknown, model: SystemModel): Extract<DirectEdit, { type: 'detail' | 'close-detail' }> | null {
+    if (!object(raw) || !keys(raw, ['baseRevision', 'action']) || raw.baseRevision !== model.revision || !object(raw.action)) return null;
+    const action = raw.action;
+    if (action.type === 'detail' && keys(action, ['type', 'target']) && typeof action.target === 'string') return { type: 'detail', target: action.target };
+    if (action.type === 'close-detail' && keys(action, ['type', 'viewId']) && typeof action.viewId === 'string') return { type: 'close-detail', viewId: action.viewId };
+    return null;
 }
 
 /** Read a bounded body rather than trusting Content-Length or buffering arbitrary input. */

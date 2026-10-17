@@ -2,7 +2,7 @@
 
 import { useEffect, useReducer, useRef, useState } from 'react';
 import type { EditOp, SystemModel, ViewType } from '@archwoven/model';
-import { SystemModelSchema } from '@archwoven/model';
+import { SystemModelSchema, MAX_DETAIL_VIEWS, detailViewId, isDetailView, type View } from '@archwoven/model';
 import { initial, next } from './states';
 import type { Mode, Stage } from './states';
 import { ControlPanel, type RepoForm } from './ControlPanel';
@@ -260,7 +260,7 @@ export default function WorkspacePage() {
     try {
       const res = await fetch('/api/refine', {
         method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ modelId, baseRevision: model.revision, instruction, view: model.views.find((v) => v.id === activeView)?.type ?? 'architecture' }),
+        body: JSON.stringify({ modelId, baseRevision: model.revision, instruction, view: (model.views.find((v) => v.id === activeView) ?? model.views[0])?.type ?? 'architecture' }),
       });
       if (res.status === 409) {
         const b = (await res.json()) as { model: SystemModel };
@@ -312,6 +312,24 @@ export default function WorkspacePage() {
     }
   };
 
+  const selectView = (id: string) => {
+    setActiveView(id);
+    const hash = new URLSearchParams(window.location.hash.slice(1));
+    if (id) hash.set('view', id); else hash.delete('view');
+    window.history.replaceState(null, '', `#${hash}`);
+  };
+  // Undo, close, refinement or a stale link can remove the active view: fall back to the first.
+  useEffect(() => {
+    if (model && activeView && !model.views.some(v => v.id === activeView)) selectView(model.views[0]?.id ?? '');
+  }, [model, activeView]);
+
+  const openDetail = (target: string) => {
+    if (!model) return;
+    const existing = model.views.find(v => v.id === detailViewId(target));
+    if (existing && isDetailView(existing)) { selectView(existing.id); return; }
+    void directEdit({ type: 'detail', target });
+  };
+
   const directEdit = async(action:DirectEdit):Promise<boolean> => {
     if(!model||!modelId||mutationRef.current)return false;
     mutationRef.current=true;setRefining(true);setSummary('Saving change…');
@@ -320,7 +338,9 @@ export default function WorkspacePage() {
       if(response.status===409){const body=await response.json();const latest=SystemModelSchema.parse(body.model);setModel(latest);setHistory([latest]);setSummary('The diagram changed elsewhere. Review the latest version and try again.');return false;}
       if(!response.ok){setSummary(await responseMessage(response,'Could not save this change. Try again.'));return false;}
       const accepted=SystemModelSchema.parse((await response.json()).model);
-      setModel(accepted);if(accepted.revision!==model.revision)setHistory(h=>pushHistory(h,accepted));setSummary(action.type==='rename'?'Name saved.':action.type==='orient'?`${action.orientation==='LR'?'Horizontal':'Vertical'} layout saved.`:'Positions saved.');return true;
+      setModel(accepted);if(accepted.revision!==model.revision)setHistory(h=>pushHistory(h,accepted));
+      if(action.type==='detail')selectView(detailViewId(action.target));
+      setSummary(action.type==='rename'?'Name saved.':action.type==='orient'?`${action.orientation==='LR'?'Horizontal':'Vertical'} layout saved.`:action.type==='detail'?'Detail view opened.':action.type==='close-detail'?'Detail view closed.':'Positions saved.');return true;
     }catch{setSummary('Could not save this change. Check your connection and try again.');return false;}
     finally{mutationRef.current=false;setRefining(false);}
   };
@@ -337,10 +357,11 @@ export default function WorkspacePage() {
       }
       return;
     }
-    if (!activeView) return;
+    const viewId = (model.views.find(v => v.id === activeView) ?? model.views[0])?.id;
+    if (!viewId) return;
     setSummary('Preparing export…');
     try {
-      const svg = await buildSvg(model, activeView);
+      const svg = await buildSvg(model, viewId);
       let blob = new Blob([svg], { type: 'image/svg+xml' });
       let ext = 'svg';
       if (kind === 'png') {
@@ -361,7 +382,7 @@ export default function WorkspacePage() {
           ext = 'png';
         } catch { /* fall back to SVG, honestly named and reported below */ }
       }
-      downloadBlob(blob, `archwoven-${activeView}.${ext}`);
+      downloadBlob(blob, `archwoven-${viewId.replace(/[^A-Za-z0-9._-]+/g, '-')}.${ext}`);
       setSummary(kind === 'png' && ext === 'svg' ? 'PNG export unavailable. Downloaded SVG instead.' : `${ext.toUpperCase()} downloaded.`);
     } catch {
       setSummary('Could not export the diagram. Please try again.');
@@ -372,6 +393,13 @@ export default function WorkspacePage() {
   const viewTabs = model?.views ?? [];
   const currentView = viewTabs.find(v => v.id === activeView) ?? viewTabs[0];
   const passport = model && selected ? passportFor(model, selected) : null;
+  const inDetail = !!currentView && isDetailView(currentView);
+  const viewLabel = (v: View) => isDetailView(v) ? `${model?.nodes.find(n => n.id === v.focus)?.label ?? v.focus} · detail` : v.type === 'er' ? 'Data model' : v.type.replace('-', ' ');
+  const selectedNode = model && selected ? model.nodes.find(n => n.id === selected) : undefined;
+  const detailAction = model && selectedNode && selectedNode.kind !== 'entity' && !(inDetail && currentView!.focus === selectedNode.id)
+    ? { onOpen: () => openDetail(selectedNode.id), limitReached: !model.views.some(v => v.id === detailViewId(selectedNode.id)) && model.views.filter(isDetailView).length >= MAX_DETAIL_VIEWS }
+    : null;
+  const focusLabel = inDetail ? model?.nodes.find(n => n.id === currentView!.focus)?.label ?? currentView!.focus! : '';
   const references = model ? sourceReferences(model) : null;
   const exportSources = model && references?.present ? { private: model.privacy.classification === 'private' || model.privacy.boundary === 'local-only', repos: references.repos } : null;
   // Pre-model chip states the deployment's processing location — never a hardcoded claim.
@@ -415,17 +443,18 @@ export default function WorkspacePage() {
         {showCanvas ? (
           <main className="aw-diagram-main" aria-label="Architecture diagram">
             <div className="aw-view-tabs" role="group" aria-label="Diagram views">
-              {viewTabs.map((v) => (
-                <button key={v.id} aria-pressed={v.id === activeView} onClick={() => {
-                  setActiveView(v.id);
-                  const hash = new URLSearchParams(window.location.hash.slice(1));
-                  hash.set('view', v.id);
-                  window.history.replaceState(null, '', `#${hash}`);
-                }}>{v.type === 'er' ? 'Data model' : v.type.replace('-', ' ')}</button>
+              {viewTabs.map((v) => isDetailView(v) ? (
+                <span key={v.id} className="aw-detail-tab">
+                  <button aria-pressed={v.id === currentView?.id} title={viewLabel(v)} onClick={() => selectView(v.id)} style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{viewLabel(v)}</button>
+                  <button className="aw-detail-close" aria-label={`Close ${viewLabel(v).replace(/ · detail$/, '')} detail`} disabled={refining} onClick={() => { void directEdit({ type: 'close-detail', viewId: v.id }); }}>×</button>
+                </span>
+              ) : (
+                <button key={v.id} aria-pressed={v.id === currentView?.id} onClick={() => selectView(v.id)}>{viewLabel(v)}</button>
               ))}
               {currentView && <ArchitectureOrientation model={model} view={currentView} busy={refining} onChange={orientation=>{void directEdit({type:'orient',viewId:currentView.id,orientation});}} />}
             </div>
-            <div style={{ flex: 1, minHeight: 0 }}><Canvas model={model} modelId={modelId ?? ''} viewId={activeView || viewTabs[0]?.id || ''} busy={refining} onMove={positions=>directEdit({type:'move',positions})} onSelect={setSelected} onDeselect={() => setSelected(null)} /></div>
+            {inDetail && <p role="note" className="aw-detail-caption">{focusLabel} and its direct connections · arranged automatically{currentView!.edges.length ? '' : ' · no direct connections'}</p>}
+            <div style={{ flex: 1, minHeight: 0 }}><Canvas model={model} modelId={modelId ?? ''} viewId={currentView?.id ?? ''} busy={refining} onMove={inDetail ? undefined : positions=>directEdit({type:'move',positions})} onSelect={setSelected} onDeselect={() => setSelected(null)} /></div>
             <RefineBar busy={refining} summary={summary} canUndo={history.length > 1} onRefine={refine} onUndo={doUndo} onExport={doExport} sources={exportSources} />
           </main>
         ) : (
@@ -435,7 +464,7 @@ export default function WorkspacePage() {
             {clarification && state.kind === 'running' && <button className="aw-clarification-cancel" onClick={cancelJob}>Cancel</button>}
           </main>
         )}
-        {showCanvas && <Inspector payload={selected ? inspectorFor(model, selected) : null} gaps={state.kind === 'partial' ? state.gaps : undefined} passport={passport} busy={refining} onRename={(target,label)=>{void directEdit({type:'rename',target,label});}} />}
+        {showCanvas && <Inspector payload={selected ? inspectorFor(model, selected) : null} gaps={state.kind === 'partial' ? state.gaps : undefined} passport={passport} busy={refining} detail={detailAction} onRename={(target,label)=>{void directEdit({type:'rename',target,label});}} />}
       </div>
     </div>
   );
