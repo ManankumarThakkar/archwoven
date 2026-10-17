@@ -371,7 +371,7 @@ function GraphCanvas({ model, modelId, viewId, permalinkVersion = 0, onSelect, o
   return (
     <div className="aw-canvas" style={{ width: '100%', height: '100%', position: 'relative' }}>
       <svg aria-hidden="true" width="0" height="0" style={{ position: 'absolute' }}><defs dangerouslySetInnerHTML={{ __html: GRAPH_MARKER_DEFS + ER_MARKER_DEFS }} /></svg>
-      {!!placed.warnings?.length&&<div role="status" style={{position:'absolute',bottom:8,left:64,right:8,zIndex:6,fontSize:12,color:'#fbbf24',background:'#111a2eee',padding:6,borderRadius:6}}>{placed.warnings.join(' ')}</div>}
+      {!!placed.warnings?.length&&<div role="status" aria-label="Layout warnings" tabIndex={0} style={{position:'absolute',bottom:8,left:64,right:12,maxWidth:'calc(100% - 76px)',maxHeight:'35%',overflow:'auto',overflowWrap:'anywhere',boxSizing:'border-box',zIndex:6,fontSize:12,color:'#fbbf24',background:'#111a2eee',padding:6,borderRadius:6}}>{placed.warnings.join(' ')}</div>}
       <div className="aw-canvas-toolbar" style={{ position: 'absolute', top: 36, left: 8, zIndex: 5, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
         <select aria-label="route from" value={probeFrom} onChange={(e) => setProbeFrom(e.target.value)} style={selectCls} disabled={!!probe}>
           <option value="">from…</option>{viewNodes.map((id) => <option key={id} value={id}>{model.nodes.find((n) => n.id === id)?.label ?? id}</option>)}
