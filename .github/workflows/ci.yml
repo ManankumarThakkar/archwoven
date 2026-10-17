@@ -10,6 +10,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Verify visual-review evidence package
+        working-directory: benchmarks/ordinary-model-floor/review
+        run: sha256sum --check SHA256SUMS
       - uses: pnpm/action-setup@v4 # reads packageManager from package.json
       - uses: actions/setup-node@v4
         with:

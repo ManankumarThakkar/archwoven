@@ -19,6 +19,10 @@ next-env.d.ts
 
 # Reference material (third-party screenshots — not committed)
 *.png
+# First-party benchmark review evidence is part of the release handoff.
+!benchmarks/ordinary-model-floor/review/todo-api.png
+!benchmarks/ordinary-model-floor/review/checkout.png
+!benchmarks/ordinary-model-floor/review/boring-crud.png
 
 # SDD scratch (ledgers, briefs, review packages, research notes) — never committed
 .superpowers/
