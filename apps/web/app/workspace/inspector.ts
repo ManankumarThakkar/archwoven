@@ -33,6 +33,10 @@ const ROLE: Record<NodeKind, string> = {
 
 const evidenceLink = (ev: Evidence): EvidenceLink => {
   const file = ev.path?.split('/').pop();
+  if (ev.repo?.startsWith('local/')) {
+    const path = ev.path ?? 'Local source';
+    return { label: `${path}${ev.lines ? `:${ev.lines[0]}-${ev.lines[1]}` : ''}${ev.commit ? ` · commit ${ev.commit.slice(0, 12)}` : ''}`, href: undefined };
+  }
   const label = ev.lines ? `${file ?? ev.path ?? 'source'}:${ev.lines[0]}-${ev.lines[1]}` : file ?? ev.note ?? ev.repo ?? 'source';
   // Pin to the analyzed revision when known (scenario 5), else the default branch.
   const href = ev.repo && ev.path ? `https://github.com/${ev.repo}/blob/${ev.commit ?? 'main'}/${ev.path}${ev.lines ? `#L${ev.lines[0]}` : ''}` : undefined;

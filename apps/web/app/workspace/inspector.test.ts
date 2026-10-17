@@ -23,6 +23,11 @@ const model: SystemModel = {
 };
 
 describe('inspectorFor', () => {
+  it('shows a local commit citation without inventing a GitHub destination', () => {
+    const local = structuredClone(model);
+    local.nodes[0]!.evidence = [{ repo: 'local/shop', commit: 'abc1234', path: 'api/main.py', lines: [1, 2] }];
+    expect(inspectorFor(local, 'svc.orders')!.evidence).toEqual([{ label: 'api/main.py:1-2 · commit abc1234', href: undefined }]);
+  });
   it('preserves entity fields and relationship cardinality in inspection', () => {
     expect(inspectorFor(validFullModel, 'entity.order')?.fields).toEqual(validFullModel.nodes.find(n => n.id === 'entity.order')!.fields);
     expect(inspectorFor(validFullModel, 'er.user-order')?.cardinality).toBe('1:N');

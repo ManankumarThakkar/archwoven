@@ -5,11 +5,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { extractFastApi, extractSpringBoot } from '@archwoven/extract';
 import { ingestLocal, walkLocal } from './local';
+import { commitFixture } from './git-fixtures';
 
 const dirs: string[] = [];
 const tmp = () => { const dir = mkdtempSync(join(tmpdir(), 'aw-source-safety-')); dirs.push(dir); return dir; };
 afterAll(() => { for (const dir of dirs) rmSync(dir, { recursive: true, force: true }); });
-const deps = { revParse: async () => '0123456789abcdef0123456789abcdef01234567', extractFastApi, extractSpringBoot };
+const deps = { revParse: async (dir: string) => commitFixture(dir), extractFastApi, extractSpringBoot };
 const caps = { maxFiles: 100, maxTotalBytes: 10000, maxFileBytes: 1000 };
 
 for (const framework of ['fastapi', 'spring-boot'] as const) {
@@ -119,35 +120,18 @@ it('bounds the combined size of accepted local files and discloses omissions', a
   expect(result.skipped).toEqual([expect.objectContaining({ path: 'b.py', reason: expect.stringMatching(/total.*cap/i) })]);
 });
 
-it('rejects an ancestor directory swapped after canonicalization but before open', async () => {
-  const dir = fs.realpathSync(tmp());
-  const outside = tmp();
+it('reads committed sources when the working directory is redirected before capture', async () => {
+  const dir = fs.realpathSync(tmp()), outside = tmp();
   mkdirSync(join(dir, 'src'));
   writeFileSync(join(dir, 'src/main.py'), 'from fastapi import FastAPI\nApproved = FastAPI()');
   writeFileSync(join(outside, 'main.py'), 'from fastapi import FastAPI\nOutside = FastAPI()');
-  const realpath = fs.realpathSync;
-  let swapped = false;
-  const spy = vi.spyOn(fs, 'realpathSync').mockImplementation((path, ...args) => {
-    const canonical = realpath(path, ...args);
-    if (path === join(dir, 'src/main.py') && !swapped) {
-      swapped = true;
-      renameSync(join(dir, 'src'), join(dir, 'saved'));
-      symlinkSync(outside, join(dir, 'src'));
-    }
-    return canonical;
-  });
-  syncBuiltinESMExports();
-  try {
-    const result = await ingestLocal(dir, deps);
-    expect(swapped).toBe(true);
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.fragment.nodes.some((node) => node.label === 'Outside')).toBe(false);
-    expect(result.gaps.join(' ')).toMatch(/changed|redirected|symlink/);
-  } finally {
-    spy.mockRestore();
-    syncBuiltinESMExports();
-  }
+  const result = await ingestLocal(dir, deps, { onStage: stage => {
+    if (stage !== 'fetching') return;
+    renameSync(join(dir, 'src'), join(dir, 'saved'));
+    symlinkSync(outside, join(dir, 'src'));
+  } });
+  expect(result.ok, JSON.stringify(result)).toBe(true);
+  if (result.ok) expect(result.fragment.nodes.map(node => node.label)).toEqual(['Approved']);
 });
 
 
@@ -175,5 +159,5 @@ it('does not follow a clone root replaced with a directory symlink before enumer
 it('never enumerates a sibling directory during a scoped import',async()=>{
   const dir=fs.realpathSync(tmp());mkdirSync(join(dir,'outside'));mkdirSync(join(dir,'api'));writeFileSync(join(dir,'outside/a.go'),'package outside');writeFileSync(join(dir,'api/main.go'),'package api');
   const original=fs.readdirSync;const visited:string[]=[];const spy=vi.spyOn(fs,'readdirSync').mockImplementation(((path:fs.PathLike,...args:unknown[])=>{visited.push(String(path));return Reflect.apply(original,fs,[path,...args]);}) as typeof fs.readdirSync);
-  syncBuiltinESMExports();try{const result=await ingestLocal(dir,deps,{subdir:'api'});expect(result.ok).toBe(true);expect(visited).toEqual([join(dir,'api')]);}finally{spy.mockRestore();syncBuiltinESMExports();}
+  syncBuiltinESMExports();try{const result=await ingestLocal(dir,deps,{subdir:'api'});expect(result.ok).toBe(true);expect(visited).toEqual([]);}finally{spy.mockRestore();syncBuiltinESMExports();}
 });

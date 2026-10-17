@@ -98,6 +98,13 @@ machine running Archwoven; with Docker, mount your code read-only (see the comme
 answers requests addressed to `localhost`/`127.0.0.1` from the same origin, so other sites and
 devices on your network cannot trigger or read imports.
 
+Local folder imports require git on the server (included in the Docker image). Enter the
+clone root and use **Subdirectory** to narrow the analysis. Imports read the checked-out
+commit directly from git: staged, unstaged and untracked changes are excluded. Commit changes
+you want included, then import again. Missing git objects are reported; imports do not fetch
+them automatically or run checkout filters. Local citations show the captured path and commit
+without linking a local folder to GitHub.
+
 The privacy promise is tested, not asserted: egress guard refuses hosted APIs before
 DNS (§9), local jobs route to Ollama only, privacy is server-stamped from deploy
 mode, exports carry no evidence paths, and the same suite runs green in both modes
