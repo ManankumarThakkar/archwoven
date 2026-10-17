@@ -1,0 +1,45 @@
+{
+  "nodes": [
+    { "kind": "gateway", "label": "app" },
+    { "kind": "service", "label": "api_router" },
+    { "kind": "service", "label": "items-router" },
+    { "kind": "service", "label": "users-router" },
+    { "kind": "service", "label": "admin-router" },
+    { "kind": "service", "label": "legacy-router" },
+    { "kind": "service", "label": "BillingService" },
+    { "kind": "service", "label": "AuditService" },
+    { "kind": "external", "label": "billing.example.com" },
+    { "kind": "datastore", "label": "PostgreSQL" },
+    { "kind": "entity", "label": "user" },
+    { "kind": "entity", "label": "inventory_items" }
+  ],
+  "edges": [
+    ["app", "api_router"],
+    ["app", "admin-router"],
+    ["api_router", "items-router"],
+    ["api_router", "users-router"],
+    ["items-router", "PostgreSQL"],
+    ["items-router", "BillingService"],
+    ["items-router", "AuditService"],
+    ["users-router", "PostgreSQL"],
+    ["BillingService", "billing.example.com"],
+    ["AuditService", "PostgreSQL"],
+    ["inventory_items", "user"]
+  ],
+  "endpoints": [
+    ["GET", "/healthz"],
+    ["GET", "/api/v1/items/"],
+    ["GET", "/api/v1/items/{item_id}"],
+    ["HEAD", "/api/v1/items/{item_id}"],
+    ["POST", "/api/v1/items/"],
+    ["GET", "/api/v1/accounts/users/me"],
+    ["GET", "/api/v1/accounts/users/"],
+    ["DELETE", "{settings.ADMIN_PREFIX}/cache"],
+    ["GET", "/legacy/ping"]
+  ],
+  "gaps": [
+    "settings.API_PREFIX resolved to its declared default \"/api/v1\"",
+    "computed prefix settings.ADMIN_PREFIX",
+    "legacy-router is not included"
+  ]
+}

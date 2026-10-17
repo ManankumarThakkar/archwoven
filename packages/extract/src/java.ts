@@ -1,4 +1,5 @@
 import type { EdgeType, NodeKind } from '@archwoven/model';
+import type { Node as SyntaxNode } from 'web-tree-sitter';
 import { getParser, loadSources, parseSource, evidence, visit, childOfType, type SourceInventory } from './loader';
 import type { Fragment } from './fragment';
 import { deriveSemanticChecks } from './fragment';
@@ -12,6 +13,8 @@ const CLASS_KINDS: Record<string, NodeKind> = {
   Component: 'component',
 };
 
+const RELATIONS: Record<string, string> = { ManyToOne: 'N:1', OneToOne: 'N:1', OneToMany: '1:N', ManyToMany: 'N:M' };
+
 const MAPPING_METHOD: Record<string, string> = {
   GetMapping: 'GET',
   PostMapping: 'POST',
@@ -20,6 +23,34 @@ const MAPPING_METHOD: Record<string, string> = {
   PatchMapping: 'PATCH',
 };
 
+const HTTP_VERBS = /\b(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS|TRACE)\b/g;
+
+/** Annotation elements by name; a lone positional element is `value`. */
+const elements = (args?: SyntaxNode | null): Map<string, SyntaxNode> => {
+  const out = new Map<string, SyntaxNode>();
+  for (const c of args?.namedChildren ?? []) {
+    if (c.type === 'element_value_pair') out.set(c.childForFieldName('key')!.text, c.childForFieldName('value')!);
+    else if (c.type !== 'comment') out.set('value', c);
+  }
+  return out;
+};
+/** Mapping paths of an annotation: string literals, arrays of them, or `{CONSTANT}` placeholders for references. */
+const mappingPaths = (args: SyntaxNode | null | undefined, onUnresolved: (expr: string) => void): string[] => {
+  const el = elements(args);
+  const value = el.get('value') ?? el.get('path');
+  if (!value) return [''];
+  const items = value.type === 'element_value_array_initializer' ? value.namedChildren.filter((c) => c.type !== 'comment') : [value];
+  return items.map((n) => {
+    if (n.type === 'string_literal') return n.text.replace(/^"|"$/g, '');
+    onUnresolved(n.text);
+    return `{${n.text}}`;
+  });
+};
+/** Spring's path rule: a missing leading slash is added and a trailing one dropped (`"tags/"` serves `/tags`). */
+const slashed = (path: string): string => {
+  const trimmed = path.replace(/\/+$/, '');
+  return trimmed && !trimmed.startsWith('/') ? `/${trimmed}` : trimmed;
+};
 const stringsIn = (text: string): string[] => [...text.matchAll(/"([^"]*)"/g)].map((m) => m[1]!);
 
 const DATASTORES: [RegExp, string][] = [
@@ -27,6 +58,14 @@ const DATASTORES: [RegExp, string][] = [
   [/jdbc:mysql/i, 'MySQL'],
   [/jdbc:mariadb/i, 'MariaDB'],
   [/mongodb:/i, 'MongoDB'],
+  [/jdbc:h2:/i, 'H2'],
+  [/jdbc:hsqldb:/i, 'HSQLDB'],
+];
+/** Embedded databases Spring Boot configures itself when the default profile names no datasource URL. */
+const EMBEDDED: [RegExp, string][] = [
+  [/<artifactId>h2<\/artifactId>|['"]com\.h2database:h2\b/, 'H2'],
+  [/<artifactId>hsqldb<\/artifactId>|['"]org\.hsqldb:hsqldb\b/, 'HSQLDB'],
+  [/<artifactId>derby<\/artifactId>|['"]org\.apache\.derby:derby\b/, 'Derby'],
 ];
 
 /**
@@ -35,7 +74,7 @@ const DATASTORES: [RegExp, string][] = [
  * Placeholders (${VAR}) and dynamic wiring become explicit gaps — never guesses.
  */
 export async function extractSpringBoot(dir: string, inventory?: SourceInventory): Promise<Fragment> {
-  const sources = loadSources(dir, ['.java', '.yml', '.yaml', '.properties'], inventory);
+  const sources = loadSources(dir, ['.java', '.yml', '.yaml', '.properties', 'pom.xml', 'build.gradle', 'build.gradle.kts'], inventory);
   const parser = await getParser('java');
   const frag: Fragment = { nodes: [], edges: [], endpoints: [], gaps: [] };
   const seen = new Set<string>();
@@ -43,6 +82,10 @@ export async function extractSpringBoot(dir: string, inventory?: SourceInventory
   const controllerIds = new Set<string>();
   const requiredKeys = new Set<string>();
   const requiredEdges: { from: string; to: string; type: 'sync' }[] = [];
+  const unresolvedPath = (rel: string) => (expr: string) => {
+    const gap = `mapping path ${expr} in ${rel} — not statically resolved`;
+    if (!frag.gaps.includes(gap)) frag.gaps.push(gap);
+  };
 
   const addNode = (id: string, kind: NodeKind, label: string, ev: Fragment['nodes'][0]['evidence'][0]) => {
     if (seen.has(id)) return;
@@ -64,7 +107,7 @@ export async function extractSpringBoot(dir: string, inventory?: SourceInventory
       if (!modifiers) return;
 
       let kind: NodeKind | undefined;
-      let classPrefix = '';
+      let classPrefixes = [''];
       const injected: string[] = [];
       let lombokCtor = false;
 
@@ -73,7 +116,7 @@ export async function extractSpringBoot(dir: string, inventory?: SourceInventory
         const ann = mod.childForFieldName('name')?.text ?? '';
         const args = mod.childForFieldName('arguments')?.text ?? '';
         if (CLASS_KINDS[ann]) kind = CLASS_KINDS[ann];
-        if (ann === 'RequestMapping') classPrefix = stringsIn(args)[0] ?? '';
+        if (ann === 'RequestMapping') classPrefixes = mappingPaths(mod.childForFieldName('arguments'), unresolvedPath(relPath));
         if (ann === 'RequiredArgsConstructor' || ann === 'AllArgsConstructor') lombokCtor = true;
       }
       if (!kind) return;
@@ -115,11 +158,17 @@ export async function extractSpringBoot(dir: string, inventory?: SourceInventory
             if (mod.type !== 'marker_annotation' && mod.type !== 'annotation') continue;
             const ann = mod.childForFieldName('name')?.text ?? '';
             const annArgs = mod.childForFieldName('arguments')?.text ?? '';
-            const method = MAPPING_METHOD[ann];
-            if (method) {
-              const raw = (stringsIn(annArgs)[0] ?? '').replace(/\/+$/, '');
-              const full = classPrefix + (raw.startsWith('/') ? raw : raw ? `/${raw}` : '');
-              frag.endpoints.push({ method, path: full === '' ? '/' : full, evidence: evidence(relPath, md) });
+            const verbs = MAPPING_METHOD[ann] ? [MAPPING_METHOD[ann]]
+              : ann === 'RequestMapping' ? [...new Set([...(elements(mod.childForFieldName('arguments')).get('method')?.text ?? '').matchAll(HTTP_VERBS)].map((v) => v[1]!))] : undefined;
+            if (verbs) {
+              for (const prefix of classPrefixes) {
+                for (const p of mappingPaths(mod.childForFieldName('arguments'), unresolvedPath(relPath))) {
+                  const full = slashed(prefix) + slashed(p);
+                  for (const method of verbs.length ? verbs : ['ANY']) {
+                    frag.endpoints.push({ method, path: full === '' ? '/' : full, evidence: evidence(relPath, md) });
+                  }
+                }
+              }
               controllerIds.add(nodeId);
             }
             if ((ann === 'KafkaListener' || ann === 'RabbitListener') && !/class_declaration/.test(md.parent?.type ?? '')) {
@@ -140,16 +189,17 @@ export async function extractSpringBoot(dir: string, inventory?: SourceInventory
             }
           }
         });
-        // Entity owning-side relations (ManyToOne/OneToOne); inverse sides labeled in gaps
+        // Entity owning-side relations; inverse sides (mappedBy) repeat a relation the owner already states
         if (kind === 'entity') {
           visit(body, 'field_declaration', (fd) => {
-            const mods = childOfType(fd, 'modifiers');
-            const rel = mods?.children.some(
-              (m) => (m.type === 'marker_annotation' || m.type === 'annotation') &&
-                (m.childForFieldName('name')?.text === 'ManyToOne' || m.childForFieldName('name')?.text === 'OneToOne'),
-            );
             const type = fd.childForFieldName('type')?.text;
-            if (rel && type) addEdge(nodeId, `java.${type}`, 'relation', 'N:1', evidence(relPath, fd));
+            for (const m of childOfType(fd, 'modifiers')?.children ?? []) {
+              if (m.type !== 'marker_annotation' && m.type !== 'annotation') continue;
+              const cardinality = RELATIONS[m.childForFieldName('name')?.text ?? ''];
+              if (!cardinality || !type || elements(m.childForFieldName('arguments')).has('mappedBy')) continue;
+              const target = cardinality === 'N:1' ? type : /<\s*(?:[\w.]+\s*,\s*)?([\w.]+)\s*>/.exec(type)?.[1]?.replace(/^.*\./, '');
+              if (target) addEdge(nodeId, `java.${target}`, 'relation', cardinality, evidence(relPath, fd));
+            }
           });
         }
       }
@@ -204,6 +254,25 @@ export async function extractSpringBoot(dir: string, inventory?: SourceInventory
     }
     for (const m of text.matchAll(/\$\{([A-Z0-9_.]+)\}/g)) {
       frag.gaps.push(`unresolved placeholder \${${m[1]}} in ${rel} — runtime value not statically provable`);
+    }
+  }
+  // Embedded database from a non-test build dependency, used only when the default profile names no URL
+  const defaultConfig = [...sources].filter(([rel]) => /(?:^|\/)application\.(?:ya?ml|properties)$/.test(rel)).map(([, text]) => text).join('\n');
+  const configuresUrl = /^[ \t]*[^#\s].*(?:jdbc:|mongodb:|datasource\.url[ \t]*[=:])/m.test(defaultConfig)
+    || /^[ \t]*datasource:[ \t]*\n(?:[ \t]+.*\n)*?[ \t]+url:/m.test(defaultConfig);
+  for (const [rel, text] of sources) {
+    if (configuresUrl || !/(?:^|\/)(?:pom\.xml|build\.gradle(?:\.kts)?)$/.test(rel)) continue;
+    const blocks = rel.endsWith('pom.xml')
+      ? [...text.matchAll(/<dependency>[\s\S]*?<\/dependency>/g)].filter((b) => !/<scope>\s*test\s*<\/scope>/.test(b[0]))
+      : [...text.matchAll(/^[ \t]*(?!test)\w+[ \t(]+['"][^'"\n]+['"].*$/gm)];
+    for (const b of blocks) {
+      const name = EMBEDDED.find(([re]) => re.test(b[0]))?.[1];
+      if (!name || datastores.some((d) => d.name === name)) continue;
+      const start = text.slice(0, b.index).split('\n').length;
+      const ev = { path: rel, lines: [start, start + b[0].split('\n').length - 1] as [number, number] };
+      const id = `java.datastore.${name.toLowerCase()}`;
+      addNode(id, 'datastore', name, ev);
+      datastores.push({ id, name, ev });
     }
   }
   if (datastores.length === 1) {

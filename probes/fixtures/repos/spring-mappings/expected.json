@@ -1,0 +1,30 @@
+{
+  "nodes": [
+    { "kind": "service", "label": "CatalogController" },
+    { "kind": "service", "label": "CatalogService" },
+    { "kind": "service", "label": "CatalogRepository" },
+    { "kind": "entity", "label": "Catalog" },
+    { "kind": "entity", "label": "Item" },
+    { "kind": "entity", "label": "Shelf" },
+    { "kind": "entity", "label": "Tag" },
+    { "kind": "datastore", "label": "H2" }
+  ],
+  "edges": [
+    ["CatalogController", "CatalogService"],
+    ["CatalogService", "CatalogRepository"],
+    ["CatalogRepository", "H2"],
+    ["Catalog", "Tag"],
+    ["Item", "Catalog"],
+    ["Shelf", "Item"]
+  ],
+  "endpoints": [
+    ["GET", "/catalog/items"], ["GET", "/v2/catalog/items"],
+    ["PUT", "/catalog/items/{id}"], ["PATCH", "/catalog/items/{id}"], ["PUT", "/catalog/products/{id}"], ["PATCH", "/catalog/products/{id}"],
+    ["PUT", "/v2/catalog/items/{id}"], ["PATCH", "/v2/catalog/items/{id}"], ["PUT", "/v2/catalog/products/{id}"], ["PATCH", "/v2/catalog/products/{id}"],
+    ["GET", "/catalog/search"], ["GET", "/v2/catalog/search"],
+    ["POST", "/catalog/import"], ["POST", "/v2/catalog/import"],
+    ["ANY", "/catalog/legacy"], ["ANY", "/v2/catalog/legacy"],
+    ["DELETE", "/catalog"], ["DELETE", "/v2/catalog"]
+  ],
+  "gaps": []
+}
