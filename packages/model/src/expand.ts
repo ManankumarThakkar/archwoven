@@ -3,6 +3,7 @@ import { detailViewId, isDetailView, MAX_DETAIL_VIEWS, syncDetailViewsInPlace } 
 import { internalsOf, isInternal } from './groups';
 import { EdgeTypeSchema, type Edge, type SystemModel } from './schema';
 import { validateModel } from './validate';
+import { reconcileReferences } from './reconcile';
 
 export const MIN_INTERNALS = 2;
 export const MAX_INTERNALS = 8;
@@ -84,11 +85,6 @@ function ruleErrors(model: SystemModel, focus: string, e: z.output<typeof Expans
         ? `${name}'s link ${x.id} (${x.from}→${x.to}, ${x.type}) is not covered: add a ${x.type} link from an internal to "${x.to}".`
         : `${name}'s link ${x.id} (${x.from}→${x.to}, ${x.type}) is not covered: add a ${x.type} link from "${x.from}" to an internal.`);
   }
-  const checks = model.semanticChecks;
-  for (const i of e.internals) {
-    if (checks?.allowedRoots.length && !e.links.some(l => l.to === i.key)) errors.push(`internal "${i.key}" needs an incoming link; this model checks that every component is reached.`);
-    if (checks?.allowedTerminals.length && !e.links.some(l => l.from === i.key)) errors.push(`internal "${i.key}" needs an outgoing link; this model checks that every component leads somewhere.`);
-  }
   return [...new Set(errors)];
 }
 
@@ -123,6 +119,9 @@ export function applyExpansion(model: SystemModel, focus: string, raw: unknown):
   }
   if (!next.views.some(v => v.id === detailViewId(focus)))
     next.views.push({ id: detailViewId(focus), type: 'component-detail', focus, nodes: [], edges: [] });
+  // Leaf parts are legitimate sources or sinks; root/terminal lists stay server-maintained.
+  const refusals = reconcileReferences(model, next);
+  if (refusals.length) return { ok: false, errors: refusals };
   syncDetailViewsInPlace(next);
   const checked = validateModel({ ...next, revision: model.revision + 1, parentId: model.revision });
   return checked.ok ? { ok: true, model: checked.model } : { ok: false, errors: checked.errors };

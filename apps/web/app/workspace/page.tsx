@@ -254,8 +254,9 @@ export default function WorkspacePage() {
     // the poll observes `cancelled` and dispatches CANCEL — no double transition here
   };
 
-  const refine = async (instruction: string) => {
-    if (!model || !modelId || mutationRef.current) return;
+  /** Resolves true only when a revision was saved, so the bar keeps the instruction otherwise. */
+  const refine = async (instruction: string): Promise<boolean> => {
+    if (!model || !modelId || mutationRef.current) return false;
     mutationRef.current=true;
     setRefining(true);
     try {
@@ -269,21 +270,23 @@ export default function WorkspacePage() {
         setHistory([b.model]);
         setSummary('The diagram changed elsewhere — showing the latest version.');
         dispatch({ type: 'REBASE', modelId, revision: b.model.revision });
-        return;
+        return false;
       }
       if (res.status === 429) {
         const q = (await res.json()) as { reason: string; message?: string; resetAt?: number };
         dispatch({ type: 'QUOTA_BLOCKED', reason: q.reason, resetAt: q.resetAt ?? Date.now() + 60_000, message: q.message ?? '' });
-        return;
+        return false;
       }
-      if (!res.ok) { setSummary(await responseMessage(res, 'Refinement failed. Please try again.')); return; }
+      if (!res.ok) { setSummary(await responseMessage(res, 'Refinement failed. Please try again.')); return false; }
       const { ops, model: nextModel, remaining } = (await res.json()) as { ops: EditOp[]; model: SystemModel; remaining?: number };
       setHistory((h) => pushHistory(h, nextModel));
       setModel(nextModel);
       setSummary(summarizeOps(ops));
       if (typeof remaining === 'number') setRemaining(remaining);
+      return true;
     } catch {
       setSummary('Could not refine the diagram. Check your connection before trying again.');
+      return false;
     } finally {
       mutationRef.current=false;
       setRefining(false);

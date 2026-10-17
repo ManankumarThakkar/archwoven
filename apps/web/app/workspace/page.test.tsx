@@ -854,3 +854,34 @@ describe('expanding internals', () => {
     expect(container.querySelector('[role="status"].aw-detail-drift')?.textContent).toContain('API Gateway now also connects to Redis Cache (data); its internals don’t show which part does.');
   });
 });
+
+describe('refinement refusals keep the instruction', () => {
+  beforeEach(() => window.history.replaceState(null, '', '/workspace#model=m1'));
+  const instruction = () => container.querySelector<HTMLInputElement>('input[aria-label="Refinement instruction"]')!.value;
+
+  it('shows the server reason and keeps the typed instruction when nothing was saved', async () => {
+    transport = (input, init) => {
+      if (input === '/api/models/m1' && !init) return Response.json({ model: validFullModelExtended });
+      if (input === '/api/refine') return Response.json({ reason: 'refine-failed', errors: ['Customer → API Gateway is backed by source evidence and can\'t be removed by refinement.'] }, { status: 502 });
+      return undefined;
+    };
+    await mount();
+    await fill('input[aria-label="Refinement instruction"]', 'Remove the link from Customer to API Gateway');
+    await click('Refine');
+    expect(container.textContent).toContain('Customer → API Gateway is backed by source evidence and can\'t be removed by refinement.');
+    expect(instruction()).toBe('Remove the link from Customer to API Gateway');
+  });
+
+  it('clears the instruction once the refinement is saved', async () => {
+    const refined = structuredClone(validFullModelExtended); refined.revision = 2; refined.parentId = 1;
+    transport = (input, init) => {
+      if (input === '/api/models/m1' && !init) return Response.json({ model: validFullModelExtended });
+      if (input === '/api/refine') return Response.json({ ops: [{ op: 'update', target: 'gateway.api', patch: { label: 'Edge' }, baseRevision: 1, summary: 'Rename' }], model: refined, revision: 2, remaining: 5.75 });
+      return undefined;
+    };
+    await mount();
+    await fill('input[aria-label="Refinement instruction"]', 'Rename the gateway');
+    await click('Refine');
+    expect(instruction()).toBe('');
+  });
+});

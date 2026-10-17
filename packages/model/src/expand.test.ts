@@ -57,7 +57,7 @@ describe('applying a valid expansion', () => {
     const before = base();
     const after = ok(applyExpansion(before, 'svc.orders', valid()));
     expect(after.views.filter(v => !v.id.startsWith('detail:'))).toEqual(before.views);
-    expect(after.semanticChecks).toEqual(before.semanticChecks);
+    expect(after.semanticChecks).toEqual(before.semanticChecks); // every internal here has both links, so no list changes
     expect(after.boundaries).toEqual(before.boundaries);
   });
 
@@ -120,13 +120,21 @@ describe('expansion rules', () => {
     ['an inward link from a neighbour that only receives from the focus', e => { e.links.push({ from: 'external.stripe', to: 'payments', type: 'sync' }); }, /no sync link from "external\.stripe" to Order Service/],
     ['an inward link of the wrong type', e => { e.links.push({ from: 'gateway.api', to: 'payments', type: 'async' }); }, /no async link from "gateway\.api" to Order Service/],
     ['an uncovered focus link', e => { e.links = e.links.filter(l => l.to !== 'external.stripe'); e.links.push({ from: 'payments', to: 'store', type: 'data' }); }, /e\.orders-stripe.*not covered: add a sync link from an internal to "external\.stripe"/],
-    ['an internal without an incoming link when roots are checked', e => { e.links = e.links.filter(l => l.from !== 'intake' || l.to !== 'store'); e.links.push({ from: 'store', to: 'payments', type: 'sync' }); }, /"store" needs an incoming link/],
-    ['an internal without an outgoing link when terminals are checked', e => { e.links = e.links.filter(l => l.to !== 'datastore.postgres'); e.links.push({ from: 'payments', to: 'datastore.postgres', type: 'data' }); }, /"store" needs an outgoing link/],
   ];
   it.each(cases)('rejects %s with an actionable message', (_name, mutate, message) => {
     const e = valid();
     mutate(e);
     expect(fails(applyExpansion(base(), 'svc.orders', e))).toMatch(message);
+  });
+
+  it('accepts a leaf part on a checked model and lists it as a terminal instead of forcing a link', () => {
+    const e = valid();
+    e.internals.push({ key: 'audit', label: 'Audit Log' });
+    e.links.push({ from: 'intake', to: 'audit', type: 'async' });
+    const after = ok(applyExpansion(base(), 'svc.orders', e));
+    expect(after.semanticChecks!.allowedTerminals).toContain('svc.orders/audit');
+    expect(after.semanticChecks!.allowedRoots).not.toContain('svc.orders/audit');
+    expect(after.semanticChecks!.requiredEdges).toEqual(base().semanticChecks!.requiredEdges);
   });
 
   it('does not require incoming or outgoing links when the model has no root or terminal checks', () => {

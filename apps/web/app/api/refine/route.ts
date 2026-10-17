@@ -1,5 +1,5 @@
 import { reserve, refundCredits, recordUsage } from '@archwoven/jobs';
-import { applyEditOps, type ViewType } from '@archwoven/model';
+import { applyEditOps, sameModelContent, type ViewType } from '@archwoven/model';
 import {
   serverDeps, readOrCreateSession, sessionCookie, tierOf,
   creditsExhaustedCopy, STOP_LOSS_COPY, BURST_COPY,
@@ -72,6 +72,12 @@ export async function POST(req: Request) {
     return Response.json({ reason: 'refine-failed', errors: applied.errors }, { status: 502, headers });
   }
 
+  // A batch that changes nothing must not cost a credit or add an empty revision.
+  if (sameModelContent(applied.model, current)) {
+    refundCredits(serverDeps.store, sessionId, day, 0.25);
+    recordUsage(serverDeps.store, { sessionId, tier, action: 'refine', usage: out.usage, retries: out.usage.repairs, outcome: 'failed' });
+    return Response.json({ reason: 'no-change', message: 'This instruction did not change the diagram, so nothing was saved and no credit was used.' }, { status: 422, headers });
+  }
   serverDeps.store.saveRevision(modelId, applied.model, sessionId);
   recordUsage(serverDeps.store, { sessionId, tier, action: 'refine', usage: out.usage, retries: out.usage.repairs, outcome: out.usage.repairs > 0 ? 'repaired' : 'ok' });
 
