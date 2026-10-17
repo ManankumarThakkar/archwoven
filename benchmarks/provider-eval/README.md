@@ -42,8 +42,24 @@ Run against an isolated production build on one machine, cases one at a time, wi
 
 The assembled diagrams kept everything the extractor found and claimed nothing extra as source-supported. The template misses are the extractor's known SMTP and Sentry gaps (`docs/EXTRACTION-GROUND-TRUTH.md`). This covers two repositories whose extractor output was tuned against the same truth, so it measures assembly faithfulness, not extraction on unseen code.
 
-### Why first attempts fail
+### Why first attempts failed (fixed in task 19b)
 
 A follow-up diagnostic replayed four descriptions (one per diagram type, about $0.7, outside the metered run) and recorded the validator feedback for every repair. In all four, the first schema-valid attempt failed for one reason: every `evidence` entry was free text, for example `"evidenceJson": "[\"User: an HTTP controller\"]"`, where the schema requires evidence objects. One attempt also returned output that was not valid JSON.
 
-The cause is the hosted prompt contract. It carries the API-grammar workaround that sends evidence as an opaque JSON-encoded string, so the element shape never reaches the model. Hosted generation does not use the grammar. Every description and import therefore pays at least one repair round. This is recorded in `docs/OPEN-GAPS.md` and is the next fix, to be measured against this baseline.
+The cause was the hosted prompt contract. It carried the API-grammar workaround that sends evidence as an opaque JSON-encoded string, so the element shape never reached the model. Hosted generation does not use the grammar, so every description and import paid at least one repair round.
+
+## After the fix: 2026-10-17, task 19b
+
+Hosted descriptions and imports now receive the same native-values contract as the local model, so evidence objects, ER fields and sequence values are all visible in the schema. The prompt is slightly smaller (8,345 against 8,475 characters). A second diagnostic then found the remaining repairs: complete models wrapped in one Markdown ```` ```json ```` fence. Exactly that wrapper is now removed before parsing; any other surrounding text still goes through repair.
+
+Both steps were measured on a subset of the same cases (approved cap $1.50; $0.97 metered plus about $0.21 estimated for the diagnostic). Results are in `results/2026-10-17-hosted-19b-*`.
+
+| same 7 descriptions | valid on first attempt | latency median / max | cost |
+|---|---|---|---|
+| task 19 baseline | 0 / 7 | 33.8 / 59.2 s | $0.76 |
+| evidence contract only | 3 / 7 | 19.4 / 50.4 s | $0.48 |
+| evidence contract and fence unwrap | **7 / 7** | **14.2 / 29.1 s** | **$0.27** |
+
+- **The 7 cases:** the three Suite A prompts, one more architecture case, and one sequence, one ER and one component case. All 7 diagrams validate and the Suite A gates passed 3/3 in both subset runs.
+- **The import and the refinement** ran only in the evidence-only subset. The FastAPI template import kept its baseline accuracy (10/12 nodes, 12/16 edges, 100 % source-supported precision) but still needed one repair; that run predates the fence fix, so import first-pass validity after both fixes is unmeasured. The refinement needed one repair (baseline 5/6 first-pass); refinements use the API grammar and are unaffected by either change.
+- **Sample size:** seven cases show the failure mode is gone; they do not give a first-pass rate for every prompt.

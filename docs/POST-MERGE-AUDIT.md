@@ -777,3 +777,40 @@ Because the workspace opens a diagram's latest revision, the first capture showe
 App source is unchanged.
 
 Artifacts outside version control are in the session scratchpad (`eval`). No database, key or session cookie is committed: the committed results contain prompts, model shapes, usage and diagrams only.
+
+## Task 19b — hosted first-pass validity
+
+2026-10-17, America/Chicago. Branch `fix/hosted-evidence-contract`, based on merged PR #35 at `77d0a25`. Real-provider spend was approved up to $1.50 for a subset. Details: [benchmarks/provider-eval/README.md](../benchmarks/provider-eval/README.md).
+
+**Before.** Task 19 measured 0 of 20 hosted descriptions and 0 of 4 imports valid on the first attempt. Every first schema-valid attempt carried free-text evidence, because the hosted prompt described `evidence` as an opaque JSON-encoded string. That encoding is a workaround for the API's structured-output grammar, which hosted generation does not use. The grammar schema (`faithfulSchema`) is now referenced only by its own test; it is pre-existing and left in place.
+
+**Changes.**
+- **Shared contract:** hosted descriptions (`STABLE_SYSTEM`) and imports (`REPO_SYSTEM`) use the same native-values contract as the local model, so evidence objects, ER fields and sequence values are visible. The wire decoder stays, so older-style output still parses. The prompt is 130 characters smaller.
+- **Fence unwrap:** a measured second cause was complete models wrapped in one Markdown code fence. `unfenced` removes exactly that wrapper before parsing on both paths; prose around the JSON, or two fenced blocks, still go through repair. Refinement and expansion use the API grammar and are unchanged.
+
+**Tests and mutations.**
+- One existing test asserted the hosted contract contained `evidenceJson`, which pinned the defect; it is replaced.
+- New tests check that:
+  - the hosted contract shows the evidence, field and sequence shapes
+  - native evidence passes with no repair, while wire output still decodes
+  - the import contract shows the evidence shape
+  - a fenced answer needs no repair, for descriptions and imports
+  - text around a fence, or two fenced blocks, still triggers a repair
+- Before the changes, the contract tests and the fence tests failed. Restoring an encoded evidence key in the import prompt fails its test.
+
+Final checks:
+- 1,080 hosted tests passed; local 1,056 passed with 24 expected skips
+- typechecks and selftests passed
+- the isolated production builds used for the runs succeeded
+
+**Live measurement** (isolated production builds on loopback, hosted `claude-opus-5-5`, ports confirmed free and each server confirmed to hold its own database):
+- **Same 7 descriptions:**
+  - first-attempt validity 0/7 → 3/7 with the contract fix → 7/7 with both fixes
+  - median latency 33.8 → 19.4 → 14.2 s
+  - cost $0.76 → $0.48 → $0.27
+  - every diagram validates; Suite A gates passed 3/3 in both runs
+- **Diagnostics:** a two-step diagnostic attributed the remaining repairs to fenced output. It cost about $0.21 (estimated), outside the metered runs.
+- **Import and refinement:** both ran before the fence fix. The import kept its task 19 accuracy at 100 % source-supported precision, but needed one repair. Import first-pass validity after both fixes is unmeasured and recorded in `OPEN-GAPS.md`.
+- **Spend:** $0.97 metered, plus about $0.21 estimated.
+
+Artifacts outside version control are in the session scratchpad (`eval`, `eval2`, `eval3`). Committed results contain prompts, model shapes, usage and diagrams only.

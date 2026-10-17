@@ -1,0 +1,146 @@
+{
+  "schemaVersion": "1",
+  "revision": 1,
+  "title": "Todo App Architecture",
+  "requirements": [
+    {
+      "id": "req.gateway",
+      "text": "Customers call an API gateway",
+      "status": "stated"
+    },
+    {
+      "id": "req.orders",
+      "text": "An orders service handles requests",
+      "status": "stated"
+    },
+    {
+      "id": "req.persist",
+      "text": "Orders service persists to PostgreSQL",
+      "status": "stated"
+    }
+  ],
+  "openQuestions": [],
+  "nodes": [
+    {
+      "id": "actor.customer",
+      "kind": "actor",
+      "label": "Customer",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "gw.api",
+      "kind": "gateway",
+      "label": "API Gateway",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "svc.orders",
+      "kind": "service",
+      "label": "Orders Service",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "db.postgres",
+      "kind": "datastore",
+      "label": "PostgreSQL",
+      "provenance": "user-specified",
+      "evidence": []
+    }
+  ],
+  "edges": [
+    {
+      "id": "e.customer-gateway",
+      "from": "actor.customer",
+      "to": "gw.api",
+      "type": "sync",
+      "label": "API requests",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.gateway-orders",
+      "from": "gw.api",
+      "to": "svc.orders",
+      "type": "sync",
+      "label": "Route requests",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.orders-postgres",
+      "from": "svc.orders",
+      "to": "db.postgres",
+      "type": "data",
+      "label": "Persist data",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    }
+  ],
+  "views": [
+    {
+      "id": "view.architecture",
+      "type": "architecture",
+      "orientation": "LR",
+      "nodes": [
+        "actor.customer",
+        "gw.api",
+        "svc.orders",
+        "db.postgres"
+      ],
+      "edges": [
+        "e.customer-gateway",
+        "e.gateway-orders",
+        "e.orders-postgres"
+      ],
+      "mainPath": [
+        "actor.customer",
+        "gw.api",
+        "svc.orders",
+        "db.postgres"
+      ]
+    }
+  ],
+  "semanticChecks": {
+    "allowedRoots": [
+      "actor.customer"
+    ],
+    "allowedTerminals": [
+      "db.postgres"
+    ],
+    "requiredEdges": [
+      {
+        "from": "actor.customer",
+        "to": "gw.api",
+        "type": "sync"
+      },
+      {
+        "from": "gw.api",
+        "to": "svc.orders",
+        "type": "sync"
+      },
+      {
+        "from": "svc.orders",
+        "to": "db.postgres",
+        "type": "data"
+      }
+    ],
+    "requiredPaths": [
+      {
+        "from": "actor.customer",
+        "to": "db.postgres"
+      }
+    ]
+  },
+  "boundaries": [],
+  "guidedViews": [],
+  "privacy": {
+    "classification": "public",
+    "boundary": "external-allowed"
+  }
+}
