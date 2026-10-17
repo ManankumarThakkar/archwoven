@@ -1,6 +1,7 @@
 import { NodeSchema, EdgeSchema, type EditOp, type SystemModel } from './schema';
 import { validateModel } from './validate';
 import { syncDetailViewsInPlace } from './detail';
+import { isInternal } from './groups';
 
 /**
  * §7 controlled edits: every op is checked against baseRevision, the batch is
@@ -38,9 +39,12 @@ export function applyEditOps(
         const p = NodeSchema.safeParse(o.patch);
         if (!p.success) { errors.push(fmt(p.error.issues)); continue; }
         if (p.data.id !== o.target) { errors.push(`add "${o.target}": patch id "${p.data.id}" does not match target`); continue; }
+        // A node grouped under an existing component is one of its internals: detail views only.
+        const internal = !!p.data.group && p.data.group !== p.data.id && !!findNode(p.data.group);
         m.nodes.push(p.data);
-        for (const v of m.views)
-          if (v.type === 'architecture' && !v.nodes.includes(o.target)) v.nodes.push(o.target);
+        if (!internal)
+          for (const v of m.views)
+            if (v.type === 'architecture' && !v.nodes.includes(o.target)) v.nodes.push(o.target);
       }
       continue;
     }
@@ -75,6 +79,7 @@ export function applyEditOps(
         const referrers = [
           ...m.edges.filter((e) => e.from === o.target || e.to === o.target).map((e) => `edge ${e.id}`),
           ...m.views.filter((v) => v.sequence?.participants.includes(o.target)).map((v) => `sequence view ${v.id}`),
+          ...m.nodes.filter((n) => n.group === o.target && isInternal(m, n.id)).map((n) => `internal ${n.id}`),
         ];
         if (referrers.length > 0) {
           errors.push(`remove "${o.target}" still referenced by: ${referrers.join(', ')}`);

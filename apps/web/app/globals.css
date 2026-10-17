@@ -118,6 +118,13 @@ textarea::placeholder, input::placeholder { color: #8290aa; opacity: 1; }
 .aw-detail-focus { box-shadow: 0 0 0 2px #5eead4; }
 .aw-detail-caption { margin: 0; padding: 4px 12px 8px; font-size: 12px; color: #94a3b8; }
 .aw-detail-tab { display: inline-flex; align-items: stretch; }
+.aw-detail-source { color: #fbbf24; }
+.aw-detail-drift { padding: 0 12px 8px; font-size: 12px; color: #fbbf24; }
+.aw-detail-drift p { margin: 2px 0; }
+.aw-expand { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 12px 10px; }
+.aw-expand input { flex: 1 1 200px; min-width: 0; min-height: 44px; padding: 8px 12px; border-radius: 8px; background: #0b1220; color: #e5e7eb; border: 1px solid #334155; }
+.aw-expand button { min-height: 44px; padding: 8px 14px; border-radius: 8px; border: 1px solid #5eac9f; background: #11312f; color: #93f1dc; cursor: pointer; }
+.aw-expand button:disabled { opacity: 0.5; cursor: default; }
 .aw-view-tabs .aw-detail-tab button { text-transform: none; }
 .aw-detail-tab .aw-detail-close { min-width: 44px; min-height: 44px; }
 .react-flow__edge.aw-edge-focus .react-flow__edge-path { stroke-width: 2.5; }

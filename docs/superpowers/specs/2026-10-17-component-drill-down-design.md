@@ -34,23 +34,69 @@ Date: 2026-10-17. Release task 10 (RELEASE-PROGRESS.md). SPEC §2: "bounded comp
 
 ## Step 2 — Expand internals (PR B)
 
-- **Trigger:** a detail view without internals offers **Expand internals** (refinement weight 0.25 credits hosted; free locally), with an optional hint of up to 300 characters. It is synchronous, with refinement's reservation, refund, metering and cancellation semantics.
-- **Provider contract** (hosted wire and local native): `{ internals: [{ key, label, role }] (2–8), links: [{ from, to, type, label? }] }`. The server builds ids (`<focusId>/<slug>`, deduplicated), `kind: 'component'`, `group: <focusId>`, provenance (`inferred`, or `proposed` when answering the hint) and empty evidence.
-- **Server rules,** with violations sent back through the bounded repair loop and named errors:
-  - soundness: an internal→X link requires focus→X with the same direction and type
-  - completeness: every focus link is covered by at least one internal link
-  - internal-only keys, no self-loops or duplicates, and plain-text length limits
-  - repository and user text fenced as untrusted data
-- **Model effects:**
-  - `applyEditOps` no longer auto-joins grouped nodes to architecture views.
-  - Removing a node is refused while grouped nodes reference it.
-  - Detail membership becomes internals + neighbours + internal links. The focus is drawn as a view-only container (existing boundary hull) labelled with its current name.
-  - The overview marks expanded components.
-- **Bounds and disclosures:**
-  - nesting is limited to one level, and there is no re-expansion (use refinement or undo)
-  - repository models show "Internals are inferred, not found in source"
-  - drift notices name uncovered or unbacked links after later overview changes, and nothing is silently rewritten
-  - private models never reach hosted providers (existing router)
+Revised after code inspection (2026-10-17). Boundaries are post-layout hulls and the layout engine does not group nodes, so a container box could visually enclose non-member neighbours. Internals are therefore **marked**, not boxed. A grouped (compound) layout is a possible separate follow-up.
+
+### Definitions
+- An **internal** of component F is a node with `group === F`, where F is an existing node, and that node is in no architecture view. Generated models that use `group` differently are unaffected.
+- **Expandable:** F exists, is not an ER entity, is not itself an internal, and has no internals yet. Nesting is limited to one level, and there is no re-expansion; use refinement or undo instead.
+
+### Contract
+- The provider sees a minimal context only: the title, the focus, its direct neighbours and the focus's links. It is fenced as untrusted data with `fenceEscape`. An optional user hint of up to 300 characters is passed as guidance.
+- The provider returns `{ internals: [{ key, label }] (2–8), links: [{ from, to, type, label? }] }`. `from`/`to` are internal keys or neighbour ids.
+- The server builds everything else:
+  - node ids `<F>/<slug(key)>` and edge ids `<F>/link-<n>`, unique against the model
+  - `kind: 'component'`, `group: F`, `provenance: 'inferred'`, `evidence: []`
+  - link provenance `inferred`
+  - nothing provider-controlled reaches ids, kinds, provenance or evidence
+
+### Rules (pure validator in `@archwoven/model`, shared by hosted and local repair loops and the route)
+1. **Shape:**
+   - 2–8 internals
+   - keys unique and matching `[a-z0-9-]{1,40}`
+   - labels 1–60 characters, trimmed, unique case-insensitively, and different from the focus label
+   - link labels at most 80 characters
+2. **Endpoints:**
+   - each link has at least one internal endpoint
+   - the other endpoint is an internal or a focus neighbour
+   - no internal self-loops, no duplicate (from, to, type)
+3. **Soundness:** internal→X requires focus→X with the same type; X→internal requires X→focus with the same type. Internal→internal links are allowed for any type.
+4. **Completeness:**
+   - every focus→X link is covered by some internal→X link of the same type, and every X→focus link by some X→internal link of the same type
+   - a focus self-loop is covered by an internal→internal link of the same type
+5. **Semantic checks:** when `allowedRoots` is non-empty, every internal has an incoming link; when `allowedTerminals` is non-empty, every internal has an outgoing link. The checks themselves are never edited.
+
+Violations are returned as named errors to the bounded repair loop (`MAX_REPAIRS`). When repairs are exhausted, nothing is saved.
+
+### Model effects
+- **`applyEditOps`:**
+  - an added node whose `group` names an existing node is not auto-joined to architecture views
+  - removing a node is refused while internals reference it
+- **Detail membership for an expanded focus:** internals, plus all focus neighbours, plus links with an internal endpoint. The focus itself is not drawn.
+- The detail view is created in the same revision if it is missing; the 12-view limit is checked before inference.
+- **Drift** (derived, never auto-fixed): uncovered focus links and internal links no longer backed by a focus link are listed in the detail tab.
+
+### Graph helpers
+- `journey`/`reachability` take the view's edges. This applies to canvas focus, the route probe and the share card. It prevents overview routes through hidden internals, and also prevents routes through any edge outside the view.
+
+### Request path
+- `POST /api/models/:id/expand { baseRevision, target, hint? }` follows refinement semantics:
+  - owner 404, stale 409 (before and after inference)
+  - reserve `refine` (0.25 hosted; free locally; separate metering label is task 14)
+  - refund and meter on failure, cancellation or staleness
+  - `withSlot` concurrency
+  - 400 for invalid or non-expandable targets before any reservation
+- The hosted path refuses `local-only` models in code. Fake mode returns a deterministic expansion that satisfies the rules: an entry internal takes incoming links, a core internal takes outgoing links and self-loops, with entry→core between them.
+
+### Workspace
+- **Detail tab:**
+  - an **Expand internals** control with an optional hint and the credit cost shown in hosted mode
+  - disabled while busy; hidden when the focus is not expandable
+  - the hint is preserved on failure
+- **Caption once expanded:** "Inside <label> (inferred) · and its direct connections". Repository models (any source-supported node) also show "Internals are inferred, not found in source."
+- Drift is listed as a status note.
+- **Canvas:**
+  - internals have a dashed style with the sub-label "inside <label>"
+  - the overview marks an expanded component "has detail" (visible text and accessible name)
 
 ## Verification
 

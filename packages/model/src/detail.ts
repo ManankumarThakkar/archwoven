@@ -1,5 +1,6 @@
 import type { SystemModel, View } from './schema';
 import { validateModel } from './validate';
+import { internalsOf, isInternal } from './groups';
 
 /** Drill-down views are ordinary component-detail views whose id names their focus.
  * Generated component-detail views never match, so they are never rewritten. */
@@ -10,12 +11,19 @@ export const isDetailView = (view: View): boolean =>
 
 type Result = { ok: true; model: SystemModel } | { ok: false; errors: string[] };
 
-/** The focus, its direct neighbours in edge order, and every edge touching it. */
+/** The focus, its direct neighbours in edge order, and every edge touching it. Once expanded,
+ * the internals replace the focus: internals, its neighbours, and every link touching an internal. */
 export function detailMembership(model: SystemModel, focus: string): { nodes: string[]; edges: string[] } {
-  const edges = model.edges.filter(e => e.from === focus || e.to === focus);
+  // An overview-level component stays at its level: links into another component's internals are not its connections.
+  const sameLevel = (e: { from: string; to: string }) => isInternal(model, focus) || !isInternal(model, e.from === focus ? e.to : e.from);
+  const edges = model.edges.filter(e => (e.from === focus || e.to === focus) && sameLevel(e));
+  const neighbours = edges.map(e => (e.from === focus ? e.to : e.from));
+  const inner = new Set(internalsOf(model, focus).map(n => n.id));
+  if (!inner.size) return { nodes: [...new Set([focus, ...neighbours])], edges: edges.map(e => e.id) };
+  const links = model.edges.filter(e => inner.has(e.from) || inner.has(e.to));
   return {
-    nodes: [...new Set([focus, ...edges.map(e => (e.from === focus ? e.to : e.from))])],
-    edges: edges.map(e => e.id),
+    nodes: [...new Set([...inner, ...neighbours.filter(id => id !== focus), ...links.flatMap(e => [e.from, e.to])])],
+    edges: links.map(e => e.id),
   };
 }
 

@@ -79,3 +79,35 @@ describe('scale (fastapi-grade, Review Focus 3)', () => {
     expect(Date.now() - t0).toBeLessThan(500);
   });
 });
+
+describe('view-scoped exploration', () => {
+  // A hidden shortcut a→c exists in the model (e.g. an internal link) but not in the overview.
+  const scoped: SystemModel = {
+    schemaVersion: '1', revision: 1, title: 'scoped', requirements: [], openQuestions: [], boundaries: [], guidedViews: [],
+    privacy: { classification: 'public', boundary: 'external-allowed' },
+    nodes: ['a', 'b', 'c', 'hidden'].map((id) => ({ id, kind: 'service' as const, label: id, provenance: 'inferred' as const, evidence: [] })),
+    edges: [
+      { id: 'ab', from: 'a', to: 'b', type: 'sync', provenance: 'inferred', evidence: [] },
+      { id: 'bc', from: 'b', to: 'c', type: 'sync', provenance: 'inferred', evidence: [] },
+      { id: 'a-c', from: 'a', to: 'c', type: 'sync', provenance: 'inferred', evidence: [] },
+      { id: 'hidden-c', from: 'hidden', to: 'c', type: 'sync', provenance: 'inferred', evidence: [] },
+    ],
+    views: [{ id: 'overview', type: 'architecture', nodes: ['a', 'b', 'c'], edges: ['ab', 'bc'] }],
+  };
+
+  it('routes only along the view\'s own connections', () => {
+    expect(journey(scoped, 'a', 'c')).toEqual(['a', 'c']);
+    expect(journey(scoped, 'a', 'c', 'overview')).toEqual(['a', 'b', 'c']);
+  });
+
+  it('reports reachability only through the view\'s connections', () => {
+    const r = reachability(scoped, 'a', 'overview');
+    expect([...r.forward.keys()]).toEqual(['b', 'c']);
+    expect(reachability(scoped, 'c', 'overview').backward.has('hidden')).toBe(false);
+  });
+
+  it('finds no route when the view has none, even if the model does', () => {
+    const m = { ...scoped, views: [{ id: 'overview', type: 'architecture' as const, nodes: ['a', 'c'], edges: [] }] };
+    expect(journey(m, 'a', 'c', 'overview')).toBeNull();
+  });
+});

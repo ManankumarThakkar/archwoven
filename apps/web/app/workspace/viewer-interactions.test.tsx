@@ -37,7 +37,7 @@ vi.mock('@xyflow/react', async (importOriginal) => ({
       return Promise.resolve(true);
     } }); }, []);
     return <div data-flow-theme={colorMode}>
-    {nodes.map((n) => <button key={n.id} data-node={n.id} data-position={JSON.stringify(n.position)} data-node-type={n.type} data-inline-shadow={n.style?.boxShadow} data-source-position={n.sourcePosition} data-target-position={n.targetPosition} className={n.className} onClick={() => onNodeClick(null, n)}>{n.id}</button>)}
+    {nodes.map((n) => <button key={n.id} data-node={n.id} data-position={JSON.stringify(n.position)} data-node-type={n.type} data-inline-shadow={n.style?.boxShadow} data-source-position={n.sourcePosition} data-target-position={n.targetPosition} data-inside={(n.data as { inside?: string })?.inside ?? ''} data-has-detail={String(!!(n.data as { hasDetail?: boolean })?.hasDetail)} className={n.className} onClick={() => onNodeClick(null, n)}>{n.id}</button>)}
     {edges.map((e) => <button key={e.id} data-edge={e.id} data-edge-type={e.type} data-route={JSON.stringify(e.data?.route)} title={String(e.label ?? '')} data-start={typeof e.markerStart === 'string' ? e.markerStart : ''} data-end={typeof e.markerEnd === 'string' ? e.markerEnd : ''} className={e.className} data-animated={String(e.animated)} onClick={() => onEdgeClick(null, e)}>{e.id}</button>)}
     {children}
   </div>;
@@ -566,5 +566,37 @@ describe('component detail focus', () => {
     const generated: SystemModel = { ...model, views: [...model.views, { id: 'view.component', type: 'component-detail', focus: 'b', nodes: ['b', 'a'], edges: ['ab'] }] };
     await mount(generated, 'view.component');
     expect(host.querySelector('[data-node="b"]')!.className).toBe('');
+  });
+});
+
+describe('view-scoped focus highlighting', () => {
+  it('does not mark a component reachable through a connection the view does not show', async () => {
+    const scoped: SystemModel = { ...model, views: [{ id: 'v', type: 'architecture', nodes: ['a', 'b', 'c'], edges: ['ab'] }] };
+    await act(async () => root.render(<Canvas model={scoped} modelId="m" viewId="v" onSelect={() => {}} onDeselect={() => {}} />));
+    await act(async () => (host.querySelector('[data-node="a"]') as HTMLButtonElement).click());
+    expect(host.querySelector('[data-node="b"]')!.className).toBe('aw-reach');
+    expect(host.querySelector('[data-node="c"]')!.className).toBe('aw-dim');
+  });
+});
+
+describe('internals on the canvas', () => {
+  const withInternals: SystemModel = {
+    ...model,
+    nodes: [...model.nodes, { id: 'b/x', kind: 'component', label: 'Part X', provenance: 'inferred', evidence: [], group: 'b' }, { id: 'b/y', kind: 'component', label: 'Part Y', provenance: 'inferred', evidence: [], group: 'b' }],
+    edges: [...model.edges, { id: 'b/link-1', from: 'a', to: 'b/x', type: 'sync', provenance: 'inferred', evidence: [] }, { id: 'b/link-2', from: 'b/x', to: 'b/y', type: 'sync', provenance: 'inferred', evidence: [] }, { id: 'b/link-3', from: 'b/y', to: 'c', type: 'async', provenance: 'inferred', evidence: [] }],
+    views: [...model.views, { id: 'detail:b', type: 'component-detail', focus: 'b', nodes: ['b/x', 'b/y', 'a', 'c'], edges: ['b/link-1', 'b/link-2', 'b/link-3'] }],
+  };
+  const mount = (viewId: string) => act(async () => root.render(<Canvas model={withInternals} modelId="m" viewId={viewId} onSelect={() => {}} onDeselect={() => {}} />));
+
+  it('names the parent of each internal in its detail view', async () => {
+    await mount('detail:b');
+    expect(host.querySelector('[data-node="b/x"]')!.getAttribute('data-inside')).toBe('Queue');
+    expect(host.querySelector('[data-node="a"]')!.getAttribute('data-inside')).toBe('');
+  });
+
+  it('marks the expanded component in the overview', async () => {
+    await mount('v');
+    expect(host.querySelector('[data-node="b"]')!.getAttribute('data-has-detail')).toBe('true');
+    expect(host.querySelector('[data-node="a"]')!.getAttribute('data-has-detail')).toBe('false');
   });
 });
