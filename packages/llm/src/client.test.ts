@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { generateModel, makeAnthropic, MAX_REPAIRS, MAX_TOKENS, STABLE_SYSTEM, faithfulSchema, MODEL_JSON_CONTRACT } from './client';
+import { generateModel, makeAnthropic, MAX_REPAIRS, MAX_TOKENS, STABLE_SYSTEM, faithfulSchema } from './client';
+
+/** The JSON schema the hosted system prompt shows the model. */
+const hostedContract = () => JSON.parse(STABLE_SYSTEM.split('<model-json-schema>\n')[1]!.split('\n</model-json-schema>')[0]!);
 import type { StructuredClient } from './client';
 import validFull from '@archwoven/model/src/fixtures/valid-full.json';
 import dangling from '@archwoven/model/src/fixtures/invalid-dangling-edge.json';
@@ -43,23 +46,39 @@ describe('generateModel (mocked SDK)', () => {
     const out = await generateModel('Users have many orders', 'er', { client });
     expect(out.ok).toBe(true); expect(out.usage.repairs).toBe(1); expect(calls).toHaveLength(2);
   });
-  it('includes field names, types and PK/FK/UK constraints in the hosted string-value contract', () => {
-    const nested = MODEL_JSON_CONTRACT.match(/<fields-json-schema>\n([\s\S]+?)\n<\/fields-json-schema>/);
-    expect(nested).not.toBeNull();
-    const field = JSON.parse(nested![1]!).items;
-    expect(field.properties).toHaveProperty('name'); expect(field.properties).toHaveProperty('type');
-    expect(JSON.stringify(field.properties.key)).toContain('pk');
-    expect(JSON.stringify(field.properties.key)).toContain('fk');
-    expect(JSON.stringify(field.properties.key)).toContain('uk');
+  it('shows hosted generation the evidence, field and sequence shapes instead of opaque encoded strings', () => {
+    const contract = hostedContract();
+    const node = contract.properties.nodes.items.properties;
+    expect(node).not.toHaveProperty('evidenceJson');
+    expect(node.evidence.type).toBe('array');
+    expect(Object.keys(node.evidence.items.properties)).toEqual(expect.arrayContaining(['path', 'lines', 'note']));
+    const fields = JSON.stringify(node.fields);
+    for (const shape of ['"name"', '"type"', '"pk"', '"fk"', '"uk"']) expect(fields).toContain(shape);
+    const sequence = JSON.stringify(contract.properties.views.items.properties.sequence);
+    for (const shape of ['"participants"', '"messages"', '"fragment"', '"covers"', '"opt"']) expect(sequence).toContain(shape);
   });
-  it('gives hosted generation the complete sequence value contract despite its string wire encoding', () => {
-    const nested = MODEL_JSON_CONTRACT.match(/<sequence-json-schema>\n([\s\S]+?)\n<\/sequence-json-schema>/);
-    expect(nested).not.toBeNull();
-    const schema = JSON.parse(nested![1]!);
-    const message = schema.properties.messages.items;
-    expect(message.properties).toHaveProperty('fragment');
-    expect(JSON.stringify(message.properties.fragment)).toContain('covers');
-    expect(JSON.stringify(message.properties.fragment)).toContain('opt');
+  it('accepts a complete model wrapped in one Markdown code fence without a repair round', async () => {
+    const fenced = fakeClient(['```json\n' + JSON.stringify(validFull, null, 2) + '\n```']);
+    const out = await generateModel('x', 'architecture', { client: fenced.client });
+    expect(out.ok).toBe(true); expect(out.usage.repairs).toBe(0); expect(fenced.calls).toHaveLength(1);
+  });
+  it('still asks for a repair when text surrounds the JSON beyond a single fence', async () => {
+    for (const reply of ['Here is the model:\n```json\n' + JSON.stringify(validFull) + '\n```', '```json\n{}\n```\n```json\n' + JSON.stringify(validFull) + '\n```']) {
+      const { client, calls } = fakeClient([reply, validFull]);
+      const out = await generateModel('x', 'architecture', { client });
+      expect(out.ok).toBe(true); expect(out.usage.repairs).toBe(1); expect(calls).toHaveLength(2);
+    }
+  });
+  it('accepts native evidence objects on the first attempt and still decodes wire-encoded output', async () => {
+    const native = structuredClone(validFull);
+    native.nodes[0]!.evidence = [{ note: 'stated in the description' }];
+    const first = fakeClient([native]);
+    const out = await generateModel('x', 'architecture', { client: first.client });
+    expect(out.ok).toBe(true); expect(out.usage.repairs).toBe(0); expect(first.calls).toHaveLength(1);
+    const { evidence, ...rest } = native.nodes[0]!;
+    const wire = { ...native, nodes: [{ ...rest, evidenceJson: JSON.stringify(evidence) }, ...native.nodes.slice(1)] };
+    const legacy = await generateModel('x', 'architecture', { client: fakeClient([wire]).client });
+    expect(legacy.ok).toBe(true); expect(legacy.ok && legacy.model.nodes[0]!.evidence).toEqual([{ note: 'stated in the description' }]);
   });
   it('decodes hosted wire evidence, ER fields and complete sequence metadata before validation', async () => {
     const wire = {
@@ -136,8 +155,8 @@ describe('generateModel (mocked SDK)', () => {
     expect(contractText, 'hosted generation must receive its output contract in the prompt').toBeDefined();
     const contract = JSON.parse(contractText!);
     expect(contract.properties.views.items.properties.type.enum).toEqual(['architecture', 'sequence', 'er', 'component-detail']);
-    expect(contract.properties.nodes.items.properties).toHaveProperty('evidenceJson');
-    expect(contract.properties.views.items.properties).toHaveProperty('sequenceJson');
+    expect(contract.properties.nodes.items.properties.evidence.type).toBe('array');
+    expect(contract.properties.views.items.properties).toHaveProperty('sequence');
   });
 
   it('wire schema carries no unsupported constraint keywords — Anthropic structured outputs 400s on them', () => {

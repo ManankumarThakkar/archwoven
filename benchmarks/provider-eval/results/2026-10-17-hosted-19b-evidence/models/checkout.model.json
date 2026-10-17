@@ -1,0 +1,151 @@
+{
+  "schemaVersion": "1",
+  "revision": 1,
+  "title": "Checkout Flow",
+  "requirements": [
+    {
+      "id": "req.checkout",
+      "text": "Customers check out via API gateway to order service, which charges Stripe.",
+      "status": "stated"
+    }
+  ],
+  "openQuestions": [
+    {
+      "id": "q.persistence",
+      "text": "Where does the order service persist orders?",
+      "blockedBy": null
+    }
+  ],
+  "nodes": [
+    {
+      "id": "actor.customer",
+      "kind": "actor",
+      "label": "Customer",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "gw.api",
+      "kind": "gateway",
+      "label": "API Gateway",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "svc.orders",
+      "kind": "service",
+      "label": "Order Service",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "ext.stripe",
+      "kind": "external",
+      "label": "Stripe",
+      "provenance": "user-specified",
+      "evidence": []
+    }
+  ],
+  "edges": [
+    {
+      "id": "e.customer-gw",
+      "from": "actor.customer",
+      "to": "gw.api",
+      "type": "sync",
+      "label": "checkout request",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.gw-orders",
+      "from": "gw.api",
+      "to": "svc.orders",
+      "type": "sync",
+      "label": "route checkout",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.orders-stripe",
+      "from": "svc.orders",
+      "to": "ext.stripe",
+      "type": "sync",
+      "label": "charge payment",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    }
+  ],
+  "views": [
+    {
+      "id": "view.architecture",
+      "type": "architecture",
+      "orientation": "LR",
+      "nodes": [
+        "actor.customer",
+        "gw.api",
+        "svc.orders",
+        "ext.stripe"
+      ],
+      "edges": [
+        "e.customer-gw",
+        "e.gw-orders",
+        "e.orders-stripe"
+      ],
+      "mainPath": [
+        "actor.customer",
+        "gw.api",
+        "svc.orders",
+        "ext.stripe"
+      ]
+    }
+  ],
+  "semanticChecks": {
+    "allowedRoots": [
+      "actor.customer"
+    ],
+    "allowedTerminals": [
+      "ext.stripe"
+    ],
+    "requiredEdges": [
+      {
+        "from": "actor.customer",
+        "to": "gw.api",
+        "type": "sync"
+      },
+      {
+        "from": "gw.api",
+        "to": "svc.orders",
+        "type": "sync"
+      },
+      {
+        "from": "svc.orders",
+        "to": "ext.stripe",
+        "type": "sync"
+      }
+    ],
+    "requiredPaths": [
+      {
+        "from": "actor.customer",
+        "to": "ext.stripe"
+      }
+    ]
+  },
+  "boundaries": [
+    {
+      "id": "b.platform",
+      "label": "Checkout Platform",
+      "wraps": [
+        "gw.api",
+        "svc.orders"
+      ]
+    }
+  ],
+  "guidedViews": [],
+  "privacy": {
+    "classification": "public",
+    "boundary": "external-allowed"
+  }
+}

@@ -8,8 +8,6 @@ import { z } from 'zod';
 import { generatedViewErrors } from './generated-view';
 import {
   SystemModelSchema,
-  SequenceMetaSchema,
-  FieldSchema,
   validateModel,
   validFullModelExtended,
   type SystemModel,
@@ -200,29 +198,12 @@ export const faithfulSchema = wireSchema(z.toJSONSchema(SystemModelSchema, {
   target: 'draft-2020-12',
 }), { dropTopLevel: ['layout'], stringify: WIRE_STRINGIFIED, atTop: true }) as Record<string, unknown>;
 
-/** Hosted calls cannot use the API grammar. Derive its textual contract from
- * the model schema with the same wire keys, keeping optional/default semantics
- * instead of the strict grammar's API-only all-required/null workaround. */
-const promptSchema = wireSchema(z.toJSONSchema(SystemModelSchema, {
-  reused: 'inline', target: 'draft-2020-12',
-}), { dropTopLevel: ['layout'], stringify: WIRE_STRINGIFIED, atTop: true, requireAllProperties: false });
-
-export const MODEL_JSON_CONTRACT = `Output must conform to this JSON schema. Use the exact property names and enum values; additional properties are forbidden. evidenceJson and fieldsJson contain JSON-encoded arrays; sequenceJson contains a JSON-encoded object with participants and messages. Omit absent optional fields. On a new model omit parentId. layout is computed by the server and must be omitted.
-<model-json-schema>
-${JSON.stringify(promptSchema)}
-</model-json-schema>
-The value encoded inside sequenceJson must follow this complete schema. A fragment is optional on a message, never a property on the sequence root. For example a message may include "fragment":{"type":"opt","covers":[2,3,4]} to group those numbered messages.
-<sequence-json-schema>
-${JSON.stringify(z.toJSONSchema(SequenceMetaSchema, { target: 'draft-2020-12', io: 'input' }))}
-</sequence-json-schema>
-The value encoded inside fieldsJson must follow this schema; key may be pk, fk or uk, and absent types/keys stay unspecified.
-<fields-json-schema>
-${JSON.stringify(z.toJSONSchema(z.array(FieldSchema), { target: 'draft-2020-12', io: 'input' }))}
-</fields-json-schema>`;
-
-/** Ollama supports the native schema directly: no Anthropic grammar workarounds,
- * encoded JSON strings or forced nullable defaults. New models have no parent
- * and layout is computed by the server. The same schema is sent as `format`. */
+/** The output contract both providers see: native JSON values with every nested
+ * shape visible (evidence objects, fields, sequence), no grammar workarounds,
+ * encoded strings or forced nullable defaults. Hosted calls use no grammar, so
+ * the wire encoding only hid the evidence shape and every first attempt wrote
+ * free-text evidence. New models have no parent and layout is computed by the
+ * server. Ollama also receives this schema as `format`. */
 export const NATIVE_MODEL_JSON_SCHEMA = z.toJSONSchema(SystemModelSchema.omit({ layout: true, parentId: true }), {
   reused: 'inline', target: 'draft-2020-12', io: 'input',
 });
@@ -230,6 +211,11 @@ export const NATIVE_MODEL_JSON_CONTRACT = `Output must conform to this JSON sche
 <model-json-schema>
 ${JSON.stringify(NATIVE_MODEL_JSON_SCHEMA)}
 </model-json-schema>`;
+
+/** The model sometimes wraps an otherwise complete JSON answer in one Markdown code
+ * fence. Unwrap exactly that shape; any other surrounding text still fails to parse
+ * and goes through the repair loop. */
+export const unfenced = (text: string): string => /^\s*```(?:json)?[ \t]*\n([\s\S]*)\n```\s*$/.exec(text)?.[1] ?? text;
 
 /** Decode wire-encoded JSON-string fields back to their schema shapes, at any depth. */
 export function decodeWireModel(node: unknown): unknown {
@@ -268,7 +254,7 @@ Hard rules:
 
 ${contract}`;
 
-export const STABLE_SYSTEM = modelSystem(MODEL_JSON_CONTRACT, 'public');
+export const STABLE_SYSTEM = modelSystem(NATIVE_MODEL_JSON_CONTRACT, 'public');
 export const LOCAL_MODEL_SYSTEM = modelSystem(NATIVE_MODEL_JSON_CONTRACT, 'private');
 
 export function usageFrom(usage: RawUsage | UsageLedger, effort: Effort, latencyMs: number, repairs: number): TaskUsage {
@@ -360,7 +346,7 @@ export async function generateModel(
     const text = textOf(response.content);
     let parsed: unknown;
     try {
-      parsed = decodeWireModel(JSON.parse(text));
+      parsed = decodeWireModel(JSON.parse(unfenced(text)));
     } catch (e) {
       lastErrors = [`output was not valid JSON (${response.stop_reason ?? 'unknown'}): ${e instanceof Error ? e.message : String(e)}`];
       if (attempt < MAX_REPAIRS) {

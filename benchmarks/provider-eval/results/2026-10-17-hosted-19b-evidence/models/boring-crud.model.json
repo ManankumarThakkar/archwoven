@@ -1,0 +1,160 @@
+{
+  "schemaVersion": "1",
+  "revision": 1,
+  "title": "Catalog App",
+  "requirements": [
+    {
+      "id": "req.gateway",
+      "text": "Customers call an API gateway",
+      "status": "stated"
+    },
+    {
+      "id": "req.catalog",
+      "text": "Catalog service serves items from PostgreSQL",
+      "status": "stated"
+    }
+  ],
+  "openQuestions": [],
+  "nodes": [
+    {
+      "id": "actor.customer",
+      "kind": "actor",
+      "label": "Customer",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "gw.api",
+      "kind": "gateway",
+      "label": "API Gateway",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "svc.catalog",
+      "kind": "service",
+      "label": "Catalog Service",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "db.catalog",
+      "kind": "datastore",
+      "label": "PostgreSQL",
+      "provenance": "user-specified",
+      "evidence": []
+    }
+  ],
+  "edges": [
+    {
+      "id": "e.customer-gateway",
+      "from": "actor.customer",
+      "to": "gw.api",
+      "type": "sync",
+      "label": "HTTP requests",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.gateway-catalog",
+      "from": "gw.api",
+      "to": "svc.catalog",
+      "type": "sync",
+      "label": "Route catalog calls",
+      "role": "main",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "e.catalog-db",
+      "from": "svc.catalog",
+      "to": "db.catalog",
+      "type": "data",
+      "label": "Read items",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    }
+  ],
+  "views": [
+    {
+      "id": "view.architecture",
+      "type": "architecture",
+      "orientation": "LR",
+      "nodes": [
+        "actor.customer",
+        "gw.api",
+        "svc.catalog",
+        "db.catalog"
+      ],
+      "edges": [
+        "e.customer-gateway",
+        "e.gateway-catalog",
+        "e.catalog-db"
+      ],
+      "mainPath": [
+        "actor.customer",
+        "gw.api",
+        "svc.catalog",
+        "db.catalog"
+      ]
+    }
+  ],
+  "semanticChecks": {
+    "allowedRoots": [
+      "actor.customer"
+    ],
+    "allowedTerminals": [
+      "db.catalog"
+    ],
+    "requiredEdges": [
+      {
+        "from": "svc.catalog",
+        "to": "db.catalog",
+        "type": "data"
+      }
+    ],
+    "requiredPaths": [
+      {
+        "from": "actor.customer",
+        "to": "db.catalog"
+      }
+    ]
+  },
+  "boundaries": [
+    {
+      "id": "b.backend",
+      "label": "Backend",
+      "wraps": [
+        "gw.api",
+        "svc.catalog",
+        "db.catalog"
+      ]
+    }
+  ],
+  "guidedViews": [
+    {
+      "id": "gv.entry",
+      "label": "Entry",
+      "focus": [
+        "actor.customer",
+        "gw.api"
+      ],
+      "note": "Customers reach the system through the API gateway."
+    },
+    {
+      "id": "gv.catalog",
+      "label": "Catalog serving",
+      "focus": [
+        "svc.catalog",
+        "db.catalog"
+      ],
+      "note": "The catalog service reads items from PostgreSQL."
+    }
+  ],
+  "privacy": {
+    "classification": "public",
+    "boundary": "external-allowed"
+  }
+}

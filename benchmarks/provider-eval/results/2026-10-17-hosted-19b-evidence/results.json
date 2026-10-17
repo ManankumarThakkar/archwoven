@@ -1,0 +1,486 @@
+{
+  "summary": {
+    "ranAt": "2026-10-17T19:40:15.076Z",
+    "base": "http://127.0.0.1:3048",
+    "budget": 1.2,
+    "spentUsd": 0.7026,
+    "generations": {
+      "ran": 7,
+      "succeeded": "7/7 (100%)",
+      "providerCalls": 7,
+      "firstPassValid": "3/7 (43%)",
+      "repairedToValid": "4/7 (57%)",
+      "failedCalls": 0,
+      "latencyP50": "19.4 s",
+      "latencyP90": "50.4 s",
+      "latencyMax": "50.4 s",
+      "costUsd": 0.4822,
+      "cacheReadTokens": 35470,
+      "cacheWriteTokens": 3547,
+      "uncachedInputTokens": 8692,
+      "cacheSavingsUsd": 0.1312
+    },
+    "byView": {
+      "architecture": {
+        "ran": 4,
+        "succeeded": "4/4 (100%)",
+        "providerCalls": 4,
+        "firstPassValid": "2/4 (50%)",
+        "repairedToValid": "2/4 (50%)",
+        "failedCalls": 0,
+        "latencyP50": "8.2 s",
+        "latencyP90": "50.4 s",
+        "latencyMax": "50.4 s",
+        "costUsd": 0.257,
+        "cacheReadTokens": 17735,
+        "cacheWriteTokens": 3547,
+        "uncachedInputTokens": 4604,
+        "cacheSavingsUsd": 0.0638
+      },
+      "sequence": {
+        "ran": 1,
+        "succeeded": "1/1 (100%)",
+        "providerCalls": 1,
+        "firstPassValid": "1/1 (100%)",
+        "repairedToValid": "0/1 (0%)",
+        "failedCalls": 0,
+        "latencyP50": "15.6 s",
+        "latencyP90": "15.6 s",
+        "latencyMax": "15.6 s",
+        "costUsd": 0.0363,
+        "cacheReadTokens": 3547,
+        "cacheWriteTokens": 0,
+        "uncachedInputTokens": 71,
+        "cacheSavingsUsd": 0.0135
+      },
+      "er": {
+        "ran": 1,
+        "succeeded": "1/1 (100%)",
+        "providerCalls": 1,
+        "firstPassValid": "0/1 (0%)",
+        "repairedToValid": "1/1 (100%)",
+        "failedCalls": 0,
+        "latencyP50": "28.5 s",
+        "latencyP90": "28.5 s",
+        "latencyMax": "28.5 s",
+        "costUsd": 0.0875,
+        "cacheReadTokens": 7094,
+        "cacheWriteTokens": 0,
+        "uncachedInputTokens": 1900,
+        "cacheSavingsUsd": 0.027
+      },
+      "component-detail": {
+        "ran": 1,
+        "succeeded": "1/1 (100%)",
+        "providerCalls": 1,
+        "firstPassValid": "0/1 (0%)",
+        "repairedToValid": "1/1 (100%)",
+        "failedCalls": 0,
+        "latencyP50": "34.0 s",
+        "latencyP90": "34.0 s",
+        "latencyMax": "34.0 s",
+        "costUsd": 0.1015,
+        "cacheReadTokens": 7094,
+        "cacheWriteTokens": 0,
+        "uncachedInputTokens": 2117,
+        "cacheSavingsUsd": 0.027
+      }
+    },
+    "clarifications": [],
+    "validModels": "9/9 (100%)",
+    "suiteA": {
+      "todo-api": {
+        "semantic": true,
+        "validate": true
+      },
+      "checkout": {
+        "semantic": true,
+        "validate": true
+      },
+      "boring-crud": {
+        "semantic": true,
+        "validate": true
+      }
+    },
+    "refinements": {
+      "ran": 1,
+      "succeeded": "1/1 (100%)",
+      "providerCalls": 1,
+      "firstPassValid": "0/1 (0%)",
+      "repairedToValid": "1/1 (100%)",
+      "failedCalls": 0,
+      "latencyP50": "6.7 s",
+      "latencyP90": "6.7 s",
+      "latencyMax": "6.7 s",
+      "costUsd": 0.0243,
+      "cacheReadTokens": 944,
+      "cacheWriteTokens": 944,
+      "uncachedInputTokens": 2453,
+      "cacheSavingsUsd": 0.0026
+    },
+    "repositories": {
+      "ran": 1,
+      "succeeded": "1/1 (100%)",
+      "providerCalls": 1,
+      "firstPassValid": "0/1 (0%)",
+      "repairedToValid": "1/1 (100%)",
+      "failedCalls": 0,
+      "latencyP50": "50.0 s",
+      "latencyP90": "50.0 s",
+      "latencyMax": "50.0 s",
+      "costUsd": 0.1961,
+      "cacheReadTokens": 3626,
+      "cacheWriteTokens": 3626,
+      "uncachedInputTokens": 10066,
+      "cacheSavingsUsd": 0.0102
+    },
+    "diagramVsTruth": {
+      "repo-fastapi-template": {
+        "nodeRecall": "10/12",
+        "edgeRecall": "12/16",
+        "sourceSupportedNodePrecision": "10/10",
+        "sourceSupportedEdgePrecision": "12/12",
+        "missedNodes": [
+          "SMTP",
+          "Sentry"
+        ],
+        "missedEdges": [
+          "login-router → SMTP",
+          "users-router → SMTP",
+          "utils-router → SMTP",
+          "app → Sentry"
+        ],
+        "unsupportedNodes": [],
+        "unsupportedEdges": [],
+        "inferredOrProposed": {
+          "nodes": 0,
+          "edges": 0
+        }
+      }
+    }
+  },
+  "results": [
+    {
+      "id": "todo-api",
+      "kind": "generation",
+      "view": "architecture",
+      "status": "succeeded",
+      "latencyMs": 19354,
+      "usage": {
+        "calls": [
+          {
+            "view": "architecture",
+            "outcome": "repaired",
+            "repairs": 1,
+            "costUsd": 0.07022039999999999
+          }
+        ],
+        "inputTokens": 1304,
+        "cacheWriteTokens": 3547,
+        "cacheReadTokens": 3547,
+        "outputTokens": 2328,
+        "costUsd": 0.07022039999999999,
+        "repairs": 1
+      },
+      "model": {
+        "nodes": 4,
+        "edges": 3,
+        "views": [
+          "architecture"
+        ],
+        "openQuestions": 0,
+        "valid": true
+      },
+      "suiteA": {
+        "semantic": true,
+        "validate": true
+      }
+    },
+    {
+      "id": "checkout",
+      "kind": "generation",
+      "view": "architecture",
+      "status": "succeeded",
+      "latencyMs": 6781,
+      "usage": {
+        "calls": [
+          {
+            "view": "architecture",
+            "outcome": "ok",
+            "repairs": 0,
+            "costUsd": 0.0174974
+          }
+        ],
+        "inputTokens": 42,
+        "cacheWriteTokens": 0,
+        "cacheReadTokens": 3547,
+        "outputTokens": 831,
+        "costUsd": 0.0174974,
+        "repairs": 0
+      },
+      "model": {
+        "nodes": 4,
+        "edges": 3,
+        "views": [
+          "architecture"
+        ],
+        "openQuestions": 1,
+        "valid": true
+      },
+      "suiteA": {
+        "semantic": true,
+        "validate": true
+      }
+    },
+    {
+      "id": "boring-crud",
+      "kind": "generation",
+      "view": "architecture",
+      "status": "succeeded",
+      "latencyMs": 8205,
+      "usage": {
+        "calls": [
+          {
+            "view": "architecture",
+            "outcome": "ok",
+            "repairs": 0,
+            "costUsd": 0.019005400000000002
+          }
+        ],
+        "inputTokens": 44,
+        "cacheWriteTokens": 0,
+        "cacheReadTokens": 3547,
+        "outputTokens": 906,
+        "costUsd": 0.019005400000000002,
+        "repairs": 0
+      },
+      "model": {
+        "nodes": 4,
+        "edges": 3,
+        "views": [
+          "architecture"
+        ],
+        "openQuestions": 0,
+        "valid": true
+      },
+      "suiteA": {
+        "semantic": true,
+        "validate": true
+      }
+    },
+    {
+      "id": "repo-fastapi-template",
+      "kind": "repository",
+      "status": "succeeded",
+      "latencyMs": 50016,
+      "gaps": 1,
+      "usage": {
+        "calls": [
+          {
+            "view": "architecture",
+            "outcome": "repaired",
+            "repairs": 1,
+            "costUsd": 0.1960792
+          }
+        ],
+        "inputTokens": 10066,
+        "cacheWriteTokens": 3626,
+        "cacheReadTokens": 3626,
+        "outputTokens": 6848,
+        "costUsd": 0.1960792,
+        "repairs": 1
+      },
+      "model": {
+        "nodes": 10,
+        "edges": 12,
+        "views": [
+          "architecture",
+          "er"
+        ],
+        "openQuestions": 1,
+        "valid": true
+      },
+      "diagram": {
+        "nodeRecall": "10/12",
+        "edgeRecall": "12/16",
+        "sourceSupportedNodePrecision": "10/10",
+        "sourceSupportedEdgePrecision": "12/12",
+        "missedNodes": [
+          "SMTP",
+          "Sentry"
+        ],
+        "missedEdges": [
+          "login-router → SMTP",
+          "users-router → SMTP",
+          "utils-router → SMTP",
+          "app → Sentry"
+        ],
+        "unsupportedNodes": [],
+        "unsupportedEdges": [],
+        "inferredOrProposed": {
+          "nodes": 0,
+          "edges": 0
+        }
+      }
+    },
+    {
+      "id": "streaming",
+      "kind": "generation",
+      "view": "architecture",
+      "status": "succeeded",
+      "latencyMs": 50353,
+      "usage": {
+        "calls": [
+          {
+            "view": "architecture",
+            "outcome": "repaired",
+            "repairs": 1,
+            "costUsd": 0.1502748
+          }
+        ],
+        "inputTokens": 3214,
+        "cacheWriteTokens": 0,
+        "cacheReadTokens": 7094,
+        "outputTokens": 6800,
+        "costUsd": 0.1502748,
+        "repairs": 1
+      },
+      "model": {
+        "nodes": 14,
+        "edges": 14,
+        "views": [
+          "architecture"
+        ],
+        "openQuestions": 2,
+        "valid": true
+      }
+    },
+    {
+      "id": "login-seq",
+      "kind": "generation",
+      "view": "sequence",
+      "status": "succeeded",
+      "latencyMs": 15554,
+      "usage": {
+        "calls": [
+          {
+            "view": "sequence",
+            "outcome": "ok",
+            "repairs": 0,
+            "costUsd": 0.036273400000000004
+          }
+        ],
+        "inputTokens": 71,
+        "cacheWriteTokens": 0,
+        "cacheReadTokens": 3547,
+        "outputTokens": 1764,
+        "costUsd": 0.036273400000000004,
+        "repairs": 0
+      },
+      "model": {
+        "nodes": 4,
+        "edges": 3,
+        "views": [
+          "sequence"
+        ],
+        "openQuestions": 2,
+        "valid": true
+      }
+    },
+    {
+      "id": "library-er",
+      "kind": "generation",
+      "view": "er",
+      "status": "succeeded",
+      "latencyMs": 28462,
+      "usage": {
+        "calls": [
+          {
+            "view": "er",
+            "outcome": "repaired",
+            "repairs": 1,
+            "costUsd": 0.0874588
+          }
+        ],
+        "inputTokens": 1900,
+        "cacheWriteTokens": 0,
+        "cacheReadTokens": 7094,
+        "outputTokens": 3922,
+        "costUsd": 0.0874588,
+        "repairs": 1
+      },
+      "model": {
+        "nodes": 5,
+        "edges": 5,
+        "views": [
+          "er"
+        ],
+        "openQuestions": 1,
+        "valid": true
+      }
+    },
+    {
+      "id": "order-component",
+      "kind": "generation",
+      "view": "component-detail",
+      "status": "succeeded",
+      "latencyMs": 34004,
+      "usage": {
+        "calls": [
+          {
+            "view": "component-detail",
+            "outcome": "repaired",
+            "repairs": 1,
+            "costUsd": 0.10146680000000001
+          }
+        ],
+        "inputTokens": 2117,
+        "cacheWriteTokens": 0,
+        "cacheReadTokens": 7094,
+        "outputTokens": 4579,
+        "costUsd": 0.10146680000000001,
+        "repairs": 1
+      },
+      "model": {
+        "nodes": 8,
+        "edges": 7,
+        "views": [
+          "component-detail"
+        ],
+        "openQuestions": 2,
+        "valid": true
+      }
+    },
+    {
+      "id": "refine-add-cache",
+      "kind": "refinement",
+      "status": "succeeded",
+      "latencyMs": 6746,
+      "usage": {
+        "calls": [
+          {
+            "view": "architecture",
+            "outcome": "repaired",
+            "repairs": 1,
+            "costUsd": 0.0243008
+          }
+        ],
+        "inputTokens": 2453,
+        "cacheWriteTokens": 944,
+        "cacheReadTokens": 944,
+        "outputTokens": 479,
+        "costUsd": 0.0243008,
+        "repairs": 1
+      },
+      "model": {
+        "nodes": 5,
+        "edges": 4,
+        "views": [
+          "architecture"
+        ],
+        "openQuestions": 0,
+        "valid": true
+      }
+    }
+  ]
+}

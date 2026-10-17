@@ -39,6 +39,6 @@ Representative real-provider results: first-pass validity, repair success, laten
 **Current status:** all three harnesses and their selftests are implemented.
 - **Suite A:** the oracle matches whole names after normalising case, punctuation, plurals and parentheticals, and one node may satisfy only one requirement. The two 2026-10-16 rejections were false negatives: the original receipt is kept, and a re-check of the same models passes. A fresh real-provider run (2026-10-17) passed the semantic and validation gates 3/3. Suite A stays ineligible until a named person records the visual reviews ([ordinary-model-floor/review/](ordinary-model-floor/review/README.md)).
 - **Suite B:** a clean receipt is pinned to merged commit `d6f28bcd`, with all eight deterministic cases passing.
-- **Provider evaluation (2026-10-17):** 30/30 cases succeeded, but no hosted description or import was valid on the first attempt; see its README for the cause.
+- **Provider evaluation (2026-10-17):** 30/30 cases succeeded, but no hosted description or import was valid on the first attempt. After the task 19b prompt and parsing fixes, the same 7 descriptions were valid on the first attempt 7/7, with the median down from 33.8 s to 14.2 s and cost down 64 %. See its README.
 
 See [post-merge audit](../docs/POST-MERGE-AUDIT.md) for exact limits and remaining work.

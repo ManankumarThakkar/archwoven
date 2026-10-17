@@ -1,0 +1,377 @@
+{
+  "summary": {
+    "ranAt": "2026-10-17T19:44:56.298Z",
+    "base": "http://127.0.0.1:3049",
+    "budget": 0.4,
+    "spentUsd": 0.2726,
+    "generations": {
+      "ran": 7,
+      "succeeded": "7/7 (100%)",
+      "providerCalls": 7,
+      "firstPassValid": "7/7 (100%)",
+      "repairedToValid": "0/7 (0%)",
+      "failedCalls": 0,
+      "latencyP50": "14.2 s",
+      "latencyP90": "29.1 s",
+      "latencyMax": "29.1 s",
+      "costUsd": 0.2726,
+      "cacheReadTokens": 24829,
+      "cacheWriteTokens": 0,
+      "uncachedInputTokens": 450,
+      "cacheSavingsUsd": 0.0944
+    },
+    "byView": {
+      "architecture": {
+        "ran": 4,
+        "succeeded": "4/4 (100%)",
+        "providerCalls": 4,
+        "firstPassValid": "4/4 (100%)",
+        "repairedToValid": "0/4 (0%)",
+        "failedCalls": 0,
+        "latencyP50": "8.8 s",
+        "latencyP90": "29.1 s",
+        "latencyMax": "29.1 s",
+        "costUsd": 0.1437,
+        "cacheReadTokens": 14188,
+        "cacheWriteTokens": 0,
+        "uncachedInputTokens": 247,
+        "cacheSavingsUsd": 0.0539
+      },
+      "sequence": {
+        "ran": 1,
+        "succeeded": "1/1 (100%)",
+        "providerCalls": 1,
+        "firstPassValid": "1/1 (100%)",
+        "repairedToValid": "0/1 (0%)",
+        "failedCalls": 0,
+        "latencyP50": "14.2 s",
+        "latencyP90": "14.2 s",
+        "latencyMax": "14.2 s",
+        "costUsd": 0.0354,
+        "cacheReadTokens": 3547,
+        "cacheWriteTokens": 0,
+        "uncachedInputTokens": 71,
+        "cacheSavingsUsd": 0.0135
+      },
+      "er": {
+        "ran": 1,
+        "succeeded": "1/1 (100%)",
+        "providerCalls": 1,
+        "firstPassValid": "1/1 (100%)",
+        "repairedToValid": "0/1 (0%)",
+        "failedCalls": 0,
+        "latencyP50": "16.6 s",
+        "latencyP90": "16.6 s",
+        "latencyMax": "16.6 s",
+        "costUsd": 0.0466,
+        "cacheReadTokens": 3547,
+        "cacheWriteTokens": 0,
+        "uncachedInputTokens": 58,
+        "cacheSavingsUsd": 0.0135
+      },
+      "component-detail": {
+        "ran": 1,
+        "succeeded": "1/1 (100%)",
+        "providerCalls": 1,
+        "firstPassValid": "1/1 (100%)",
+        "repairedToValid": "0/1 (0%)",
+        "failedCalls": 0,
+        "latencyP50": "18.0 s",
+        "latencyP90": "18.0 s",
+        "latencyMax": "18.0 s",
+        "costUsd": 0.047,
+        "cacheReadTokens": 3547,
+        "cacheWriteTokens": 0,
+        "uncachedInputTokens": 74,
+        "cacheSavingsUsd": 0.0135
+      }
+    },
+    "clarifications": [],
+    "validModels": "7/7 (100%)",
+    "suiteA": {
+      "todo-api": {
+        "semantic": true,
+        "validate": true
+      },
+      "checkout": {
+        "semantic": true,
+        "validate": true
+      },
+      "boring-crud": {
+        "semantic": true,
+        "validate": true
+      }
+    },
+    "refinements": {
+      "ran": 0,
+      "succeeded": "—",
+      "providerCalls": 0,
+      "firstPassValid": "—",
+      "repairedToValid": "—",
+      "failedCalls": 0,
+      "latencyP50": "—",
+      "latencyP90": "—",
+      "latencyMax": "—",
+      "costUsd": 0,
+      "cacheReadTokens": 0,
+      "cacheWriteTokens": 0,
+      "uncachedInputTokens": 0,
+      "cacheSavingsUsd": 0
+    },
+    "repositories": {
+      "ran": 0,
+      "succeeded": "—",
+      "providerCalls": 0,
+      "firstPassValid": "—",
+      "repairedToValid": "—",
+      "failedCalls": 0,
+      "latencyP50": "—",
+      "latencyP90": "—",
+      "latencyMax": "—",
+      "costUsd": 0,
+      "cacheReadTokens": 0,
+      "cacheWriteTokens": 0,
+      "uncachedInputTokens": 0,
+      "cacheSavingsUsd": 0
+    },
+    "diagramVsTruth": {}
+  },
+  "results": [
+    {
+      "id": "todo-api",
+      "kind": "generation",
+      "view": "architecture",
+      "status": "succeeded",
+      "latencyMs": 8493,
+      "usage": {
+        "calls": [
+          {
+            "view": "architecture",
+            "outcome": "ok",
+            "repairs": 0,
+            "costUsd": 0.0195134
+          }
+        ],
+        "inputTokens": 46,
+        "cacheWriteTokens": 0,
+        "cacheReadTokens": 3547,
+        "outputTokens": 931,
+        "costUsd": 0.0195134,
+        "repairs": 0
+      },
+      "model": {
+        "nodes": 4,
+        "edges": 3,
+        "views": [
+          "architecture"
+        ],
+        "openQuestions": 0,
+        "valid": true
+      },
+      "suiteA": {
+        "semantic": true,
+        "validate": true
+      }
+    },
+    {
+      "id": "checkout",
+      "kind": "generation",
+      "view": "architecture",
+      "status": "succeeded",
+      "latencyMs": 10260,
+      "usage": {
+        "calls": [
+          {
+            "view": "architecture",
+            "outcome": "ok",
+            "repairs": 0,
+            "costUsd": 0.0268374
+          }
+        ],
+        "inputTokens": 42,
+        "cacheWriteTokens": 0,
+        "cacheReadTokens": 3547,
+        "outputTokens": 1298,
+        "costUsd": 0.0268374,
+        "repairs": 0
+      },
+      "model": {
+        "nodes": 4,
+        "edges": 3,
+        "views": [
+          "architecture"
+        ],
+        "openQuestions": 2,
+        "valid": true
+      },
+      "suiteA": {
+        "semantic": true,
+        "validate": true
+      }
+    },
+    {
+      "id": "boring-crud",
+      "kind": "generation",
+      "view": "architecture",
+      "status": "succeeded",
+      "latencyMs": 8831,
+      "usage": {
+        "calls": [
+          {
+            "view": "architecture",
+            "outcome": "ok",
+            "repairs": 0,
+            "costUsd": 0.0217654
+          }
+        ],
+        "inputTokens": 44,
+        "cacheWriteTokens": 0,
+        "cacheReadTokens": 3547,
+        "outputTokens": 1044,
+        "costUsd": 0.0217654,
+        "repairs": 0
+      },
+      "model": {
+        "nodes": 4,
+        "edges": 3,
+        "views": [
+          "architecture"
+        ],
+        "openQuestions": 0,
+        "valid": true
+      },
+      "suiteA": {
+        "semantic": true,
+        "validate": true
+      }
+    },
+    {
+      "id": "streaming",
+      "kind": "generation",
+      "view": "architecture",
+      "status": "succeeded",
+      "latencyMs": 29119,
+      "usage": {
+        "calls": [
+          {
+            "view": "architecture",
+            "outcome": "ok",
+            "repairs": 0,
+            "costUsd": 0.0755694
+          }
+        ],
+        "inputTokens": 115,
+        "cacheWriteTokens": 0,
+        "cacheReadTokens": 3547,
+        "outputTokens": 3720,
+        "costUsd": 0.0755694,
+        "repairs": 0
+      },
+      "model": {
+        "nodes": 14,
+        "edges": 14,
+        "views": [
+          "architecture"
+        ],
+        "openQuestions": 2,
+        "valid": true
+      }
+    },
+    {
+      "id": "login-seq",
+      "kind": "generation",
+      "view": "sequence",
+      "status": "succeeded",
+      "latencyMs": 14162,
+      "usage": {
+        "calls": [
+          {
+            "view": "sequence",
+            "outcome": "ok",
+            "repairs": 0,
+            "costUsd": 0.0353934
+          }
+        ],
+        "inputTokens": 71,
+        "cacheWriteTokens": 0,
+        "cacheReadTokens": 3547,
+        "outputTokens": 1720,
+        "costUsd": 0.0353934,
+        "repairs": 0
+      },
+      "model": {
+        "nodes": 4,
+        "edges": 3,
+        "views": [
+          "sequence"
+        ],
+        "openQuestions": 2,
+        "valid": true
+      }
+    },
+    {
+      "id": "library-er",
+      "kind": "generation",
+      "view": "er",
+      "status": "succeeded",
+      "latencyMs": 16595,
+      "usage": {
+        "calls": [
+          {
+            "view": "er",
+            "outcome": "ok",
+            "repairs": 0,
+            "costUsd": 0.0465614
+          }
+        ],
+        "inputTokens": 58,
+        "cacheWriteTokens": 0,
+        "cacheReadTokens": 3547,
+        "outputTokens": 2281,
+        "costUsd": 0.0465614,
+        "repairs": 0
+      },
+      "model": {
+        "nodes": 5,
+        "edges": 5,
+        "views": [
+          "er"
+        ],
+        "openQuestions": 1,
+        "valid": true
+      }
+    },
+    {
+      "id": "order-component",
+      "kind": "generation",
+      "view": "component-detail",
+      "status": "succeeded",
+      "latencyMs": 18024,
+      "usage": {
+        "calls": [
+          {
+            "view": "component-detail",
+            "outcome": "ok",
+            "repairs": 0,
+            "costUsd": 0.0470054
+          }
+        ],
+        "inputTokens": 74,
+        "cacheWriteTokens": 0,
+        "cacheReadTokens": 3547,
+        "outputTokens": 2300,
+        "costUsd": 0.0470054,
+        "repairs": 0
+      },
+      "model": {
+        "nodes": 8,
+        "edges": 7,
+        "views": [
+          "component-detail"
+        ],
+        "openQuestions": 2,
+        "valid": true
+      }
+    }
+  ]
+}

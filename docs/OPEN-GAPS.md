@@ -2,13 +2,12 @@
 
 A single, living list of known gaps that are not yet fixed, so none is lost between tasks. Each entry links to where it was found. When a gap is fixed, delete its row in the same PR; when one is found, add it here in the PR that found it.
 
-Last reviewed: 2026-10-17, after PR #34 (main `7c45d39`). Release tasks refer to `RELEASE-PROGRESS.md`.
+Last reviewed: 2026-10-17, after PR #35 (main `77d0a25`). Release tasks refer to `RELEASE-PROGRESS.md`.
 
 ## Scheduled into a release task
 
 | Gap | User impact | Found in | Planned |
 |---|---|---|---|
-| Hosted descriptions and imports are never valid on the first attempt (0/24 in the task 19 run): the hosted prompt sends evidence as an opaque JSON-encoded string, so the model writes free-text evidence and every job pays at least one repair round | Roughly doubles the provider calls behind each diagram; descriptions take 52 s at the median | Task 19 provider evaluation | Task 19b (next PR, measured against the task 19 baseline) |
 | Named-person visual reviews of the Suite A diagrams are missing | Evaluation not eligible for publication | Post-merge audit | Owner review: screenshots, models and commands are ready in `benchmarks/ordinary-model-floor/review/` |
 | After the run's refinement added a notification service, the checkout diagram laid out right to left with a connection wrapping around the group (observed in a screenshot, not yet confirmed by a reviewer) | Refined diagrams may read backwards | Task 19 review capture | Confirm during visual review; then Task 20 |
 | Refine status text is truncated to one line; full reason only on hover | Refusals and errors are hard to read, especially on touch devices | Task 10b | Task 20 |
@@ -24,6 +23,7 @@ Last reviewed: 2026-10-17, after PR #34 (main `7c45d39`). Release tasks refer to
 
 | Gap | User impact | Found in | Notes |
 |---|---|---|---|
+| Hosted import first-pass validity after the task 19b fixes is unmeasured (the one import measured ran before the fence fix and needed a repair); the description rate comes from 7 cases | Imports may still pay a repair round | Task 19b | Include imports in the next provider evaluation run |
 | Node and edge ground truth exists only for the two repositories used while fixing the extractors; held-out truth covers endpoints only | Diagram and extraction accuracy on unseen repositories is unmeasured beyond endpoints | Tasks 15 and 19 | Needs hand-authored truth for new held-out repositories |
 | Third-party SDK clients reached through helper functions (SMTP via `emails`/`smtplib`, Sentry) are not extracted | External services such as email delivery are missing from FastAPI diagrams | Task 15 ground truth (full-stack template) | Needs call-graph inference; candidate for a later extractor pass |
 | FastAPI dependencies built by factory calls (`Depends(get_repository(UsersRepository))`) are not resolved | Repository/service links behind parameterised dependency factories are missing | Task 15 held-out reading (fastapi-realworld) | Same call-graph limitation; disclosed only implicitly by the missing edges |

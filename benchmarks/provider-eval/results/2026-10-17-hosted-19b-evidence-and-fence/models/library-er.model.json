@@ -1,0 +1,322 @@
+{
+  "schemaVersion": "1",
+  "revision": 1,
+  "title": "Library Data Model",
+  "requirements": [
+    {
+      "id": "req.book-copies",
+      "text": "A book has many physical copies.",
+      "status": "stated"
+    },
+    {
+      "id": "req.loans",
+      "text": "Members borrow copies through loans with due dates.",
+      "status": "stated"
+    },
+    {
+      "id": "req.loan-ownership",
+      "text": "A loan belongs to exactly one member and one copy.",
+      "status": "stated"
+    },
+    {
+      "id": "req.reservations",
+      "text": "Members can reserve books.",
+      "status": "stated"
+    }
+  ],
+  "openQuestions": [
+    {
+      "id": "q.reservation-scope",
+      "text": "Are reservations placed on a book (any copy) or on a specific copy?",
+      "blockedBy": "e.book-reservation"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "entity.book",
+      "kind": "entity",
+      "label": "Book",
+      "provenance": "user-specified",
+      "evidence": [],
+      "fields": [
+        {
+          "name": "book_id",
+          "type": "uuid",
+          "key": "pk"
+        },
+        {
+          "name": "isbn",
+          "type": "string",
+          "key": "uk"
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "author",
+          "type": "string",
+          "key": null
+        }
+      ]
+    },
+    {
+      "id": "entity.copy",
+      "kind": "entity",
+      "label": "Copy",
+      "provenance": "user-specified",
+      "evidence": [],
+      "fields": [
+        {
+          "name": "copy_id",
+          "type": "uuid",
+          "key": "pk"
+        },
+        {
+          "name": "book_id",
+          "type": "uuid",
+          "key": "fk"
+        },
+        {
+          "name": "barcode",
+          "type": "string",
+          "key": "uk"
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "key": null
+        }
+      ]
+    },
+    {
+      "id": "entity.member",
+      "kind": "entity",
+      "label": "Member",
+      "provenance": "user-specified",
+      "evidence": [],
+      "fields": [
+        {
+          "name": "member_id",
+          "type": "uuid",
+          "key": "pk"
+        },
+        {
+          "name": "email",
+          "type": "string",
+          "key": "uk"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "key": null
+        }
+      ]
+    },
+    {
+      "id": "entity.loan",
+      "kind": "entity",
+      "label": "Loan",
+      "provenance": "user-specified",
+      "evidence": [],
+      "fields": [
+        {
+          "name": "loan_id",
+          "type": "uuid",
+          "key": "pk"
+        },
+        {
+          "name": "member_id",
+          "type": "uuid",
+          "key": "fk"
+        },
+        {
+          "name": "copy_id",
+          "type": "uuid",
+          "key": "fk"
+        },
+        {
+          "name": "loaned_at",
+          "type": "timestamp",
+          "key": null
+        },
+        {
+          "name": "due_date",
+          "type": "date",
+          "key": null
+        },
+        {
+          "name": "returned_at",
+          "type": "timestamp",
+          "key": null
+        }
+      ]
+    },
+    {
+      "id": "entity.reservation",
+      "kind": "entity",
+      "label": "Reservation",
+      "provenance": "inferred",
+      "evidence": [],
+      "fields": [
+        {
+          "name": "reservation_id",
+          "type": "uuid",
+          "key": "pk"
+        },
+        {
+          "name": "member_id",
+          "type": "uuid",
+          "key": "fk"
+        },
+        {
+          "name": "book_id",
+          "type": "uuid",
+          "key": "fk"
+        },
+        {
+          "name": "reserved_at",
+          "type": "timestamp",
+          "key": null
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "key": null
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "e.book-copy",
+      "from": "entity.book",
+      "to": "entity.copy",
+      "type": "relation",
+      "label": "has copies",
+      "cardinality": "1:N",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.member-loan",
+      "from": "entity.member",
+      "to": "entity.loan",
+      "type": "relation",
+      "label": "borrows",
+      "cardinality": "1:N",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.copy-loan",
+      "from": "entity.copy",
+      "to": "entity.loan",
+      "type": "relation",
+      "label": "loaned via",
+      "cardinality": "1:N",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.member-reservation",
+      "from": "entity.member",
+      "to": "entity.reservation",
+      "type": "relation",
+      "label": "places",
+      "cardinality": "1:N",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "e.book-reservation",
+      "from": "entity.book",
+      "to": "entity.reservation",
+      "type": "relation",
+      "label": "reserved in",
+      "cardinality": "1:N",
+      "provenance": "inferred",
+      "evidence": []
+    }
+  ],
+  "views": [
+    {
+      "id": "view.er",
+      "type": "er",
+      "orientation": "LR",
+      "nodes": [
+        "entity.book",
+        "entity.copy",
+        "entity.member",
+        "entity.loan",
+        "entity.reservation"
+      ],
+      "edges": [
+        "e.book-copy",
+        "e.member-loan",
+        "e.copy-loan",
+        "e.member-reservation",
+        "e.book-reservation"
+      ]
+    }
+  ],
+  "semanticChecks": {
+    "allowedRoots": [],
+    "allowedTerminals": [],
+    "requiredEdges": [
+      {
+        "from": "entity.book",
+        "to": "entity.copy",
+        "type": "relation"
+      },
+      {
+        "from": "entity.member",
+        "to": "entity.loan",
+        "type": "relation"
+      },
+      {
+        "from": "entity.copy",
+        "to": "entity.loan",
+        "type": "relation"
+      }
+    ],
+    "requiredPaths": []
+  },
+  "boundaries": [],
+  "guidedViews": [
+    {
+      "id": "gv.catalog",
+      "label": "Catalog",
+      "focus": [
+        "entity.book",
+        "entity.copy"
+      ],
+      "note": "A book has many physical copies."
+    },
+    {
+      "id": "gv.loans",
+      "label": "Loans",
+      "focus": [
+        "entity.member",
+        "entity.loan",
+        "entity.copy"
+      ],
+      "note": "Each loan links one member to one copy and has a due date."
+    },
+    {
+      "id": "gv.reservations",
+      "label": "Reservations",
+      "focus": [
+        "entity.member",
+        "entity.reservation",
+        "entity.book"
+      ],
+      "note": "Members reserve books. Modeling this as a reservation entity is inferred."
+    }
+  ],
+  "privacy": {
+    "classification": "public",
+    "boundary": "external-allowed"
+  }
+}

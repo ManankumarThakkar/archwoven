@@ -1,0 +1,280 @@
+{
+  "schemaVersion": "1",
+  "revision": 1,
+  "title": "Order Service Component Detail",
+  "requirements": [
+    {
+      "id": "req.components",
+      "text": "Order service has HTTP controller, application service, pricing, repository, outbox publisher",
+      "status": "stated"
+    },
+    {
+      "id": "req.persistence",
+      "text": "Order repository is backed by PostgreSQL",
+      "status": "stated"
+    },
+    {
+      "id": "req.events",
+      "text": "Outbox publisher sends events to Kafka",
+      "status": "stated"
+    }
+  ],
+  "openQuestions": [
+    {
+      "id": "q.outbox-storage",
+      "text": "Is the outbox table stored in the same PostgreSQL database and written in the order transaction?",
+      "blockedBy": "e.outbox-postgres"
+    },
+    {
+      "id": "q.pricing-deps",
+      "text": "Does pricing call any external price or tax source?",
+      "blockedBy": null
+    }
+  ],
+  "nodes": [
+    {
+      "id": "actor.client",
+      "kind": "actor",
+      "label": "API Client",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "comp.http-controller",
+      "kind": "component",
+      "label": "HTTP Controller",
+      "provenance": "user-specified",
+      "evidence": [],
+      "group": "svc.orders"
+    },
+    {
+      "id": "comp.order-app-service",
+      "kind": "component",
+      "label": "Order Application Service",
+      "provenance": "user-specified",
+      "evidence": [],
+      "group": "svc.orders"
+    },
+    {
+      "id": "comp.pricing",
+      "kind": "component",
+      "label": "Pricing",
+      "provenance": "user-specified",
+      "evidence": [],
+      "group": "svc.orders"
+    },
+    {
+      "id": "comp.order-repository",
+      "kind": "component",
+      "label": "Order Repository",
+      "provenance": "user-specified",
+      "evidence": [],
+      "group": "svc.orders"
+    },
+    {
+      "id": "comp.outbox-publisher",
+      "kind": "component",
+      "label": "Outbox Publisher",
+      "provenance": "user-specified",
+      "evidence": [],
+      "group": "svc.orders"
+    },
+    {
+      "id": "db.postgres",
+      "kind": "datastore",
+      "label": "PostgreSQL",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "queue.kafka",
+      "kind": "queue",
+      "label": "Kafka",
+      "provenance": "user-specified",
+      "evidence": []
+    }
+  ],
+  "edges": [
+    {
+      "id": "e.client-controller",
+      "from": "actor.client",
+      "to": "comp.http-controller",
+      "type": "sync",
+      "label": "HTTP request",
+      "role": "main",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "e.controller-app",
+      "from": "comp.http-controller",
+      "to": "comp.order-app-service",
+      "type": "sync",
+      "label": "invoke use case",
+      "role": "main",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "e.app-pricing",
+      "from": "comp.order-app-service",
+      "to": "comp.pricing",
+      "type": "sync",
+      "label": "calculate price",
+      "role": "branch",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "e.app-repository",
+      "from": "comp.order-app-service",
+      "to": "comp.order-repository",
+      "type": "sync",
+      "label": "save order",
+      "role": "main",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "e.repository-postgres",
+      "from": "comp.order-repository",
+      "to": "db.postgres",
+      "type": "data",
+      "label": "persist orders",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.outbox-postgres",
+      "from": "comp.outbox-publisher",
+      "to": "db.postgres",
+      "type": "data",
+      "label": "read outbox rows",
+      "role": "branch",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "e.outbox-kafka",
+      "from": "comp.outbox-publisher",
+      "to": "queue.kafka",
+      "type": "async",
+      "label": "publish events",
+      "role": "async",
+      "provenance": "user-specified",
+      "evidence": []
+    }
+  ],
+  "views": [
+    {
+      "id": "view.component-detail",
+      "type": "component-detail",
+      "orientation": "LR",
+      "nodes": [
+        "actor.client",
+        "comp.http-controller",
+        "comp.order-app-service",
+        "comp.pricing",
+        "comp.order-repository",
+        "comp.outbox-publisher",
+        "db.postgres",
+        "queue.kafka"
+      ],
+      "edges": [
+        "e.client-controller",
+        "e.controller-app",
+        "e.app-pricing",
+        "e.app-repository",
+        "e.repository-postgres",
+        "e.outbox-postgres",
+        "e.outbox-kafka"
+      ],
+      "mainPath": [
+        "actor.client",
+        "comp.http-controller",
+        "comp.order-app-service",
+        "comp.order-repository",
+        "db.postgres"
+      ]
+    }
+  ],
+  "semanticChecks": {
+    "allowedRoots": [
+      "actor.client",
+      "comp.outbox-publisher"
+    ],
+    "allowedTerminals": [
+      "comp.pricing",
+      "db.postgres",
+      "queue.kafka"
+    ],
+    "requiredEdges": [
+      {
+        "from": "comp.order-repository",
+        "to": "db.postgres",
+        "type": "data"
+      },
+      {
+        "from": "comp.outbox-publisher",
+        "to": "queue.kafka",
+        "type": "async"
+      }
+    ],
+    "requiredPaths": [
+      {
+        "from": "actor.client",
+        "to": "db.postgres"
+      }
+    ]
+  },
+  "boundaries": [
+    {
+      "id": "b.order-service",
+      "label": "Order Service",
+      "wraps": [
+        "comp.http-controller",
+        "comp.order-app-service",
+        "comp.pricing",
+        "comp.order-repository",
+        "comp.outbox-publisher"
+      ]
+    }
+  ],
+  "guidedViews": [
+    {
+      "id": "g.request",
+      "label": "Request handling",
+      "focus": [
+        "actor.client",
+        "comp.http-controller",
+        "comp.order-app-service",
+        "comp.pricing"
+      ],
+      "note": "Requests enter via the controller; the application service orchestrates pricing."
+    },
+    {
+      "id": "g.persistence",
+      "label": "Persistence",
+      "focus": [
+        "comp.order-repository",
+        "db.postgres"
+      ],
+      "note": "The repository persists orders in PostgreSQL."
+    },
+    {
+      "id": "g.events",
+      "label": "Event publishing",
+      "focus": [
+        "comp.outbox-publisher",
+        "db.postgres",
+        "queue.kafka"
+      ],
+      "note": "The outbox publisher relays stored events to Kafka."
+    }
+  ],
+  "privacy": {
+    "classification": "public",
+    "boundary": "external-allowed"
+  }
+}
