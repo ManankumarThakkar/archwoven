@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { validFullModel, type SystemModel } from '@archwoven/model';
+import { openDetailView, validFullModel, type SystemModel } from '@archwoven/model';
 import { buildSvg } from './export-svg';
 import { buildCardSvg } from '../app/api/share-card/card';
+import { expandedDetailModel } from '../probes/render/detail-fixture';
 
 const evil = (n: string): string =>
   n === 'actor.user'
@@ -49,5 +50,70 @@ describe('scenario 11: malicious labels cannot execute in exports', () => {
     const m = maliciousModel();
     const svg = buildCardSvg(m, m.views[0]!.id, 'route', m.nodes[0]!.id, m.nodes[2]!.id);
     assertSafe(svg);
+  });
+});
+
+describe('component detail export context', () => {
+  it('marks internal nodes as dashed and names their parent without marking ordinary inferred nodes', async () => {
+    const model = expandedDetailModel();
+    const svg = await buildSvg(model, 'detail:svc.orders');
+    const internal = svg.match(/<g data-node="svc.orders\/intake">[\s\S]*?<\/g>/)![0];
+    expect(internal).toMatch(/<rect[^>]+stroke-dasharray="6 4"/);
+    expect(internal).toContain('inside Order Service (inferred)');
+    const neighbour = svg.match(/<g data-node="gateway.api">[\s\S]*?<\/g>/)![0];
+    expect(neighbour).not.toContain('stroke-dasharray');
+    const overview = await buildSvg(model, 'view.architecture');
+    const parent = overview.match(/<g data-node="svc.orders">[\s\S]*?<\/g>/)![0];
+    expect(parent).toContain('· detail');
+    expect(parent).not.toContain('stroke-dasharray');
+    expect(overview).not.toContain('data-detail-caption');
+  });
+
+  it('includes visible inferred context and the source disclaimer only for repository models', async () => {
+    const model = expandedDetailModel();
+    const caption = (svg: string) => (svg.match(/<g data-detail-caption="true">[\s\S]*?<\/g>/)?.[0] ?? '')
+      .replace(/<\/tspan>/g, ' ').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+    const description = caption(await buildSvg(model, 'detail:svc.orders'));
+    expect(description).toContain('Inside Order Service (inferred)');
+    expect(description).toContain('and its direct connections');
+    expect(description).not.toContain('not found in source');
+    model.nodes.find(n => n.id === 'gateway.api')!.provenance = 'source-supported';
+    expect(caption(await buildSvg(model, 'detail:svc.orders'))).toContain('Internals are inferred, not found in source.');
+  });
+
+  it('keeps unexpanded detail views contextual without claiming their nodes are inferred internals', async () => {
+    const result = openDetailView(structuredClone(validFullModel), 'svc.orders');
+    if (!result.ok) throw new Error(result.errors.join('\n'));
+    const svg = await buildSvg(result.model, 'detail:svc.orders');
+    const caption = svg.match(/<g data-detail-caption="true">[\s\S]*?<\/g>/)?.[0] ?? '';
+    expect(caption).toContain('Order Service and its direct connections');
+    expect(caption).not.toContain('(inferred)');
+    expect(caption).not.toContain('not found in source');
+  });
+
+  it('escapes parent labels in captions and internal-node titles', async () => {
+    const model = expandedDetailModel();
+    model.nodes.find(n => n.id === 'svc.orders')!.label = '<script>"bad"</script> & parent';
+    const svg = await buildSvg(model, 'detail:svc.orders');
+    expect(svg).toContain('&lt;script&gt;&quot;bad&quot;&lt;/script&gt; &amp; parent');
+    expect(svg).not.toMatch(/<script/i);
+    expect(svg.match(/<g data-node="svc.orders\/intake">[\s\S]*?<\/g>/)?.[0]).toContain('inside &lt;script&gt;');
+  });
+
+  it('makes the parent and inference disclaimer available in the SVG accessible description', async () => {
+    const model = expandedDetailModel();
+    model.nodes.find(n => n.id === 'gateway.api')!.provenance = 'source-supported';
+    const svg = await buildSvg(model, 'detail:svc.orders');
+    const description = svg.match(/<desc>([\s\S]*?)<\/desc>/)?.[1] ?? '';
+    expect(description).toContain('Inside Order Service (inferred)');
+    expect(description).toContain('not found in source');
+  });
+
+  it('does not label a generated component view as a managed drill-down', async () => {
+    const model = structuredClone(validFullModel);
+    model.views.push({ id: 'view.component', type: 'component-detail', focus: 'svc.orders', nodes: ['svc.orders'], edges: [] });
+    const svg = await buildSvg(model, 'view.component');
+    expect(svg).not.toContain('data-detail-caption');
+    expect(svg).not.toContain('Inside Order Service');
   });
 });
