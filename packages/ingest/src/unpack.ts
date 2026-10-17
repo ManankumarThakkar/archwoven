@@ -1,3 +1,5 @@
+import { isVendor } from './exclusions';
+import { isSafeSubdir, withinScope } from './scope';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, posix } from 'node:path';
 import { createGunzip } from 'node:zlib';
@@ -13,6 +15,8 @@ import { createGunzip } from 'node:zlib';
 export interface UnpackResult {
   files: string[];
   skipped: { path: string; reason: string }[];
+  /** Bounded root metadata notices retained without materializing outside files. */
+  declarations?: { submodules: boolean; lfs: boolean };
 }
 
 export interface UnpackCaps {
@@ -26,14 +30,7 @@ export interface UnpackCaps {
 
 const MAX_EXPANDED_DEFAULT = 100 * 1024 * 1024;
 
-const VENDOR_SEGMENTS = new Set(['node_modules', 'target', 'build', '.git', '.gradle', '__pycache__', 'venv', '.venv']);
-const VENDOR_FILES = /^(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|go\.sum|Gemfile\.lock)$/;
-const VENDOR_EXT = /\.(min\.(js|css)|class|jar|war|ear|woff2?|ttf|eot|so|dylib|dll|exe|lock)$/i;
-
-export const isVendor = (rel: string): boolean => {
-  const parts = rel.split('/');
-  return parts.some((p) => VENDOR_SEGMENTS.has(p)) || VENDOR_FILES.test(parts[parts.length - 1]!) || VENDOR_EXT.test(rel);
-};
+export { isVendor } from './exclusions';
 
 const looksBinary = (body: Uint8Array): boolean => body.subarray(0, Math.min(8192, body.length)).includes(0);
 
@@ -70,17 +67,21 @@ const octal = (b: Uint8Array): number => {
 /** strip the codeload "{repo}-{sha}/" root prefix GitHub always adds */
 const normalize = (raw: string): string => raw.replace(/^\.\//, '').replace(/^[^/]+-(?:[0-9a-f]{7,40}|[\w.-]+)\//, '');
 
-export async function unpackTarball(tarball: ArrayBufferView | ArrayBuffer, destDir: string, caps: UnpackCaps): Promise<UnpackResult> {
+export async function unpackTarball(tarball: ArrayBufferView | ArrayBuffer, destDir: string, caps: UnpackCaps, opts: { subdir?: string } = {}): Promise<UnpackResult> {
+  const subdir = opts.subdir || undefined;
+  if (subdir && !isSafeSubdir(subdir)) throw new Error('Invalid subdir: choose a relative source directory without traversal, hidden or excluded folders.');
   mkdirSync(destDir, { recursive: true });
   let buf = ArrayBuffer.isView(tarball)
     ? new Uint8Array(tarball.buffer, tarball.byteOffset, tarball.byteLength)
     : new Uint8Array(tarball);
   // codeload serves .tar.gz — inflate before the block reader, capping the
   // DECOMPRESSED size incrementally (a small gzip can hide a big bomb).
+  const expandedCap = caps.maxExpandedBytes ?? MAX_EXPANDED_DEFAULT;
   if (buf[0] === 0x1f && buf[1] === 0x8b) {
-    const expandedCap = caps.maxExpandedBytes ?? MAX_EXPANDED_DEFAULT;
     buf = await inflateCapped(buf, expandedCap);
   }
+  if (buf.length > expandedCap) throw new Error(`oversized: decompressed archive exceeds ${expandedCap} bytes`);
+  const declarations = { submodules: false, lfs: false };
   const files: string[] = [];
   const skipped: { path: string; reason: string }[] = [];
   let totalWritten = 0;
@@ -104,6 +105,7 @@ export async function unpackTarball(tarball: ArrayBufferView | ArrayBuffer, dest
     const prefix = new TextDecoder().decode(header.subarray(345, 500)).replace(/\0.*$/, '');
     if (prefix) name = `${prefix}/${name}`;
 
+    if (!Number.isSafeInteger(size) || size < 0 || off + 512 + Math.ceil(size / 512) * 512 > buf.length) throw new Error('Invalid or truncated archive entry size.');
     off += 512;
     const body = buf.subarray(off, off + size);
     off += Math.ceil(size / 512) * 512;
@@ -123,6 +125,15 @@ export async function unpackTarball(tarball: ArrayBufferView | ArrayBuffer, dest
 
     if (raw.includes('..')) { skipped.push({ path: gapPath, reason: 'traversal' }); continue; }
     if (raw.startsWith('/') || /^[A-Za-z]:[\\/]/.test(raw)) { skipped.push({ path: gapPath, reason: 'absolute-path' }); continue; }
+    if (!withinScope(rel, subdir)) {
+      // These repository-wide notices are useful in a scoped analysis, but
+      // metadata must neither consume its file budget nor become an outside file.
+      if ((typeflag === '0' || typeflag === '7') && size <= Math.min(caps.maxFileBytes, 65536) && !looksBinary(body)) {
+        if (rel === '.gitmodules') declarations.submodules = true;
+        if (rel === '.gitattributes' && /filter=lfs/.test(new TextDecoder().decode(body))) declarations.lfs = true;
+      }
+      continue;
+    }
     if (typeflag === '2') { skipped.push({ path: gapPath, reason: 'symlink' }); continue; }
     if (typeflag === '1') { skipped.push({ path: gapPath, reason: 'hardlink' }); continue; }
     // Directories carry no source content; files create their own parents.
@@ -149,7 +160,7 @@ export async function unpackTarball(tarball: ArrayBufferView | ArrayBuffer, dest
     files.push(rel);
   }
 
-  return { files, skipped };
+  return { files, skipped, ...(subdir ? { declarations } : {}) };
 }
 
 export function cleanupDir(dir: string): void {

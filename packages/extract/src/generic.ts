@@ -15,7 +15,7 @@ const DEFAULT_CAPS: SourceAnalysisCaps = { maxFiles: 20, maxFileChars: 2400, max
 const SOURCE = /\.(?:[cm]?[jt]sx?|py|go|rs|java|kt|kts|cs|c|h|cc|cpp|hpp|rb|php|swift|scala|sh|ex|exs|erl|fs|fsx|clj|cljs|vue|svelte)$/i;
 const MANIFEST = /^(?:package\.json|pyproject\.toml|requirements\.txt|go\.mod|Cargo\.toml|pom\.xml|build\.gradle(?:\.kts)?|Gemfile|composer\.json|mix\.exs|.*\.csproj)$/i;
 const DOC = /^(?:readme|architecture)(?:\.[^/]*)?$/i;
-const NOISE = new Set(['node_modules', 'vendor', 'vendors', 'third_party', 'third-party', 'target', 'build', 'dist', 'coverage', '.git', '.next', '.nuxt', '.gradle', '__pycache__', 'venv', '.venv', 'test', 'tests', '__tests__', 'fixtures', '__fixtures__', 'testdata', 'generated', '.cache', '.idea', '.vscode']);
+const NOISE = new Set(['node_modules', 'vendor', 'vendors', 'third_party', 'third-party', 'target', 'build', 'dist', 'out', '__generated__', 'coverage', '.git', '.next', '.nuxt', '.gradle', '__pycache__', 'venv', '.venv', 'test', 'tests', '__tests__', 'fixtures', '__fixtures__', 'testdata', 'generated', '.cache', '.idea', '.vscode']);
 const SENSITIVE = /(?:^|[._-])(?:credentials?|secrets?|private[-_]?key|id_rsa|id_ed25519)(?:[._-]|$)/i;
 const base = (path: string) => posix.basename(path);
 const manifest = (path: string) => MANIFEST.test(base(path));
@@ -23,12 +23,12 @@ const source = (path: string) => SOURCE.test(path);
 
 /** Shared before-read allowlist. Unknown binary/config files and sensitive names
  * never enter the source inventory or snippets. The input paths are untrusted. */
-function isSafeSourcePath(path: string): boolean {
+export function isSafeSourcePath(path: string): boolean {
   if (!path || path.startsWith('/') || path.includes('\\') || /^[A-Za-z]:/.test(path)) return false;
   const parts = path.split('/');
   if (parts.some((part) => part === '..' || part === '.' || NOISE.has(part.toLowerCase()) || part.startsWith('.'))) return false;
   const name = base(path);
-  if (SENSITIVE.test(name) || /\.(?:test|spec|generated|min)\.[^.]+$/i.test(name) || /^(?:test_.+|.+_test)\.(?:py|go)$/i.test(name)) return false;
+  if (SENSITIVE.test(name) || /(?:\.(?:test|spec|min)\.[^.]+|\.generated(?:\.[^./]+)+)$/i.test(name) || /^(?:test_.+|.+_test)\.(?:py|go)$/i.test(name)) return false;
   return true;
 }
 

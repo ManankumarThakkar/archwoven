@@ -215,3 +215,29 @@ describe('ingestRepo (pin → fetch → unpack → detect → extract)', () => {
     if (r.ok) expect(r.filesScanned).toBe(2);
   });
 });
+
+
+it('applies hosted scope before file caps, keeps repo declarations and pins full evidence paths',async()=>{
+  const result=await ingestRepo({owner:'foo',repo:'r',subdir:'api'}, {
+    fetcher:cannedFetcher([tarEntry('r-main/outside/main.go','package outside'),tarEntry('r-main/.gitmodules','[submodule "x"]'),tarEntry('r-main/.gitattributes','*.bin filter=lfs'),tarEntry('r-main/api/main.go','package main'),tarEntry('r-main/outside/huge.go','x'.repeat(2000))]),extractSpringBoot,extractFastApi,tmpRoot:tmp()
+  },{caps:{maxFiles:1,maxTotalBytes:100000,maxFileBytes:100}});
+  expect(result.ok,JSON.stringify(result)).toBe(true);if(!result.ok)return;expect(result.filesScanned).toBe(1);expect(result.fragment.sourceContext?.inventory).toEqual(['api/main.go']);
+  expect(result.gaps.join(' ')).not.toMatch(/outside|size limit|file limit/);expect(result.gaps.join(' ')).toMatch(/submodule/);expect(result.gaps.join(' ')).toMatch(/LFS/);
+});
+it.each(['../outside','htmlcov','api/htmlcov','api/a.generated.d.ts'])('rejects unsafe hosted library scope %s without a network call',async subdir=>{
+  let calls=0;const result=await ingestRepo({owner:'foo',repo:'r',subdir},{fetcher:async()=>{calls++;throw Error('no network');},extractSpringBoot,extractFastApi});expect(result.ok).toBe(false);expect(calls).toBe(0);
+});
+
+
+it('a scoped hosted import cannot bypass hidden-directory source exclusions',async()=>{
+  const r=await ingestRepo({owner:'foo',repo:'r',subdir:'.hidden'},{fetcher:cannedFetcher([tarEntry('r-main/.hidden/main.go','package main')]),extractSpringBoot,extractFastApi,tmpRoot:tmp()});expect(r.ok).toBe(false);
+});
+
+
+it.each(['fastapi','spring-boot'] as const)('scoped hosted %s evidence points at the selected commit path',async framework=>{
+  const filename=framework==='fastapi'?'main.py':'App.java';const code=framework==='fastapi'?'from fastapi import FastAPI\napp = FastAPI()\n@app.get("/ping")\ndef ping(): return "ok"':'@SpringBootApplication @RestController class App { @GetMapping("/ping") public String ping() { return "ok"; } }';
+  const result=await ingestRepo({owner:'foo',repo:'r',subdir:'services/api'},{fetcher:cannedFetcher([tarEntry('r-main/services/api/'+filename,code)]),extractSpringBoot,extractFastApi,tmpRoot:tmp()});
+  expect(result.ok).toBe(true);if(!result.ok)return;expect(result.sha).toBe(SHA);expect(result.framework).toBe(framework);
+  const paths=[...result.fragment.nodes.flatMap(n=>n.evidence),...result.fragment.edges.flatMap(e=>e.evidence),...result.fragment.endpoints.map(e=>e.evidence)].map(e=>e.path).filter(Boolean);
+  expect(paths.length).toBeGreaterThan(0);expect(new Set(paths)).toEqual(new Set(['services/api/'+filename]));
+});

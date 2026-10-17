@@ -386,3 +386,38 @@ Mutations disabling each of the following were all caught: the host, origin and 
 - Live inspection found a layout regression: `.aw-repo-option`'s `flex: 1` stretched the local subdirectory field vertically, leaving a large gap. The field now uses the same row container as the GitHub form; it was rebuilt and re-verified 15/15 with a corrected screenshot.
 
 Known limitation for task 12: local disclosures still list files outside the chosen subdirectory (for example fonts and the lockfile when importing `packages/jobs/src`), because `walkLocal` scans the whole clone before applying the subdirectory. Artifacts are in the session scratchpad (`live5`); no database, credentials or cookies are published.
+
+
+## Task 12 — scope before scanning and source limits
+
+2026-10-17, America/Chicago. Branch `fix/scoped-source-scanning`, based on merged PR #26 at `53ea2b33f33ae08cadde11d9ee400a04f7802ae4`.
+
+Local imports now select and validate the requested directory before enumeration. Only that subtree consumes the file-count and byte budgets or produces ordinary skipped-file disclosures. Repository-relative inventory and evidence paths remain intact. Directory links are refused, including selected ancestors; inventory checks directory identity and rejects a clone root redirected after asynchronous git work. Existing no-follow, descriptor-identity and bounded source-capture checks remain in place.
+
+Hosted imports apply the same scope before archive materialization, per-file checks and file-count accounting. Whole-download and decompression limits remain global: selecting a small directory does not bypass archive safety limits. Raw archive entry sizes are checked before advancing, even outside the scope; raw uncompressed archives also obey the expanded-size limit. Root submodule/LFS notices use bounded metadata inspection without writing outside files or consuming the scoped source budget. Global unsafe-path/archive-integrity diagnostics remain possible; ordinary outside-scope files do not generate skip noise.
+
+Generated/vendor exclusions now cover build output, coverage, framework caches and generated-source directories, plus generated compound filenames such as `.generated.d.ts`, source maps and TypeScript build metadata. Scope validation shares the ingestion exclusion predicate and rejects excluded scopes before git/network work. Framework extraction evidence now includes the selected subdirectory, matching generic evidence.
+
+**Regression evidence.** The first scope/cap/evidence tests produced 22 expected failures; boundary tests then exposed six more failures involving hidden scopes, root replacement and malformed archives. Review found two remaining gaps: compound generated declarations could consume the file cap, and `htmlcov` could reach git/network before rejection. Regression runs reproduced both (eight failures across the reviewed cases, plus the corrected local declaration fixture); all are green after the fixes. Tests also prove local enumeration visits only the selected directory, selected links/missing paths fail explicitly, outside files never materialize, and actual Spring Boot/FastAPI parsers retain repository-relative evidence.
+
+Final verification on the implementation:
+
+| Check | Result |
+|---|---|
+| Full hosted suite | 920 passed |
+| Full local suite | 904 passed, 16 expected hosted-quota skips |
+| Ingest/extract focused suites | 167 passed |
+| All package/app typechecks | Passed |
+| Frozen-lockfile offline install in an isolated source archive, then production build | Passed |
+| Ordinary-model benchmark selftests | 18 passed |
+| Repair-round benchmark selftests | 36 passed |
+| Whitespace diff check | Passed |
+
+**Real-provider/browser acceptance.** Both isolated servers reported `fake: false`. No provider responses were intercepted; existing credentials stayed in process memory. Separate temporary databases were used, and existing user servers were left running.
+
+- Native Chrome form on port 3040: imported the actual local clone with `packages/jobs/src`, using the configured native provider. Model `1cee10e1-efc8-4ef5-840f-d9d882af5b3b` has three source modules, three proven static import links and six evidence records, all under `packages/jobs/src/`, with HEAD `53ea2b33f33ae08cadde11d9ee400a04f7802ae4`. Those selected files are unchanged from that commit. One successful real call recorded 2,809 input / 342 output tokens. The ten visible disclosures are identical after reload; no outside fonts, lockfile, Next output or dependency warnings appear. The private/local-only stamp and no-credit-limit wording remain visible. A node inspection displays the full pinned evidence link.
+- Hosted Chrome form on port 3041: the initial Archwoven URL was refused because that repository is private; this was a real negative result, not a successful import. The public sample was then imported with scope `analyzer`. Model `f17239ca-1dfd-4f8d-93e2-01e16fa655cd` has 12 modules, all 12 evidence paths under `analyzer/`, pinned to `d66599cceb3a151f64d45eb1cc46afe59c386c1f`. The real hosted call recorded 12,901 input / 818 output tokens. Nine visible disclosures persist after reload. The bounded sample proves zero import links and reports 77 unresolved import declarations; this is a component map, not proof of runtime topology. Improving/quantifying extraction coverage remains task 15.
+
+Live artifacts and screenshots remain outside version control in the session scratch directory. No databases, credentials or cookies are published. Docker Compose runtime, additional browsers and physical-device acceptance were not run in this task and remain task 20. The temporary verification script initially used a nonexistent privacy field; it was corrected to the model's `classification` field and rerun successfully. The repair selftest was also rerun successfully using its actual `benchmarks/repair-rounds` path after an incorrect command path.
+
+Task 13 remains next: current local ingestion reads working-tree bytes but associates evidence with HEAD. This task verifies unchanged selected files; it does not solve dirty-worktree evidence or claim full release completion. Documentation/file cleanup remains deferred until final acceptance.
