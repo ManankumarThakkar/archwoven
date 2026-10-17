@@ -2,6 +2,7 @@ import { NodeSchema, EdgeSchema, type EditOp, type SystemModel } from './schema'
 import { validateModel } from './validate';
 import { syncDetailViewsInPlace } from './detail';
 import { isInternal } from './groups';
+import { reconcileReferences } from './reconcile';
 
 /**
  * §7 controlled edits: every op is checked against baseRevision, the batch is
@@ -78,7 +79,6 @@ export function applyEditOps(
       if (node) {
         const referrers = [
           ...m.edges.filter((e) => e.from === o.target || e.to === o.target).map((e) => `edge ${e.id}`),
-          ...m.views.filter((v) => v.sequence?.participants.includes(o.target)).map((v) => `sequence view ${v.id}`),
           ...m.nodes.filter((n) => n.group === o.target && isInternal(m, n.id)).map((n) => `internal ${n.id}`),
         ];
         if (referrers.length > 0) {
@@ -109,6 +109,8 @@ export function applyEditOps(
 
   if (errors.length > 0) return { ok: false, errors };
 
+  const refusals = reconcileReferences(model, m);
+  if (refusals.length > 0) return { ok: false, errors: refusals };
   syncDetailViewsInPlace(m);
   const checked = validateModel({ ...m, revision: m.revision + 1, parentId: m.revision });
   if (!checked.ok) return { ok: false, errors: checked.errors };

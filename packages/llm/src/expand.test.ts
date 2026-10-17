@@ -75,13 +75,11 @@ describe('hosted expansion', () => {
     expect(calls[0]!.messages[0]!.content).toMatch(/<\/model-data>\s*Guidance from the user: focus on payment retries$/);
   });
 
-  it('tells the provider about root and terminal checks only when the model has them', async () => {
-    const withChecks = fakeClient([valid]);
-    await expandComponent(base(), 'svc.orders', '', { client: withChecks.client });
-    expect(withChecks.calls[0]!.messages[0]!.content).toContain('"everyInternalNeedsIncoming":true');
-    const plain = fakeClient([valid]);
-    await expandComponent(structuredClone(validFullModel), 'svc.orders', '', { client: plain.client });
-    expect(plain.calls[0]!.messages[0]!.content).toContain('"everyInternalNeedsIncoming":false');
+  it('does not burden the provider with root or terminal checks the server maintains', async () => {
+    const { client, calls } = fakeClient([valid]);
+    await expandComponent(base(), 'svc.orders', '', { client });
+    expect(calls[0]!.messages[0]!.content).not.toMatch(/checks|allowedRoots|allowedTerminals/);
+    expect(JSON.stringify(calls[0]!.system)).not.toMatch(/incoming link|outgoing link/);
   });
 
   it('repairs a rule violation with the named error and accumulates billed usage', async () => {

@@ -299,3 +299,42 @@ Known limitations, recorded and not addressed here:
 - The pre-existing refinement/semanticChecks finding from step 1 is unchanged.
 
 Artifacts are in the session scratchpad (`live3/hosted`, `live3/local`); no database, credentials or cookies are published.
+
+## Refinement reference consistency follow-up (task 10b)
+
+2026-10-17, America/Chicago. PR #24 is confirmed merged into main at `1d16900`. Reproduction on real generated models (each carried active checks with 4–7 required edges covering nearly every user-described link) showed that refinement could not add a sink or source, remove any component, or remove a single link. `applyEditOps` removed ids only from views and layout. Semantic checks, chapters, boundaries, main paths, sequence participants and open-question blockers still referenced them, and EditOps cannot target those structures.
+
+`reconcileReferences` now keeps them consistent deterministically inside `applyEditOps`, and inside `applyExpansion`. The provider still never edits checks.
+- **Additions:** new sources and sinks join active root and terminal lists. List activity is judged before the edit, so removing the only listed root cannot silently disable checking.
+- **Removals cascade:**
+  - from lists, chapters and boundaries; emptied chapters and boundaries are dropped
+  - invalid main paths are cleared
+  - stale blockers are cleared
+  - sequence participants take their messages; survivors renumber, fragments re-index or move to the first surviving covered message, and emptied sequence views are dropped
+- **Generated requirements** follow explicit removals and retypes.
+- **Source-backed requirements** stay protected with readable refusals, for example "orders-router → OrderService is backed by source evidence and can't be removed by refinement." A source-backed requirement is an edge with `source-supported` provenance, or a path between source-supported nodes.
+- **Expand internals** no longer forces contrived links on checked models; leaf parts are listed instead (spec rule 5 superseded).
+
+Live inspection exposed three more gaps, each fixed test-first:
+1. A native provider answered a protected request with an empty edit list, and the app saved a no-op revision with no explanation; hosted mode would also have charged for it. Empty and net-zero batches are now repaired like invalid output. If a source-evidence refusal occurred during repairs, the user receives that refusal instead of the provider's last workaround. A canonical (sorted-key) content comparison catches no-ops: the first attempt compared JSON with key order and missed one.
+2. The refine route now refuses net-zero results (422, no revision, refund, "This instruction did not change the diagram, so nothing was saved and no credit was used.").
+3. The refine bar cleared the typed instruction on submit, so refusals lost the user's text against SPEC's prompt-preserved error state. It now clears only after a saved refinement, and keeps text typed during the request. The refinement prompt also states that views update automatically, after a native attempt targeted a view id.
+
+Tests: 36 net new (24 reconciliation, 8 hosted refinement, 2 local refinement, 1 route, 2 page; the two forced-link expansion cases became one leaf-part case). Reconciliation was mutation-checked by disabling, in turn: the reconcile call, edge protection, path protection, retype tracking, the pre-edit list-activity rule, fragment moves, renumbering, main-path clearing, blocker clearing, empty-chapter drops, empty-boundary drops and empty-sequence drops. The no-op and refusal paths were checked by disabling empty-batch repair (hosted and local), net-zero detection, refusal tracking (hosted and local) and the route's no-change refusal. Every mutation was caught. Final checks: 831 hosted tests passed; local 815 passed / 16 expected skips; all typechecks, an isolated production build and the 18/36 benchmark selftests passed.
+
+Live acceptance used real headless Chrome against fresh servers, both fake=false.
+- **Hosted, `f13234de-b807-4ac6-8678-4c96f5c7bc26`** (Online Bookstore: required edges 7, chapters 4, boundary 1), 12/12 checks:
+  - The previously failing "Add a Redis cache that Order Service reads from." saved in 9.7 s. The cache joined the allowed terminals, there were no dangling references, and required edges were untouched.
+  - "Remove Stripe." saved, leaving no reference in checks, chapters, boundaries or views.
+  - Undo restored every structure exactly.
+  - Credits moved 5 → 4.5, exactly two saved refinements.
+- **Native gpt-oss:20b**, git copy of `probes/fixtures/repos/fastapi-mini` (`2e1d874e-d832-414f-b3d0-297a04b0847f`: source-backed required edge and path), 10/10 checks:
+  - Removing the source-backed link was refused with both readable reasons, and nothing was written.
+  - Adding a cache saved without touching source requirements, with zero credits.
+- An earlier native run of the same scenario failed and is recorded above (no-op save, then a generic message); it drove the empty-batch and refusal fixes.
+
+Known limitations:
+- The refine status text is truncated to one line, with the full reason only on hover. Include readable, non-truncated status messages in task 20.
+- Natural-language removal of a link between two source-backed nodes reports both the edge and the dependent path refusal, which is accurate but verbose.
+
+Artifacts are in the session scratchpad (`live4`); no database, credentials or cookies are published.

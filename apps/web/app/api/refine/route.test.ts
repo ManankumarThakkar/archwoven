@@ -114,3 +114,16 @@ describe('POST /api/refine', () => {
     expect(called).toBe(false);
   });
 });
+
+describe('refinements that change nothing', () => {
+  it('saves no revision, refunds the credit and explains', async () => {
+    const same: EditOp = { op: 'update', target: 'gateway.api', patch: { label: validFullModel.nodes.find(n => n.id === 'gateway.api')!.label }, baseRevision: validFullModel.revision, summary: 'no-op' };
+    serverDeps.generateRefinement = async () => ({ ok: true as const, ops: [same], usage });
+    const res = await POST(req({ modelId: 'm1', baseRevision: 1, instruction: 'make it nicer' }));
+    expect(res.status).toBe(422);
+    expect((await res.json()).message).toBe('This instruction did not change the diagram, so nothing was saved and no credit was used.');
+    expect(serverDeps.store.getRevision('m1')?.revision).toBe(1);
+    expect(serverDeps.store.creditsUsed('test-sess', new Date().toISOString().slice(0, 10))).toBe(0);
+    expect(serverDeps.store.listCalls('test-sess')).toHaveLength(1);
+  });
+});

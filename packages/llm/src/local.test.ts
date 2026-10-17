@@ -381,3 +381,30 @@ it('native description returns bounded questions in the local-only constrained d
   expect(out).toMatchObject({ ok: true, questions: ['Should orders be stored?'], usage: { outputTokens: 800 } });
   expect(format).toHaveProperty('anyOf');
 });
+
+describe('generateRefinementLocal empty batches', () => {
+  it('repairs an empty array locally', async () => {
+    const ops = [{ op: 'add', target: 'svc.cache', patch: { id: 'svc.cache', kind: 'service', label: 'Cache', provenance: 'proposed' }, baseRevision: validFullModel.revision, summary: '+Cache' }];
+    let n = 0;
+    const bodies: { messages: { content: string }[] }[] = [];
+    const fakeFetch = (async (_url: unknown, init?: RequestInit) => { bodies.push(JSON.parse(String(init?.body))); return ndjsonResponse([JSON.stringify(n++ ? ops : [])]); }) as unknown as typeof fetch;
+    const out = await generateRefinementLocal('add a cache', validFullModel, 'architecture', { fetchImpl: fakeFetch });
+    expect(out.ok).toBe(true);
+    expect(bodies[1]!.messages.at(-1)!.content).toMatch(/No EditOps were emitted/);
+  });
+});
+
+describe('generateRefinementLocal source refusals', () => {
+  it('reports the source-evidence refusal after a local workaround', async () => {
+    const m = structuredClone(validFullModel);
+    m.edges.find(e => e.id === 'e.user-api')!.provenance = 'source-supported';
+    m.semanticChecks = { allowedRoots: [], allowedTerminals: [], requiredEdges: [{ from: 'actor.user', to: 'gateway.api', type: 'sync' }], requiredPaths: [] };
+    const remove = [{ op: 'remove', target: 'e.user-api', patch: {}, baseRevision: 1, summary: '-link' }];
+    const same = [{ op: 'update', target: 'gateway.api', patch: { label: m.nodes.find(n => n.id === 'gateway.api')!.label }, baseRevision: 1, summary: 'no-op' }];
+    let n = 0;
+    const fakeFetch = (async () => ndjsonResponse([JSON.stringify(n++ ? same : remove)])) as unknown as typeof fetch;
+    const out = await generateRefinementLocal('remove the customer link', m, 'architecture', { fetchImpl: fakeFetch });
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.errors.join(' ')).toMatch(/is backed by source evidence and can't be removed by refinement/);
+  });
+});

@@ -133,3 +133,76 @@ describe('generateRefinement', () => {
     expect(fail.calls).toHaveLength(0);
   });
 });
+
+describe('server-maintained structures', () => {
+  it('tells both refinement prompts that removals update checks, chapters, boundaries and sequences automatically', async () => {
+    const { REFINEMENT_SYSTEM, LOCAL_REFINEMENT_SYSTEM } = await import('./refine');
+    for (const prompt of [REFINEMENT_SYSTEM, LOCAL_REFINEMENT_SYSTEM]) {
+      expect(prompt).toMatch(/never target semanticChecks/);
+      expect(prompt).toMatch(/source-supported/);
+    }
+  });
+});
+
+describe('empty edit batches', () => {
+  it('repairs an empty array instead of returning a no-op refinement', async () => {
+    const { client, calls } = fakeClient([[], [addCacheOp]]);
+    const out = await generateRefinement('add a cache', mkModel(), 'architecture', { client });
+    expect(out.ok).toBe(true);
+    expect(out.usage.repairs).toBe(1);
+    const repair = (calls[1] as { messages: { content: string }[] }).messages.at(-1)!.content;
+    expect(repair).toMatch(/No EditOps were emitted/);
+  });
+
+  it('fails with an explanation when the provider keeps emitting nothing', async () => {
+    const { client } = fakeClient([[]]);
+    const out = await generateRefinement('make it nicer', mkModel(), 'architecture', { client });
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.errors.join(' ')).toMatch(/No EditOps were emitted/);
+  });
+
+  it('asks the provider to emit refused source-backed ops so the user learns why', async () => {
+    const { REFINEMENT_SYSTEM } = await import('./refine');
+    expect(REFINEMENT_SYSTEM).toMatch(/still emit the op/);
+    expect(REFINEMENT_SYSTEM).toMatch(/Never emit an empty array/);
+  });
+});
+
+describe('net-zero refinements and source refusals', () => {
+  /** api→orders is required and backed by source evidence. */
+  const guarded = (): SystemModel => {
+    const m = mkModel();
+    m.edges[0]!.provenance = 'source-supported';
+    m.semanticChecks = { allowedRoots: [], allowedTerminals: [], requiredEdges: [{ from: 'svc.api', to: 'svc.orders', type: 'sync' }], requiredPaths: [] };
+    return m;
+  };
+  const removeLink: EditOp = { op: 'remove', target: 'e.api-orders', patch: {}, baseRevision: 1, summary: '-link' };
+  const sameName: EditOp = { op: 'update', target: 'svc.api', patch: { label: 'API' }, baseRevision: 1, summary: 'no-op' };
+
+  it('reports the source-evidence refusal when the provider can only work around it', async () => {
+    const { client, calls } = fakeClient([[removeLink], [sameName]]);
+    const out = await generateRefinement('remove the link from API to Orders', guarded(), 'architecture', { client });
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.errors).toEqual(['API → Orders is backed by source evidence and can\'t be removed by refinement.']);
+    expect((calls[2] as { messages: { content: string }[] }).messages.at(-1)!.content).toMatch(/change nothing/);
+  });
+
+  it('repairs a net-zero batch and accepts a real change', async () => {
+    const { client } = fakeClient([[sameName], [addCacheOp]]);
+    const out = await generateRefinement('add a cache', mkModel(), 'architecture', { client });
+    expect(out.ok).toBe(true);
+    if (out.ok) expect(out.ops).toEqual([addCacheOp]);
+  });
+
+  it('explains when the provider never changes anything', async () => {
+    const { client } = fakeClient([[sameName]]);
+    const out = await generateRefinement('make it nicer', mkModel(), 'architecture', { client });
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.errors.join(' ')).toMatch(/change nothing/);
+  });
+
+  it('tells the provider that views follow automatically', async () => {
+    const { REFINEMENT_SYSTEM, LOCAL_REFINEMENT_SYSTEM } = await import('./refine');
+    for (const p of [REFINEMENT_SYSTEM, LOCAL_REFINEMENT_SYSTEM]) expect(p).toMatch(/never target a view/);
+  });
+});

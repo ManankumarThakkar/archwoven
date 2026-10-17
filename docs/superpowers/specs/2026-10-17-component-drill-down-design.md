@@ -63,7 +63,7 @@ Revised after code inspection (2026-10-17). Boundaries are post-layout hulls and
 4. **Completeness:**
    - every focus→X link is covered by some internal→X link of the same type, and every X→focus link by some X→internal link of the same type
    - a focus self-loop is covered by an internal→internal link of the same type
-5. **Semantic checks:** when `allowedRoots` is non-empty, every internal has an incoming link; when `allowedTerminals` is non-empty, every internal has an outgoing link. The checks themselves are never edited.
+5. **Semantic checks:** superseded by task 10b. Internals are no longer forced to have both incoming and outgoing links; the server's reference reconciliation lists leaf parts as allowed roots or terminals. The provider never edits checks.
 
 Violations are returned as named errors to the bounded repair loop (`MAX_REPAIRS`). When repairs are exhausted, nothing is saved.
 

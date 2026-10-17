@@ -18,7 +18,6 @@ Rules:
 - Every link starts or ends at an internal. Never link two neighbours. No self-loops. No duplicate links.
 - An internal may link to neighbour X only if the focus links to X in that direction with the same type. Neighbour X may link to an internal only if X links to the focus with the same type.
 - Cover every focus link: for each focus→X of type t add an internal→X link of type t; for each X→focus of type t add an X→internal link of type t; for a focus self-loop of type t add a link of type t between two internals.
-- When checks.everyInternalNeedsIncoming is true, every internal needs an incoming link. When checks.everyInternalNeedsOutgoing is true, every internal needs an outgoing link.
 - Never invent new external systems: only the given neighbours exist outside the focus. These internals are inferred; never claim they were found in source code.
 Emit ONLY JSON matching this schema:
 <expansion-schema>
@@ -39,7 +38,6 @@ export function expansionUserMessage(model: SystemModel, focus: string, hint: st
     focus: describe(focus),
     neighbours: neighbourIds.map(describe),
     links: edges.map(e => ({ from: e.from, to: e.to, type: e.type, ...(e.label ? { label: e.label } : {}) })),
-    checks: { everyInternalNeedsIncoming: !!model.semanticChecks?.allowedRoots.length, everyInternalNeedsOutgoing: !!model.semanticChecks?.allowedTerminals.length },
   }));
   const guidance = hint.trim() ? `\n\nGuidance from the user: ${hint.trim().replace(/<\//g, '<\\/')}` : '';
   return `Expand the focus component.\n\n<model-data>\n${data}\n</model-data>${guidance}`;

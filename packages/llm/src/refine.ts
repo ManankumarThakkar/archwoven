@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { EditOpSchema, applyEditOps, type EditOp, type SystemModel, type ViewType } from '@archwoven/model';
+import { EditOpSchema, applyEditOps, isSourceEvidenceRefusal, sameModelContent, type EditOp, type SystemModel, type ViewType } from '@archwoven/model';
 import {
   CONTEXT_TOKEN_LIMIT, MAX_REPAIRS, MODEL, STRUCTURED_OUTPUTS_BETA, fakeMode, makeAnthropic, resolveApiKey, usageFrom, wireSchema,
   type Effort, type StructuredClient,
@@ -19,7 +19,16 @@ Hard rules:
 - remove only unreferenced elements; if you must remove a node with edges, emit the edge removes first, then the node.
 - move patch is {x, y} and changes layout only.
 - never invent business-critical components as user-specified; use "proposed" unless the instruction states it.
+- Views list their members automatically: new nodes and edges join the architecture view, so never target a view id.
+- semanticChecks, guided chapters, boundaries, view mainPath and sequence views are maintained by the server: never target semanticChecks or any of them. Removing a node or edge updates them automatically; new sources and sinks are allowed.
+- A required link or path between source-supported elements cannot be removed or retyped. If the instruction asks for that, still emit the op: the server refuses it and explains why to the user. Never emit an empty array.
 - fewest ops that satisfy the instruction; no comments, no markdown.`;
+
+/** An empty batch would save a no-op revision with no explanation; it is repaired like any invalid output. */
+export const EMPTY_OPS_ERROR = 'No EditOps were emitted. Implement the instruction with at least one op; if it targets a source-backed requirement, still emit the op so the server can explain the refusal.';
+
+/** A batch that applies but changes nothing would read as success; it is repaired too. */
+export const NO_CHANGE_ERROR = 'These EditOps change nothing. Implement the instruction; if it targets a source-backed requirement, emit the op that does so and the server will explain the refusal.';
 
 export const REFINEMENT_SYSTEM = refinementSystem(true);
 export const LOCAL_REFINEMENT_SYSTEM = refinementSystem(false);
@@ -66,6 +75,7 @@ export async function generateRefinement(
   }
 
   let lastErrors: string[] = [];
+  const refusals: string[] = [];
   let repairs = 0;
   const billed: Required<RawUsage> = { input_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, output_tokens: 0 };
   const addUsage = (u: RawUsage) => {
@@ -118,14 +128,17 @@ export async function generateRefinement(
     const checked = z.array(EditOpSchema).safeParse(ops);
     if (!checked.success) {
       lastErrors = checked.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`);
+    } else if (checked.data.length === 0) {
+      lastErrors = [EMPTY_OPS_ERROR];
     } else {
       const badBase = checked.data.filter((o) => o.baseRevision !== model.revision);
       if (badBase.length > 0) {
         lastErrors = [`baseRevision must be ${model.revision}`];
       } else {
         const applied = applyEditOps(model, checked.data);
-        if (applied.ok) return { ok: true, ops: checked.data, usage: usageFrom(billed, effort, Date.now() - t0, repairs) };
-        lastErrors = applied.errors;
+        if (applied.ok && !sameModelContent(applied.model, model)) return { ok: true, ops: checked.data, usage: usageFrom(billed, effort, Date.now() - t0, repairs) };
+        lastErrors = applied.ok ? [NO_CHANGE_ERROR] : applied.errors;
+        if (!applied.ok) refusals.push(...applied.errors.filter(isSourceEvidenceRefusal));
       }
     }
     if (attempt < MAX_REPAIRS) {
@@ -135,5 +148,6 @@ export async function generateRefinement(
     }
   }
 
-  return { ok: false, errors: lastErrors, usage: usageFrom(billed, effort, Date.now() - t0, repairs) };
+  // A protected requirement explains a failed request better than the provider's last workaround.
+  return { ok: false, errors: refusals.length ? [...new Set(refusals)] : lastErrors, usage: usageFrom(billed, effort, Date.now() - t0, repairs) };
 }

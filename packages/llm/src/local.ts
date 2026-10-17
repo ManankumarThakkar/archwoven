@@ -3,12 +3,12 @@ import { generatedViewErrors } from './generated-view';
 import { z } from 'zod';
 import type { Fragment } from '@archwoven/extract';
 import {
-  EditOpSchema, applyEditOps, applyExpansion, expandBlocker, validateModel,
+  EditOpSchema, applyEditOps, applyExpansion, expandBlocker, isSourceEvidenceRefusal, sameModelContent, validateModel,
   type EditOp, type SystemModel, type ViewType,
 } from '@archwoven/model';
 import { LOCAL_MODEL_SYSTEM, NATIVE_MODEL_JSON_SCHEMA, MAX_REPAIRS, type GenerateOutcome, type TaskUsage } from './client';
 import { LOCAL_REPO_SYSTEM, fenceEscape, pinEvidence, sourceEvidenceErrors, preserveSourceGaps } from './repo';
-import { LOCAL_REFINEMENT_SYSTEM } from './refine';
+import { EMPTY_OPS_ERROR, LOCAL_REFINEMENT_SYSTEM, NO_CHANGE_ERROR } from './refine';
 import type { RefineOutcome } from './refine';
 import { buildSourceModel, SOURCE_PRESENTATION_SCHEMA, SOURCE_PRESENTATION_SYSTEM } from './source-presentation';
 import { EXPANSION_SYSTEM, NATIVE_EXPANSION_SCHEMA, expansionRepair, expansionUserMessage, type ExpandOutcome } from './expand';
@@ -248,6 +248,7 @@ export async function generateRefinementLocal(
     { role: 'user', content: `View: ${view}\n\nCurrent model JSON (revision ${model.revision}):\n${JSON.stringify(model)}\n\nInstruction: ${instruction}` },
   ];
 
+  const refusals: string[] = [];
   let lastErrors: string[] = [];
   let repairs = 0;
   let usage = zeroUsage(opts.model ?? LOCAL_MODEL);
@@ -270,12 +271,15 @@ export async function generateRefinementLocal(
       const checked = z.array(EditOpSchema).safeParse(ops);
       if (!checked.success) {
         lastErrors = checked.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`);
+      } else if (checked.data.length === 0) {
+        lastErrors = [EMPTY_OPS_ERROR];
       } else {
         const badBase = checked.data.filter((o) => o.baseRevision !== model.revision);
         if (badBase.length === 0) {
           const applied = applyEditOps(model, checked.data);
-          if (applied.ok) return { ok: true, ops: checked.data, usage };
-          lastErrors = applied.errors;
+          if (applied.ok && !sameModelContent(applied.model, model)) return { ok: true, ops: checked.data, usage };
+          lastErrors = applied.ok ? [NO_CHANGE_ERROR] : applied.errors;
+          if (!applied.ok) refusals.push(...applied.errors.filter(isSourceEvidenceRefusal));
         } else {
           lastErrors = [`baseRevision must be ${model.revision}`];
         }
@@ -288,7 +292,7 @@ export async function generateRefinementLocal(
     }
   }
 
-  return { ok: false, errors: lastErrors, usage };
+  return { ok: false, errors: refusals.length ? [...new Set(refusals)] : lastErrors, usage };
 }
 
 /**
