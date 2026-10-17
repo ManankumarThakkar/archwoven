@@ -124,6 +124,10 @@ you want included, then import again. Missing git objects are reported; imports 
 them automatically or run checkout filters. Local citations show the captured path and commit
 without linking a local folder to GitHub.
 
+For bind mounts owned by another user, each static Git read trusts only the selected
+canonical clone path for that command. It does not change global Git configuration or
+enable hooks, checkout filters or network transports.
+
 The privacy promise is tested, not asserted: egress guard refuses hosted APIs before
 DNS (§9), local jobs route to Ollama only, privacy is server-stamped from deploy
 mode, exports carry no evidence paths, and the same suite runs green in both modes

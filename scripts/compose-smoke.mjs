@@ -55,7 +55,7 @@ try {
   });
   assert.equal(hostileHostStatus, 403);
   assert.equal((await request('/api/generate', { method: 'POST', headers: { origin: 'https://evil.example', 'content-type': 'application/json' }, body: '{}' })).status, 403);
-  assert.equal(compose('exec', '-T', 'web', 'git', '-C', '/repos/smoke', 'rev-parse', 'HEAD').trim(), sha);
+  assert.equal(compose('exec', '-T', 'web', 'git', '-c', 'safe.directory=/repos/smoke', '-C', '/repos/smoke', 'rev-parse', 'HEAD').trim(), sha);
   const inspected = JSON.parse(execFileSync('docker', ['inspect', compose('ps', '-q', 'web').trim()], { encoding: 'utf8' }))[0];
   assert.equal(inspected.Mounts.find(m => m.Destination === '/repos/smoke')?.RW, false);
   for (const binding of Object.values(inspected.HostConfig.PortBindings).flat()) assert.equal(binding.HostIp, '127.0.0.1');
