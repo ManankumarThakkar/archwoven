@@ -9,15 +9,23 @@ import { mkdirSync, copyFileSync, mkdtempSync, readdirSync, readFileSync, rmSync
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { stableValidator } from '../stable-validator.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const H = join(here, 'harness.mjs');
 let pass = 0;
+let lastRun;
 const expect = (name, got, want) => {
   if (got === want) { pass++; console.log(`ok  ${name}`); }
-  else { console.error(`FAIL ${name}: exit ${got}, want ${want}`); process.exitCode = 1; }
+  else {
+    console.error(`FAIL ${name}: exit ${got}, want ${want}`);
+    if (lastRun?.stderr) console.error(`  stderr: ${lastRun.stderr.trim().split('\n').slice(0, 6).join('\n  ')}`);
+    process.exitCode = 1;
+  }
 };
-const inDir = (dir) => (...args) => spawnSync('node', [H, ...args, '--results-dir', dir], { encoding: 'utf8', cwd: here });
+
+const validator = await stableValidator();
+const inDir = (dir) => (...args) => (lastRun = spawnSync('node', [H, ...args, '--results-dir', dir, '--validator', validator], { encoding: 'utf8', cwd: here }));
 
 const CASES = ['dangling-edge-ref', 'duplicate-node-id', 'missing-required-label', 'invalid-enum-kind', 'revision-mismatch', 'required-path-broken', 'boundary-overlap', 'seq-gap'];
 
@@ -82,6 +90,9 @@ writeFileSync(join(hg, 'manifest.json'), readFileSync(join(here, 'manifest.json'
 const dirty = spawnSync('node', [join(hg, 'harness.mjs'), 'verify', '--results-dir', join(dg, 'results')], { encoding: 'utf8' });
 expect('verify dirty source refuses pinned evidence → 1', dirty.status, 1);
 expect('dirty refusal explains scratch alternative', dirty.stderr.includes('--scratch') ? 0 : 1, 0);
+writeFileSync(join(hg, 'manifest.json'), readFileSync(join(here, 'manifest.json'), 'utf8'));
+const pinnedSnapshot = spawnSync('node', [join(hg, 'harness.mjs'), 'verify', '--results-dir', join(dg, 'results'), '--validator', validator], { encoding: 'utf8' });
+expect('pinned verify refuses a validator snapshot → 1', pinnedSnapshot.status === 1 && pinnedSnapshot.stderr.includes('--validator is only for --scratch') ? 1 : 0, 1);
 rmSync(dg, { recursive: true, force: true });
 
 // partial matrix: receipts exist but miss cases → incomplete, not pass
@@ -117,5 +128,6 @@ writeFileSync(join(d3, '2026-10-15-selftest.json'), JSON.stringify(partial, null
 expect('complete clean provenance receipt → 0', r3('report').status, 0);
 rmSync(d3, { recursive: true, force: true });
 
+rmSync(dirname(validator), { recursive: true, force: true });
 console.log(`selftest: ${pass} checks, exit ${process.exitCode ?? 0}`);
 process.exit(process.exitCode ?? 0);

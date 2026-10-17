@@ -1,10 +1,24 @@
 import { mkdtempSync, existsSync, readFileSync, rmSync } from 'node:fs';
-import { gzipSync, gunzipSync } from 'node:zlib';
+import { gzipSync } from 'node:zlib';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterAll, describe, expect, it } from 'vitest';
+import type { Gunzip } from 'node:zlib';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 import { unpackTarball, cleanupDir } from './unpack';
 import { tarEntry, tar } from './tar-fixtures';
+
+// Pass-through wrapper that records every inflate stream and the bytes it emits.
+const inflates = vi.hoisted(() => [] as { stream: Gunzip; emitted: number }[]);
+vi.mock('node:zlib', async (importOriginal) => {
+  const zlib = await importOriginal<typeof import('node:zlib')>();
+  return { ...zlib, createGunzip: (...args: Parameters<typeof zlib.createGunzip>) => {
+    const stream = zlib.createGunzip(...args);
+    const record = { stream, emitted: 0 };
+    stream.on('data', (c: Buffer) => { record.emitted += c.length; });
+    inflates.push(record);
+    return stream;
+  } };
+});
 
 const dirs: string[] = [];
 const mkDest = () => { const d = mkdtempSync(join(tmpdir(), 'aw-unpack-')); dirs.push(d); return d; };
@@ -115,18 +129,18 @@ describe('unpackTarball (§14 tarball safety)', () => {
 
   it('aborts inflate incrementally — never allocates the full expansion (I2)', async () => {
     const dest = mkDest();
-    // 1 GB of zeros → ~1 MB gzip; the 32 MB guard must fire long before the
-    // full 1 GB expansion exists. Self-calibrating ratio, not an absolute ms
-    // bound: CI runners inflate ~10x slower than a workstation (flaked at 179
-    // vs 150ms). Old allocate-then-check code: ratio ≈ 1 → fails.
+    // 1 GB of zeros → ~1 MB gzip. Counting emitted bytes instead of timing keeps
+    // this deterministic under load: the stream must pass the 32 MB cap (so the
+    // streaming guard ran) and stop within a few chunks of it, not at 1 GB.
+    const cap = 32 * 1024 * 1024;
     const bomb = gzipSync(Buffer.alloc(1024 * 1024 * 1024));
-    const t0 = Date.now();
-    await expect(unpackTarball(bomb, dest, { ...CAPS, maxExpandedBytes: 32 * 1024 * 1024 })).rejects.toThrow(/oversized/i);
-    const tGuard = Date.now() - t0;
-    const t1 = Date.now();
-    gunzipSync(bomb); // the full inflate the guard exists to skip
-    const tFull = Date.now() - t1;
-    expect(tGuard * 4, `guard aborted at ${tGuard}ms vs full inflate ${tFull}ms — guard ran after the full inflate`).toBeLessThan(tFull);
+    const before = inflates.length;
+    await expect(unpackTarball(bomb, dest, { ...CAPS, maxExpandedBytes: cap })).rejects.toThrow(/oversized/i);
+    const [inflate] = inflates.slice(before);
+    expect(inflate, 'unpack inflated through a stream').toBeDefined();
+    if (!inflate!.stream.closed) await new Promise((resolve) => inflate!.stream.once('close', resolve));
+    expect(inflate!.emitted).toBeGreaterThan(cap);
+    expect(inflate!.emitted, `inflated ${inflate!.emitted} bytes for a ${cap}-byte cap`).toBeLessThan(cap + 4 * 1024 * 1024);
   }, 60_000);
 
   it('inflates past maxTotalBytes when the expanded size stays under maxExpandedBytes', async () => {
