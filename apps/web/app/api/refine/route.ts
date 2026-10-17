@@ -6,6 +6,7 @@ import {
   llmNotConfigured, LLM_NOT_CONFIGURED_COPY,
 } from '../../lib/server';
 import { withSlot } from '../../lib/llm-limiter';
+import { secretGate } from '../../../lib/secret-gate';
 
 export const runtime = 'nodejs';
 
@@ -39,6 +40,8 @@ export async function POST(req: Request) {
   if (baseRevision !== latest.revision)
     return Response.json({ reason: 'stale-revision', message: 'The diagram changed since you loaded it — here is the latest.', model: latest, revision: latest.revision }, { status: 409, headers });
 
+  const secret = await secretGate([{ label: 'Your instruction', text: instruction }]);
+  if (secret) return Response.json({ reason: 'secret-detected', error: secret }, { status: 400, headers });
   if (llmNotConfigured()) return Response.json({ reason: 'llm-not-configured', message: LLM_NOT_CONFIGURED_COPY }, { status: 503, headers });
 
   const tier = tierOf(sessionId);

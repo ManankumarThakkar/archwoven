@@ -7,6 +7,7 @@ import {
 } from '../../../../lib/server';
 import { withSlot } from '../../../../lib/llm-limiter';
 import { readDirectEdit } from '../../../../../lib/direct-edit';
+import { secretGate } from '../../../../../lib/secret-gate';
 
 export const runtime = 'nodejs';
 const MAX_HINT_CHARS = 300;
@@ -36,6 +37,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     return Response.json({ reason: 'stale-revision', message: 'The diagram changed elsewhere. Review the latest version and try again.', model: latest, revision: latest.revision }, { status: 409, headers });
   const blocked = expandBlocker(latest, target);
   if (blocked) return Response.json({ errors: [blocked] }, { status: 400, headers });
+  const secret = await secretGate([{ label: 'Your hint', text: hint }]);
+  if (secret) return Response.json({ reason: 'secret-detected', error: secret }, { status: 400, headers });
   if (llmNotConfigured()) return Response.json({ reason: 'llm-not-configured', message: LLM_NOT_CONFIGURED_COPY }, { status: 503, headers });
 
   const tier = tierOf(sessionId);

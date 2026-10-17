@@ -150,3 +150,17 @@ it('retains usage under the expansion action and refunds when saving fails', asy
     expect(serverDeps.store.creditsUsed('owner', day())).toBe(0);
   } finally { serverDeps.store.saveRevision = save; }
 });
+
+describe('secrets in expansion hints (hosted)', () => {
+  it('refuses before any credit or provider call', async () => {
+    const prev = process.env.ARCHWOVEN_MODE; delete process.env.ARCHWOVEN_MODE;
+    try {
+      const url = ['postgres', '://admin:', 'S3cr3tPassw0rd', '@db.internal:5432/app'].join('');
+      const res = await POST(request({ baseRevision: 1, target: 'svc.orders', hint: `it connects to ${url}` }), ctx);
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toMatch(/^Your hint contains what looks like a database connection string on line 1\./);
+      expect(calls).toEqual([]);
+      expect(serverDeps.store.creditsUsed('owner', day())).toBe(0);
+    } finally { if (prev !== undefined) process.env.ARCHWOVEN_MODE = prev; }
+  });
+});

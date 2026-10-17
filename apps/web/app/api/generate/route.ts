@@ -13,6 +13,7 @@ import { jobRegistry, startJobDeadline, JOB_TIMEOUT_COPY } from '../../lib/job-r
 
 import { ClarificationSchema } from '@archwoven/llm';
 import { parseReply, continuationPrompt, preserveClarification, type ClarificationReply } from '../../lib/clarification';
+import { secretGate } from '../../../lib/secret-gate';
 
 export const runtime = 'nodejs';
 
@@ -46,6 +47,8 @@ export async function POST(req: Request) {
   const view = context?.view ?? (VALID_VIEWS.includes(body.view as ViewType) ? (body.view as ViewType) : null);
   if (!prompt.trim() || !view) return Response.json({ error: 'prompt and view are required' }, { status: 400, headers });
   if (estimateTokens(prompt) > PROMPT_TOKEN_LIMIT) return Response.json({ reason: 'oversized', message: OVERSIZED_COPY }, { status: 413, headers });
+  const secret = await secretGate(reply ? (reply.answers ?? []).map((text, i) => ({ label: `Answer ${i + 1}`, text })) : [{ label: 'Your description', text: prompt }]);
+  if (secret) return Response.json({ reason: 'secret-detected', error: secret }, { status: 400, headers });
   if (llmNotConfigured()) return Response.json({ reason: 'llm-not-configured', message: LLM_NOT_CONFIGURED_COPY }, { status: 503, headers });
 
   const tier = tierOf(sessionId);

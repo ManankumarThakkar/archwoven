@@ -75,8 +75,9 @@ export function readOrCreateSession(req: Request): { sessionId: string; minted: 
   return { sessionId: randomUUID(), minted: true };
 }
 
+/** Secure on hosted production (HTTPS); local and development servers run over http on loopback. */
 export const sessionCookie = (sessionId: string) =>
-  `aw_sid=${sessionId}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${90 * 24 * 3600}`;
+  `aw_sid=${sessionId}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${90 * 24 * 3600}${deployMode() === 'hosted' && process.env.NODE_ENV === 'production' ? '; Secure' : ''}`;
 
 export const tierOf = (_sessionId: string): Tier => 'anonymous'; // GitHub OAuth deferred to M6 (external GitHub App registration; private repos covered by local mode)
 

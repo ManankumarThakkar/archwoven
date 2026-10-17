@@ -30,7 +30,7 @@ Later approved/runtime updates: the M5 ledger records the switch to `gpt-oss:20b
 - **archify:** MIT — inspiration-safe; attribute if any code is reused.
 - **Parsing:** `web-tree-sitter` 0.27 (WASM — zero native-build pain in Next.js API routes/serverless) + `tree-sitter-python` 0.25 + `tree-sitter-java` 0.23.5 (all MIT; java npm releases lag an active repo — pin + re-verify at build). `java-parser` (MIT, pure-JS) as fallback. JVM JavaParser: skip (needs sidecar; take Apache license arm if ever used).
 - **Repo ingestion:** codeload **tarball** default (no git binary, no `.git` bloat; excludes submodules + LFS objects → gap-listed); **fine-grained PAT, Contents:read-only, single-repo scope** as the minimal credential; `git clone --depth 1` only if submodules explicitly needed.
-- **Secret gate pre-submission:** `gitleaks` CLI (MIT) + `secretlint` (MIT) pair, best-effort labeled. **Never trufflehog (AGPL — contamination).**
+- **Secret gate pre-submission:** `secretlint` (MIT, pinned 13.0.7) in-process, best-effort labeled: typed text is blocked, repository content is masked, and every hosted request passes an egress guard. Revised 2026-10-17 from a `gitleaks` CLI + `secretlint` pair; see `docs/THREAT-MODEL.md` for the rationale. **Never trufflehog (AGPL — contamination).**
 ### Locked 2026-10-06 by principal review (reversal = one-line PR, keep it cheap)
 - **Persistence:** SQLite (one file, same code hosted + local, trivial private-mode story). No Postgres until a real multi-node need appears.
 - **Jobs:** in-process queue + durable job rows in SQLite (cancellation, retries, idempotency keys). No Redis/queues until measured need.
@@ -152,9 +152,9 @@ target-resolution (selection or reference by id/label) → bounded `EditOp` agai
 
 Per brief §8 table. Enforced **in code, not prompt**: `packages/llm` router refuses external providers when `privacy.classification === 'private'`; local-mode builds ship egress allowlist (GitHub fetch + model-download only) with a test that attempts external inference and asserts failure. Processing-location chip always visible before submit.
 
-## 9. Security controls (summary — threat model doc at M4)
+## 9. Security controls (summary — full threat model in `docs/THREAT-MODEL.md`)
 
-Read-only least-privilege GitHub auth; URL validation + SSRF/internal-address blocking; tarball safety (path traversal, symlinks, size/file-count caps, binary/vendor skip); no repo-code execution ever; repo text = untrusted data (never instructions; no tool surface exposed to repo content); secret scan (gitleaks + secretlint pair, best-effort labeled; trufflehog excluded — AGPL) before any external submit; sanitized SVG/text rendering (no scripts, no remote refs); local server binds 127.0.0.1 by default; rate limits + job concurrency caps + timeouts + cancellation; retention: temp clones + model inputs deleted after job, revisions in SQLite until user deletes.
+Read-only least-privilege GitHub auth; URL validation + SSRF/internal-address blocking; tarball safety (path traversal, symlinks, size/file-count caps, binary/vendor skip); no repo-code execution ever; repo text = untrusted data (never instructions; no tool surface exposed to repo content); secret scan (secretlint in-process, best-effort labeled; typed text blocked, repository content masked, egress guard on every hosted request; trufflehog excluded — AGPL) before any external submit; sanitized SVG/text rendering (no scripts, no remote refs); local server binds 127.0.0.1 by default; rate limits + job concurrency caps + timeouts + cancellation; retention: temp clones + model inputs deleted after job, revisions in SQLite until user deletes.
 
 ## 10. Token efficiency levers (concrete)
 

@@ -481,3 +481,40 @@ An additive `call_log.task_json` migration preserves revisions, jobs, credits an
 All seven reports were checked against their attempt sums, repair/retry counts and provider cost formulas. The six completed tasks needed no repairs/retries; bounded repair and transport-failure accounting were verified with deterministic unit tests, not presented as live provider results. Native keyboard Enter toggles the usage disclosure with visible focus. At an actual 390px Chrome viewport, the hosted detail panel spans x=18..358 and remains readable; the viewport was reset. These are focused Chrome checks, not physical-device or screen-reader acceptance.
 
 Artifacts, provider receipts and screenshots remain in temporary storage; no databases, prompts, credentials or cookies are published. Other running servers were left untouched. Broader cross-browser/accessibility/device acceptance, Docker Compose runtime and final cleanup remain task 20. Next is task 15: framework extraction gaps and measured coverage.
+
+## Task 17 — threat model and before-egress secret scanning
+
+2026-10-17, America/Chicago. Branch `feat/secret-scanning`, based on merged PR #29 at `1dba145`. The owner delegated release decisions; they are recorded in RELEASE-PROGRESS ("Release decisions"), and the full threat model is `docs/THREAT-MODEL.md`.
+
+**Before.** Hosted descriptions, refinements, clarification answers, expansion hints and repository fragments reached the provider without content scanning. SPEC promised a gitleaks + secretlint gate that did not exist. The session cookie lacked `Secure` on hosted production.
+
+**Scanner.** `@secretlint/core` and `@secretlint/secretlint-rule-preset-recommend` are pinned at 13.0.7 (MIT, published 2026-10-03; the lockfile adds six packages). A probe confirmed precise detection of real-format GitHub, Anthropic, OpenAI, Stripe, Slack, AWS secret, private-key, database-URL and basic-auth values, with no findings on prose, ids, hashes, a lone AWS key id or placeholder keys. Private keys require real ASN.1/OpenSSH headers and OpenAI keys their embedded marker, which avoids placeholder false positives. Detection is best-effort. gitleaks was not adopted: it would run as a per-request external binary that differs across hosted, Docker, development and CI environments. The SPEC deviation is recorded.
+
+**Policy.**
+- **Typed text (hosted):** refused before any credit, job or provider call, naming the field, kind and line, using precise rules only.
+- **Repository fragments (hosted):** every string is masked with precise rules plus a generic credential-assignment rule. The rule requires the key to end with a credential term and skips placeholders, environment lookups, code references and file names. The masking is disclosed in the saved diagram; a scanner failure fails the job closed and refunds credits.
+- **Defence in depth:** `hostedClient()` wraps every hosted client, including injected ones, so token counting and generation requests are scanned and refused before network access.
+- **Local mode** is not scanned; nothing leaves the machine.
+- The hosted session cookie is now `Secure` in production.
+
+**Defects found during implementation, each fixed test-first:**
+- secretlint's database-URL range included the closing quote, which masking would have removed, corrupting code samples. Ranges are now trimmed of quotes and separators.
+- Adding masking inside the `designing` stage shifted cancellation timing: two existing cancel tests failed. Masking now happens during preparation, with an abort check before the provider stage.
+- A live probe of public READMEs found a generic-rule false positive (`--secretlintrc=.secretlintrc.custom.json`). The key must now end with the credential term, and file-name values are skipped; regressions cover flags, token URLs, password-file paths and key-file names.
+- A new test fixture failed typechecking against PR #29's richer usage type and now uses `usageFrom`.
+
+**Tests: 51 new** (37 scanner, 4 egress guard across generation/refinement/expansion/repository assembly, 3 generate including clarification and local passthrough, 1 refine, 1 expand, 2 repository masking hosted/local, 1 fail-closed masking, 1 cookie, 1 page). The page refusal test passed on first run because the existing error handling already preserved the prompt; it is kept as a regression guard and was not observed failing first. Mutations disabling each of the following were all caught: masking, the typed-text gate, the local-mode exemption, the egress guard, token-count guarding, code-reference skipping, quote trimming, and fail-closed masking (the last via a `.catch(() => null)` fallback). Final checks: 1,007 hosted tests passed; local 991 passed / 16 expected skips; all typechecks, an isolated production build and the 18/36 benchmark selftests passed.
+
+**Live acceptance** (fake=false, isolated loopback servers):
+- **curl:** the hosted cookie carries `Secure` and the local cookie does not. A hosted description with a GitHub-format token returned 400 `secret-detected` with the readable message: provider calls 0 → 0, jobs 0, credits 6. The same request in local mode was accepted (202).
+- **Chrome, hosted, 8/9:**
+  - the Secure cookie works over http loopback
+  - the description refusal named the GitHub token on line 2, kept the text and used no credit
+  - a clean description generated (6 → 5 credits)
+  - a refinement carrying a Stripe-format key was refused with the reason, kept the instruction, and wrote and charged nothing
+  - the ninth check (repository import of `packages/@secretlint/...`) failed and is recorded below
+- **Hosted repository masking:** a real import of `github.com/gitleaks/gitleaks` (13 modules / 15 links, one provider call) saved the disclosure "Masked 2 likely secrets (2 credentials) before analysis; their values were never sent to the AI provider." None of the three credential-shaped README values appear in the saved diagram.
+
+**New finding (pre-existing, not addressed here).** Subdirectory selection rejects path segments containing `@` (route `safeSubdir` and the URL parser both use `[\w.-]`), so scoped-package folders common in JavaScript monorepos (`packages/@scope/name`) cannot be imported. The live import above was refused with "subdir must be a simple relative path" — this was the ninth Chrome check. Recommended for task 15 alongside extraction coverage.
+
+**Residual risks** are listed in the threat model: novel or split credential formats, a user's own proprietary text by design, and retention (task 16, next). Artifacts are in the session scratchpad (`live6`); no databases, credentials or cookies are published.

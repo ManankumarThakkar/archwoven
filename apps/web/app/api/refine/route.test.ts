@@ -139,3 +139,21 @@ it('retains provider usage and refunds a refinement when saving fails', async ()
     expect(serverDeps.store.creditsUsed('test-sess', new Date().toISOString().slice(0, 10))).toBe(0);
   } finally { serverDeps.store.saveRevision = save; }
 });
+
+describe('secrets in refinement instructions (hosted)', () => {
+  it('refuses before any credit or provider call', async () => {
+    const prev = process.env.ARCHWOVEN_MODE; delete process.env.ARCHWOVEN_MODE;
+    try {
+      let called = false;
+      serverDeps.generateRefinement = async () => { called = true; return { ok: true as const, ops: [addCacheOp], usage }; };
+      const key = ['sk_', 'live_'].join('') + 'Z9'.repeat(12);
+      const res = await POST(req({ modelId: 'm1', baseRevision: 1, instruction: `Add a payments service using ${key}` }));
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.reason).toBe('secret-detected');
+      expect(body.error).toMatch(/^Your instruction contains what looks like a Stripe key on line 1\./);
+      expect(called).toBe(false);
+      expect(serverDeps.store.creditsUsed('test-sess', new Date().toISOString().slice(0, 10))).toBe(0);
+    } finally { if (prev !== undefined) process.env.ARCHWOVEN_MODE = prev; }
+  });
+});

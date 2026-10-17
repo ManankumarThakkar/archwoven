@@ -3,6 +3,7 @@ import { reserve, refundCredits, recordUsage, TIERS, WEIGHTS } from '@archwoven/
 import { validateModel, appendDisclosures } from '@archwoven/model';
 import type { TaskUsage } from '@archwoven/model';
 import { parseRepoUrl, type ParsedRepoUrl } from '@archwoven/ingest';
+import { maskFragmentSecrets } from '@archwoven/llm';
 import {
   serverDeps, readOrCreateSession, sessionCookie, tierOf,
   creditsExhaustedCopy, STOP_LOSS_COPY, BURST_COPY,
@@ -128,9 +129,14 @@ export async function POST(req: Request) {
       if (!ingest.ok) return fail(ingest.message);
       controller.signal.throwIfAborted();
 
+      // Hosted analysis never sends secret values: mask them first and disclose what was masked (fails closed on error).
+      const masked = deployMode() === 'local' ? null : await maskFragmentSecrets(ingest.fragment);
+      const disclosures = masked?.disclosure ? [...ingest.gaps, masked.disclosure] : ingest.gaps;
+      controller.signal.throwIfAborted();
+
       stage('designing');
       const evidenceRepo = cloneDir !== null ? { owner: 'local', repo: basename(cloneDir) } : { owner: parsed!.owner, repo: parsed!.repo };
-      const out = await serverDeps.assembleRepoModel(ingest.fragment, { ...evidenceRepo, sha: ingest.sha, framework: ingest.framework }, { signal: controller.signal });
+      const out = await serverDeps.assembleRepoModel(masked?.fragment ?? ingest.fragment, { ...evidenceRepo, sha: ingest.sha, framework: ingest.framework }, { signal: controller.signal });
       pendingUsage = out.usage;
       stage('validating-output');
       if (!out.ok) return fail(out.errors.join('; '), out.usage, out.usage.repairs);
@@ -145,7 +151,7 @@ export async function POST(req: Request) {
       }
       // §9: privacy is server-stamped from deploy mode — model self-report never wins.
       // Ingest disclosures live with the model, so a reload shows exactly what the first load did.
-      const stamped = { ...appendDisclosures(checked.model, ingest.gaps), privacy: privacyForMode(deployMode()) };
+      const stamped = { ...appendDisclosures(checked.model, disclosures), privacy: privacyForMode(deployMode()) };
       serverDeps.store.saveRevision(jobId, stamped, sessionId);
       serverDeps.store.updateJob(jobId, { stage: 'laying-out' });
       recordUsage(serverDeps.store, { sessionId, tier, action: 'repo', view: 'architecture', taskId: jobId, modelId: jobId, usage: out.usage, retries: out.usage.repairs, outcome: out.usage.repairs > 0 ? 'repaired' : 'ok' });

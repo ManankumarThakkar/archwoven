@@ -101,3 +101,21 @@ describe('serverDeps local routing (§8/§9)', () => {
     } finally { globalThis.fetch = prevFetch; restore(prev); }
   });
 });
+
+describe('session cookie transport', () => {
+  it('is Secure on a hosted production deployment and stays usable over http locally and in development', async () => {
+    const { sessionCookie } = await import('./server');
+    const env = { mode: process.env.ARCHWOVEN_MODE, node: process.env.NODE_ENV };
+    const set = (mode: string | undefined, node: string) => { if (mode) process.env.ARCHWOVEN_MODE = mode; else delete process.env.ARCHWOVEN_MODE; (process.env as Record<string, string>).NODE_ENV = node; };
+    try {
+      set(undefined, 'production');
+      expect(sessionCookie('abc')).toBe(`aw_sid=abc; Path=/; HttpOnly; SameSite=Lax; Max-Age=${90 * 24 * 3600}; Secure`);
+      set('local', 'production');
+      expect(sessionCookie('abc')).not.toContain('Secure');
+      set(undefined, 'development');
+      expect(sessionCookie('abc')).not.toContain('Secure');
+    } finally {
+      set(env.mode, env.node ?? 'test');
+    }
+  });
+});
