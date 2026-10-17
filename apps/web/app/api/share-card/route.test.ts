@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { validFullModelExtended } from '@archwoven/model';
+import { validFullModel, validFullModelExtended } from '@archwoven/model';
 import { openStore } from '@archwoven/jobs';
 import { serverDeps } from '../../lib/server';
 import { buildCardSvg } from './card';
@@ -91,5 +91,18 @@ describe('share-card burst — §15 local mode + separate bucket (I3/I4)', () =>
     // the model-call burst key must be untouched by cards
     const sessHits = serverDeps.store.bumpBurst(`sess:test-sess`, 60);
     expect(sessHits, 'cards must not bump the generate bucket').toBe(1);
+  });
+});
+
+describe('card content follows the requested view', () => {
+  it('draws a route card only through connections that view shows', () => {
+    const m = structuredClone(validFullModel);
+    // A hidden shortcut (like an expanded component's internal link) outside every view.
+    m.edges.push({ id: 'e.hidden', from: 'actor.user', to: 'datastore.postgres', type: 'sync', provenance: 'inferred', evidence: [] });
+    const overview = buildCardSvg(m, 'view.architecture', 'route', 'actor.user', 'datastore.postgres');
+    expect(overview).toContain('API Gateway');
+    expect(overview).not.toMatch(/\+\d+ more hops/);
+    const unscoped = buildCardSvg(m, 'missing-view', 'route', 'actor.user', 'datastore.postgres');
+    expect(unscoped).not.toContain('API Gateway');
   });
 });

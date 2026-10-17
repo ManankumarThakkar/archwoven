@@ -2,7 +2,8 @@
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { applyEditOps, closeDetailView, openDetailView, undoTo, validFullModelExtended, type SystemModel } from '@archwoven/model';
+import { applyEditOps, applyExpansion, closeDetailView, openDetailView, undoTo, validFullModelExtended, type SystemModel } from '@archwoven/model';
+import { fakeExpansion } from '@archwoven/llm';
 import WorkspacePage from './page';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -746,5 +747,110 @@ describe('component detail views', () => {
     await click('SVG');
     await act(async () => { await vi.waitFor(() => expect(names).toHaveLength(1)); });
     expect(names[0]).toBe('archwoven-detail-gateway.api.svg');
+  });
+});
+
+describe('expanding internals', () => {
+  const ok = (r: { ok: true; model: SystemModel } | { ok: false; errors: string[] }) => { if (!r.ok) throw new Error(r.errors.join('; ')); return r.model; };
+  const withDetail = (m = structuredClone(validFullModelExtended)) => ok(openDetailView(m, 'gateway.api'));
+  const expanded = (m = withDetail()) => ok(applyExpansion(m, 'gateway.api', fakeExpansion(m, 'gateway.api')));
+  function expandServer(initial: SystemModel, mode: 'ok' | 'fail' | 'stale' = 'ok', deploy: 'hosted' | 'local' = 'hosted') {
+    let stored = initial;
+    const bodies: Record<string, unknown>[] = [];
+    transport = (input, init) => {
+      if (input === '/api/config') return Response.json({ mode: deploy, llmReady: true });
+      if (input === '/api/models/m1' && !init) return Response.json({ model: stored });
+      if (input === '/api/models/m1/expand') {
+        const body = JSON.parse(String(init?.body)); bodies.push(body);
+        if (mode === 'fail') return Response.json({ reason: 'expand-failed', errors: ['Provider unavailable'] }, { status: 502 });
+        if (mode === 'stale') { stored = structuredClone(stored); stored.parentId = stored.revision; stored.revision++; stored.nodes.find(n => n.id === 'gateway.api')!.label = 'Edge API'; return Response.json({ reason: 'stale-revision', message: 'The diagram changed elsewhere. Review the latest version and try again.', model: stored }, { status: 409 }); }
+        stored = ok(applyExpansion(stored, body.target, fakeExpansion(stored, body.target)));
+        return Response.json({ model: stored, revision: stored.revision, remaining: 5.75 });
+      }
+      return undefined;
+    };
+    return { bodies, stored: () => stored };
+  }
+  const caption = () => container.querySelector('.aw-detail-caption')?.textContent;
+  const expandButton = () => [...container.querySelectorAll('button')].find(b => b.textContent?.startsWith('Expand internals'));
+  const hint = () => container.querySelector<HTMLInputElement>('input[aria-label="Optional focus for the expansion"]');
+  beforeEach(() => window.history.replaceState(null, '', '/workspace#model=m1&view=detail:gateway.api'));
+
+  it('expands the focus from its detail tab and shows the inferred internals', async () => {
+    const server = expandServer(withDetail());
+    await mount();
+    expect(expandButton()?.textContent).toBe('Expand internals · 0.25 credit');
+    await fill('input[aria-label="Optional focus for the expansion"]', 'auth first');
+    await act(async () => expandButton()!.click());
+    expect(server.bodies).toEqual([{ baseRevision: 2, target: 'gateway.api', hint: 'auth first' }]);
+    expect(caption()).toBe('Inside API Gateway (inferred) · and its direct connections');
+    expect(container.querySelector('.aw-detail-source')).toBeNull();
+    expect(container.textContent).toContain('Added 2 inferred internals to API Gateway.');
+    expect(container.textContent).toContain('5.75/6 credits today');
+    expect(expandButton()).toBeUndefined();
+    expect(requests).not.toContain('/api/refine');
+  });
+
+  it('keeps the hint and the diagram when the expansion fails', async () => {
+    expandServer(withDetail(), 'fail');
+    await mount();
+    await fill('input[aria-label="Optional focus for the expansion"]', 'auth first');
+    await act(async () => expandButton()!.click());
+    expect(container.textContent).toContain('Provider unavailable');
+    expect(hint()!.value).toBe('auth first');
+    expect(caption()).toMatch(/^API Gateway and its direct connections/);
+    expect(expandButton()?.disabled).toBe(false);
+  });
+
+  it('adopts the latest diagram when the expansion is stale', async () => {
+    expandServer(withDetail(), 'stale');
+    await mount();
+    await act(async () => expandButton()!.click());
+    expect(container.textContent).toContain('The diagram changed elsewhere');
+    expect(caption()).toMatch(/^Edge API and its direct connections/);
+  });
+
+  it('sends no hint field when the hint is empty', async () => {
+    const server = expandServer(withDetail());
+    await mount();
+    await act(async () => expandButton()!.click());
+    expect(server.bodies).toEqual([{ baseRevision: 2, target: 'gateway.api' }]);
+  });
+
+  it('offers no expansion for an already expanded component or one of its internals', async () => {
+    const m = expanded();
+    expandServer(m);
+    await mount();
+    expect(expandButton()).toBeUndefined();
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    const internal = m.nodes.find(n => n.group === 'gateway.api')!.id;
+    expandServer(ok(openDetailView(m, internal)));
+    window.history.replaceState(null, '', `/workspace#model=m1&view=detail:${internal}`);
+    await mount();
+    expect(caption()).toMatch(/and its direct connections/);
+    expect(expandButton()).toBeUndefined();
+  });
+
+  it('shows no credit cost in local mode', async () => {
+    expandServer(withDetail(), 'ok', 'local');
+    await mount();
+    expect(expandButton()?.textContent).toBe('Expand internals');
+  });
+
+  it('says repository internals are inferred, not found in source', async () => {
+    const m = structuredClone(validFullModelExtended);
+    m.nodes.find(n => n.id === 'gateway.api')!.provenance = 'source-supported';
+    expandServer(expanded(withDetail(m)));
+    await mount();
+    expect(container.querySelector('[role="note"].aw-detail-source')?.textContent).toBe('Internals are inferred, not found in source.');
+  });
+
+  it('names overview links the internals no longer match', async () => {
+    let m = expanded();
+    m = ok(applyEditOps(m, [{ op: 'add', target: 'e.api-redis', patch: { id: 'e.api-redis', from: 'gateway.api', to: 'datastore.redis', type: 'data', provenance: 'proposed' }, baseRevision: m.revision, summary: 'add' }]));
+    expandServer(m);
+    await mount();
+    expect(container.querySelector('[role="status"].aw-detail-drift')?.textContent).toContain('API Gateway now also connects to Redis Cache (data); its internals don’t show which part does.');
   });
 });

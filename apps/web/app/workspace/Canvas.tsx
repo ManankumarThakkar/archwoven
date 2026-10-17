@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ReactFlow, Background, Controls, ControlButton, MiniMap, Position, type Node, type Edge, type ReactFlowInstance } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { isDetailView, type SystemModel, type NodeKind } from '@archwoven/model';
+import { internalsOf, isDetailView, isInternal, type SystemModel, type NodeKind } from '@archwoven/model';
 import { layoutModel, type LayoutResult } from '../../lib/layout';
 import type { Point } from '../../lib/direct-edit';
 import { useGraphEditing, type GraphPlacement } from './useGraphEditing';
@@ -119,7 +119,7 @@ function GraphCanvas({ model, modelId, viewId, onSelect, onDeselect, busy=false,
           position: { x: n.x, y: n.y },
           type: entity ? 'entity' : 'system',
           sourcePosition, targetPosition,
-          data: entity ? { entity: node, sourcePosition, targetPosition } : { node, sourcePosition, targetPosition },
+          data: entity ? { entity: node, sourcePosition, targetPosition } : { node, sourcePosition, targetPosition, inside: isInternal(model, node.id) ? model.nodes.find((m) => m.id === node.group)?.label : undefined, hasDetail: internalsOf(model, node.id).length > 0 },
           style: entity
             ? { width: n.width, height: n.height, borderRadius: 10, background: '#0f172a' }
             : { width: n.width, height: n.height, borderRadius: 10, background: s.bg },
@@ -162,7 +162,7 @@ function GraphCanvas({ model, modelId, viewId, onSelect, onDeselect, busy=false,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modelIdKey(model)]);
 
-  const reach = useMemo(() => (focusId ? reachability(model, focusId) : null), [model, focusId]);
+  const reach = useMemo(() => (focusId ? reachability(model, focusId, viewId) : null), [model, focusId, viewId]);
   const kindOf = useMemo(() => new Map(model.nodes.map((n) => [n.id, n.kind])), [model]);
   const viewEdges = useMemo(() => (view?.edges ?? []).flatMap((id) => { const e = model.edges.find((m) => m.id === id); return e ? [e] : []; }), [model, view]);
   // flow tokens only when the motion governor allows it (§6) — never bypass
@@ -220,7 +220,7 @@ function GraphCanvas({ model, modelId, viewId, onSelect, onDeselect, busy=false,
     if (nextLens.length !== lens.length) { setLens(nextLens); patch.lens = serializeLens(nextLens); }
     if (chapter && !chapter.focus.some((id) => nodeIds.has(id))) { setChapterIdx(-1); patch.chapter = null; }
     const savedRoute = readHash().route?.split('~');
-    const path = probe?.path ?? (savedRoute?.[0] && savedRoute[1] ? journey(model, savedRoute[0], savedRoute[1]) : null);
+    const path = probe?.path ?? (savedRoute?.[0] && savedRoute[1] ? journey(model, savedRoute[0], savedRoute[1], viewId) : null);
     if (path && (!path.every((id) => nodeIds.has(id)) || path.slice(1).some((id, i) =>
       !viewEdges.some((edge) => edge.from === path[i] && edge.to === id)))) {
       stopTimer();
@@ -235,7 +235,7 @@ function GraphCanvas({ model, modelId, viewId, onSelect, onDeselect, busy=false,
 
   const playProbe = (from: string, to: string) => {
     stopTimer();
-    const path = journey(model, from, to);
+    const path = journey(model, from, to, viewId);
     if (!path || path.length < 2) { setProbe(null); setProbeNoRoute(true); writeHash({ route: null }); return; }
     setProbeNoRoute(false);
     setRelationId(null);

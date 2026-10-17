@@ -2,7 +2,7 @@
 
 import { useEffect, useReducer, useRef, useState } from 'react';
 import type { EditOp, SystemModel, ViewType } from '@archwoven/model';
-import { SystemModelSchema, MAX_DETAIL_VIEWS, detailViewId, isDetailView, type View } from '@archwoven/model';
+import { SystemModelSchema, MAX_DETAIL_VIEWS, detailDrift, detailViewId, expandBlocker, internalsOf, isDetailView, type Edge, type View } from '@archwoven/model';
 import { initial, next } from './states';
 import type { Mode, Stage } from './states';
 import { ControlPanel, type RepoForm } from './ControlPanel';
@@ -13,6 +13,7 @@ import { Inspector } from './InspectorPanel';
 import { inspectorFor } from './inspector';
 import { passportFor } from './passport';
 import { RefineBar, type ExportKind } from './RefineBar';
+import { ExpandInternals } from './ExpandInternals';
 import { summarizeOps, pushHistory, undo, idempotencyKeyFor } from './refine-flow';
 import { buildSvg } from '../../lib/export-svg';
 import { modelJson, modelJsonFileName, sourceReferences } from '../../lib/export-json';
@@ -330,6 +331,35 @@ export default function WorkspacePage() {
     void directEdit({ type: 'detail', target });
   };
 
+  const expand = async (target: string, hint: string): Promise<boolean> => {
+    if (!model || !modelId || mutationRef.current) return false;
+    mutationRef.current = true; setRefining(true);
+    const label = model.nodes.find(n => n.id === target)?.label ?? target;
+    setSummary(`Expanding ${label}…`);
+    try {
+      const res = await fetch(`/api/models/${modelId}/expand`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ baseRevision: model.revision, target, ...(hint ? { hint } : {}) }) });
+      if (res.status === 409) {
+        const body = await res.json();
+        const latest = SystemModelSchema.parse(body.model);
+        setModel(latest); setHistory([latest]);
+        setSummary(typeof body.message === 'string' ? body.message : 'The diagram changed elsewhere. Review the latest version and try again.');
+        return false;
+      }
+      if (!res.ok) { setSummary(await responseMessage(res, 'Could not expand this component. Try again.')); return false; }
+      const body = await res.json();
+      const accepted = SystemModelSchema.parse(body.model);
+      setModel(accepted); setHistory(h => pushHistory(h, accepted));
+      if (typeof body.remaining === 'number') setRemaining(body.remaining);
+      setSummary(`Added ${internalsOf(accepted, target).length} inferred internals to ${label}.`);
+      return true;
+    } catch {
+      setSummary('Could not expand this component. Check your connection and try again.');
+      return false;
+    } finally {
+      mutationRef.current = false; setRefining(false);
+    }
+  };
+
   const directEdit = async(action:DirectEdit):Promise<boolean> => {
     if(!model||!modelId||mutationRef.current)return false;
     mutationRef.current=true;setRefining(true);setSummary('Saving change…');
@@ -400,6 +430,18 @@ export default function WorkspacePage() {
     ? { onOpen: () => openDetail(selectedNode.id), limitReached: !model.views.some(v => v.id === detailViewId(selectedNode.id)) && model.views.filter(isDetailView).length >= MAX_DETAIL_VIEWS }
     : null;
   const focusLabel = inDetail ? model?.nodes.find(n => n.id === currentView!.focus)?.label ?? currentView!.focus! : '';
+  const detailFocus = inDetail ? currentView!.focus! : '';
+  const expandedCount = model && inDetail ? internalsOf(model, detailFocus).length : 0;
+  const labelOf = (id: string) => model?.nodes.find(n => n.id === id)?.label ?? id;
+  const drift = model && expandedCount ? detailDrift(model, detailFocus) : null;
+  const driftLines = drift ? [
+    ...drift.uncovered.map((e: Edge) => e.from === detailFocus && e.to === detailFocus
+      ? `${focusLabel} now also loops back to itself (${e.type}); its internals don’t show which part does.`
+      : e.from === detailFocus
+        ? `${focusLabel} now also connects to ${labelOf(e.to)} (${e.type}); its internals don’t show which part does.`
+        : `${labelOf(e.from)} now also connects to ${focusLabel} (${e.type}); its internals don’t show which part receives it.`),
+    ...drift.unbacked.map((e: Edge) => `${labelOf(e.from)} → ${labelOf(e.to)} (${e.type}) is no longer in the overview.`),
+  ] : [];
   const references = model ? sourceReferences(model) : null;
   const exportSources = model && references?.present ? { private: model.privacy.classification === 'private' || model.privacy.boundary === 'local-only', repos: references.repos } : null;
   // Pre-model chip states the deployment's processing location — never a hardcoded claim.
@@ -453,7 +495,10 @@ export default function WorkspacePage() {
               ))}
               {currentView && <ArchitectureOrientation model={model} view={currentView} busy={refining} onChange={orientation=>{void directEdit({type:'orient',viewId:currentView.id,orientation});}} />}
             </div>
-            {inDetail && <p role="note" className="aw-detail-caption">{focusLabel} and its direct connections · arranged automatically{currentView!.edges.length ? '' : ' · no direct connections'}</p>}
+            {inDetail && <p role="note" className="aw-detail-caption">{expandedCount ? `Inside ${focusLabel} (inferred) · and its direct connections` : `${focusLabel} and its direct connections · arranged automatically${currentView!.edges.length ? '' : ' · no direct connections'}`}</p>}
+            {inDetail && expandedCount > 0 && model.nodes.some(n => n.provenance === 'source-supported') && <p role="note" className="aw-detail-caption aw-detail-source">Internals are inferred, not found in source.</p>}
+            {driftLines.length > 0 && <div role="status" className="aw-detail-drift">{driftLines.map(line => <p key={line}>{line}</p>)}</div>}
+            {inDetail && expandBlocker(model, detailFocus) === null && <ExpandInternals key={detailFocus} label={focusLabel} cost={deploy === 'hosted'} busy={refining} onExpand={hint => expand(detailFocus, hint)} />}
             <div style={{ flex: 1, minHeight: 0 }}><Canvas model={model} modelId={modelId ?? ''} viewId={currentView?.id ?? ''} busy={refining} onMove={inDetail ? undefined : positions=>directEdit({type:'move',positions})} onSelect={setSelected} onDeselect={() => setSelected(null)} /></div>
             <RefineBar busy={refining} summary={summary} canUndo={history.length > 1} onRefine={refine} onUndo={doUndo} onExport={doExport} sources={exportSources} />
           </main>

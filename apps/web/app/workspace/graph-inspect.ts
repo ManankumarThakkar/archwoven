@@ -1,12 +1,21 @@
-import type { SystemModel } from '@archwoven/model';
+import type { Edge, SystemModel } from '@archwoven/model';
+
+/** Exploration follows only what the view draws: hidden links (e.g. a component's internals)
+ *  must never route or highlight through nodes the view does not show. */
+const edgesOf = (model: SystemModel, viewId?: string): Edge[] => {
+  const view = viewId === undefined ? undefined : model.views.find((v) => v.id === viewId);
+  if (!view) return model.edges;
+  const ids = new Set(view.edges);
+  return model.edges.filter((e) => ids.has(e.id));
+};
 
 /** BFS reachability from a node: forward = descendants, backward = ancestors,
  *  values = hop depth. The focus node itself is absent from both maps.
  *  Visited-set BFS — cycles and fastapi-scale graphs terminate by construction. */
-export function reachability(model: SystemModel, id: string): { forward: Map<string, number>; backward: Map<string, number> } {
+export function reachability(model: SystemModel, id: string, viewId?: string): { forward: Map<string, number>; backward: Map<string, number> } {
   const fwd = new Map<string, string[]>();
   const bwd = new Map<string, string[]>();
-  for (const e of model.edges) {
+  for (const e of edgesOf(model, viewId)) {
     (fwd.get(e.from) ?? fwd.set(e.from, []).get(e.from)!).push(e.to);
     (bwd.get(e.to) ?? bwd.set(e.to, []).get(e.to)!).push(e.from);
   }
@@ -27,11 +36,11 @@ export function reachability(model: SystemModel, id: string): { forward: Map<str
 }
 
 /** Shortest forward node path from→to (inclusive); null when unreachable. */
-export function journey(model: SystemModel, from: string, to: string): string[] | null {
+export function journey(model: SystemModel, from: string, to: string, viewId?: string): string[] | null {
   if (!model.nodes.some((n) => n.id === from) || !model.nodes.some((n) => n.id === to)) return null;
   if (from === to) return [from];
   const adj = new Map<string, string[]>();
-  for (const e of model.edges) (adj.get(e.from) ?? adj.set(e.from, []).get(e.from)!).push(e.to);
+  for (const e of edgesOf(model, viewId)) (adj.get(e.from) ?? adj.set(e.from, []).get(e.from)!).push(e.to);
   const prev = new Map<string, string>();
   const seen = new Set([from]);
   const queue = [from];

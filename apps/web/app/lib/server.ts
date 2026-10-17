@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { openStore, type Store, type Tier } from '@archwoven/jobs';
 import {
-  generateModel, generateRefinement, assembleRepoModel,
-  generateModelLocal, generateRefinementLocal, assembleRepoModelLocal,
+  generateModel, generateRefinement, assembleRepoModel, expandComponent,
+  generateModelLocal, generateRefinementLocal, assembleRepoModelLocal, expandComponentLocal,
   makeEgressGuard, LOCAL_EGRESS_ALLOW,
-  type GenerateOutcome, type DescriptionOutcome, type RefineOutcome,
+  type GenerateOutcome, type DescriptionOutcome, type RefineOutcome, type ExpandOutcome,
 } from '@archwoven/llm';
 import { deployMode, fakeMode } from './mode';
 import { ingestRepo, ingestLocal, gitRevParse, type IngestResult } from '@archwoven/ingest';
@@ -31,6 +31,7 @@ export const serverDeps: {
   store: Store;
   generateModel: (prompt: string, view: ViewType, opts?: { signal?: AbortSignal; allowClarification?: boolean }) => Promise<DescriptionOutcome>;
   generateRefinement: (instruction: string, model: SystemModel, view: ViewType, opts?: { signal?: AbortSignal }) => Promise<RefineOutcome>;
+  expandComponent: (model: SystemModel, target: string, hint: string, opts?: { signal?: AbortSignal }) => Promise<ExpandOutcome>;
   ingestRepo: (parsed: { owner: string; repo: string; ref?: string; subdir?: string }, opts?: { signal?: AbortSignal; onStage?: (stage: 'fetching' | 'extracting') => void }) => Promise<IngestResult>;
   ingestLocal: (dir: string, opts?: { subdir?: string; signal?: AbortSignal; onStage?: (stage: 'fetching' | 'extracting') => void }) => Promise<IngestResult>;
   assembleRepoModel: (fragment: Fragment, meta: { owner: string; repo: string; sha: string; framework: string }, opts?: { signal?: AbortSignal }) => Promise<GenerateOutcome>;
@@ -47,6 +48,10 @@ export const serverDeps: {
     fakeMode() ? generateRefinement(instruction, model, view)
       : deployMode() === 'local' ? generateRefinementLocal(instruction, model, view, { fetchImpl: egressFetch, signal: opts?.signal })
         : generateRefinement(instruction, model, view, opts),
+  expandComponent: (model, target, hint, opts) =>
+    fakeMode() ? expandComponent(model, target, hint)
+      : deployMode() === 'local' ? expandComponentLocal(model, target, hint, { fetchImpl: egressFetch, signal: opts?.signal })
+        : expandComponent(model, target, hint, opts),
   // §14: URLs reaching this seam are already parseRepoUrl-validated (github.com only);
   // repo content is untrusted data, never executed — extraction is static analysis only.
   ingestRepo: (parsed, opts) => ingestRepo(parsed, { fetcher: (url, init) => egressFetch(url, init), extractSpringBoot, extractFastApi }, opts),

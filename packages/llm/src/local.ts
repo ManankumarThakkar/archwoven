@@ -3,7 +3,7 @@ import { generatedViewErrors } from './generated-view';
 import { z } from 'zod';
 import type { Fragment } from '@archwoven/extract';
 import {
-  EditOpSchema, applyEditOps, validateModel,
+  EditOpSchema, applyEditOps, applyExpansion, expandBlocker, validateModel,
   type EditOp, type SystemModel, type ViewType,
 } from '@archwoven/model';
 import { LOCAL_MODEL_SYSTEM, NATIVE_MODEL_JSON_SCHEMA, MAX_REPAIRS, type GenerateOutcome, type TaskUsage } from './client';
@@ -11,6 +11,7 @@ import { LOCAL_REPO_SYSTEM, fenceEscape, pinEvidence, sourceEvidenceErrors, pres
 import { LOCAL_REFINEMENT_SYSTEM } from './refine';
 import type { RefineOutcome } from './refine';
 import { buildSourceModel, SOURCE_PRESENTATION_SCHEMA, SOURCE_PRESENTATION_SYSTEM } from './source-presentation';
+import { EXPANSION_SYSTEM, NATIVE_EXPANSION_SCHEMA, expansionRepair, expansionUserMessage, type ExpandOutcome } from './expand';
 
 /** Overridable via OLLAMA_MODEL (.env.local); 20b (~13 GB) keeps a 16 GB-light
  * footprint vs 120b's 65 GB resident — same family, same constrained-decoding path. */
@@ -346,5 +347,42 @@ export async function assembleRepoModelLocal(
     }
   }
 
+  return { ok: false, errors: lastErrors, usage };
+}
+
+/** Local expansion (§8): the private model never leaves this machine; same contract and rules as hosted. */
+export async function expandComponentLocal(
+  model: SystemModel,
+  focus: string,
+  hint: string,
+  opts: LocalInferenceOptions = {},
+): Promise<ExpandOutcome> {
+  opts = { ...opts, signal: taskSignal(opts) };
+  let usage = zeroUsage(opts.model ?? LOCAL_MODEL);
+  const blocked = expandBlocker(model, focus);
+  if (blocked) return { ok: false, errors: [blocked], usage };
+  const messages: { role: string; content: string }[] = [
+    { role: 'system', content: EXPANSION_SYSTEM },
+    { role: 'user', content: expansionUserMessage(model, focus, hint) },
+  ];
+  let lastErrors: string[] = [];
+  let repairs = 0;
+  for (let attempt = 0; attempt <= MAX_REPAIRS; attempt++) {
+    // Small JSON answer, but gpt-oss reasons in hidden tokens first: keep headroom, stay bounded.
+    const r = await ollamaChat(messages, NATIVE_EXPANSION_SCHEMA, { ...opts, maxOutputTokens: 8000 });
+    usage = addLocalUsage(usage, r.usage, repairs);
+    if (r.error) { lastErrors = [r.error]; break; }
+    let raw: unknown;
+    try { raw = JSON.parse(r.text); } catch (e) { lastErrors = [`expansion was not valid JSON: ${e instanceof Error ? e.message : String(e)}`]; raw = undefined; }
+    if (raw !== undefined) {
+      const applied = applyExpansion(model, focus, raw);
+      if (applied.ok) return { ok: true, model: applied.model, usage };
+      lastErrors = applied.errors;
+    }
+    if (attempt < MAX_REPAIRS) {
+      repairs++;
+      messages.push({ role: 'assistant', content: r.text }, { role: 'user', content: expansionRepair(lastErrors) });
+    }
+  }
   return { ok: false, errors: lastErrors, usage };
 }

@@ -23,7 +23,7 @@ export function buildCardSvg(model: SystemModel, viewId: string, kind: 'route' |
   const parts: string[] = [];
 
   if (kind === 'route') {
-    const path = journey(model, from, to ?? from) ?? [from];
+    const path = journey(model, from, to ?? from, viewId) ?? [from];
     const shown = path.slice(0, 6);
     const gap = (1200 - 80 - NODE_W) / Math.max(1, shown.length - 1);
     shown.forEach((id, i) => {
@@ -33,7 +33,7 @@ export function buildCardSvg(model: SystemModel, viewId: string, kind: 'route' |
     });
     if (path.length > 6) parts.push(`<text x="1160" y="380" text-anchor="end" font-family="Inter" font-size="14" fill="#8b98b8">+${path.length - 6} more hops</text>`);
   } else {
-    const { forward, backward } = reachability(model, from);
+    const { forward, backward } = reachability(model, from, viewId);
     parts.push(box(515, 288, label(from), true));
     const bwd = [...backward.keys()].reverse().slice(-4);
     const fwd = [...forward.keys()].slice(0, 4);
