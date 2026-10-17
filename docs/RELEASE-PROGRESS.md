@@ -20,12 +20,21 @@ Completed foundation: PR #11 clean-download instructions; PR #12 authoritative e
 | 11 | Local-clone UI, accurate credits copy and stable warnings | Merged to main as PR #26; verified |
 | 12 | Subdirectory-first scanning and generated-file exclusions | Merged to main as PR #27; verified |
 | 13 | Truthful working-tree/commit evidence | Merged to main as PR #28; verified |
-| 14 | Accurate task/repair usage and provider-aware costs | PR #29 open against main; verified |
+| 14 | Accurate task/repair usage and provider-aware costs | Merged to main as PR #29; verified |
 | 15 | Supported framework extraction gaps and coverage measurements | Pending |
 | 16 | Retention, expiration and user deletion | Pending |
-| 17 | Threat model and before-egress content secret scanning | Pending |
+| 17 | Threat model and before-egress content secret scanning | PR open against main; verified |
 | 18 | Public abuse controls and honest exhausted-credit copy | Pending |
 | 19 | Evaluation oracle, representative real-provider results and human-review handoff | Pending |
 | 20 | Cross-browser/accessibility/device acceptance, clean-install rerun and documented cleanup | Pending |
 
 External acceptance work that requires a person/device must be recorded as outstanding if unavailable; do not substitute an automated check. Existing exclusions (hosted private GitHub OAuth, billing, collaboration, light mode) remain unchanged. Owner name/domain clearance remains an owner task.
+
+## Release decisions (2026-10-17)
+
+Delegated by the owner to engineering judgement; recorded here so they can be revisited.
+
+- **Order of remaining work:** 17 → 16 → 18 → 15 → 19 → 20. Protect user data first, close the release gates, then improve extraction quality, then evaluation and acceptance.
+- **17, secrets:** typed text in hosted mode is blocked before any credit or provider call; repository content is masked and the masking is disclosed; every hosted request also passes an egress guard that fails closed. Local mode is not scanned because nothing leaves the machine. secretlint runs in-process instead of the gitleaks + secretlint pair; rationale in `docs/THREAT-MODEL.md`.
+- **16, retention:** implement as promised. Anonymous hosted diagrams expire 30 days after their last change, with an automatic sweep, and owners can delete a diagram in either mode. Local diagrams never expire automatically.
+- **18, abuse controls:** keep the enforced credits, burst limits, concurrency slots and stop-loss; defer anomaly challenges and bans until post-launch traffic data exists, and narrow SPEC §15 to match. Fix the exhausted-credit copy that advertises an unavailable GitHub sign-in.
