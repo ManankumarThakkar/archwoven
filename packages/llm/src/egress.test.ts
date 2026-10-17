@@ -29,12 +29,23 @@ describe('egress guard (§9)', () => {
     expect(calls).toHaveLength(0);
   });
 
-  it('LOCAL_EGRESS_ALLOW is exactly the ollama + GitHub hosts (§9 allowlist)', () => {
-    expect([...LOCAL_EGRESS_ALLOW].sort()).toEqual([
-      '127.0.0.1:11434',
-      'api.github.com',
-      'codeload.github.com',
-      'localhost:11434',
-    ]);
+  it('allows inference through the shipped Compose Ollama service', async () => {
+    const calls: string[] = [];
+    const guard = makeEgressGuard(LOCAL_EGRESS_ALLOW, spy(calls));
+    const url = 'http://ollama:11434/api/chat';
+    const response = await guard(url);
+    expect(response.ok).toBe(true);
+    expect(calls).toEqual([url]);
+  });
+
+  it.each([
+    'http://ollama:11435/api/chat',
+    'http://ollama.evil.example:11434/api/chat',
+    'http://evil.example:11434/api/chat',
+  ])('refuses an untrusted inference endpoint %s before fetching', async (url) => {
+    const calls: string[] = [];
+    const guard = makeEgressGuard(LOCAL_EGRESS_ALLOW, spy(calls));
+    await expect(guard(url)).rejects.toBeInstanceOf(EgressBlockedError);
+    expect(calls).toHaveLength(0);
   });
 });

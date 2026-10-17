@@ -5,7 +5,8 @@
  * happens via `ollama pull` (outside this process), so the fetch allowlist is
  * exactly local inference + GitHub repo fetch.
  */
-export const LOCAL_EGRESS_ALLOW = ['localhost:11434', '127.0.0.1:11434', 'api.github.com', 'codeload.github.com'];
+// `ollama:11434` is the inference service on the shipped Compose network.
+export const LOCAL_EGRESS_ALLOW = ['localhost:11434', '127.0.0.1:11434', 'ollama:11434', 'api.github.com', 'codeload.github.com'];
 
 export class EgressBlockedError extends Error {
   constructor(public readonly host: string) {
