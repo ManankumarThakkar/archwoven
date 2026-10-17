@@ -10,6 +10,8 @@ export type ParsedRepoUrl =
 
 const ALLOWED_HOSTS = new Set(['github.com', 'www.github.com']);
 const NAME = /^[A-Za-z0-9._-]+$/;
+/** Subdirectory segments may also carry `@`, as in scoped-package folders (`packages/@scope/name`). */
+const SUBDIR_SEGMENT = /^[A-Za-z0-9@._-]+$/;
 const SHA = /^[0-9a-fA-F]{7,40}$/;
 
 /** Reject IP literals in decimal/hex/octal/dotted forms and known internal names. */
@@ -34,7 +36,7 @@ export function parseRepoUrl(raw: string): ParsedRepoUrl {
   const s = String(raw);
   // Reject traversal in the RAW string — URL() normalizes dot-segments away,
   // which would silently rewrite the user's intent instead of refusing it.
-  if (/(^|\/)\.\.?(\/|$)/.test(s.split('?')[0]!)) return { ok: false, error: 'traversal in path' };
+  if (/(^|\/)(\.|%2e){1,2}(\/|$)/i.test(s.split('?')[0]!)) return { ok: false, error: 'traversal in path' };
   let u: URL;
   try {
     u = new URL(s);
@@ -60,10 +62,15 @@ export function parseRepoUrl(raw: string): ParsedRepoUrl {
   // Branch names containing '/' are ambiguous with subdirs — use a SHA or default branch.
   if (!SHA.test(ref) && !NAME.test(ref)) return { ok: false, error: 'invalid ref' };
 
-  const subdirParts = rest.slice(2);
+  let subdirParts: string[];
+  try {
+    subdirParts = rest.slice(2).map(decodeURIComponent);
+  } catch {
+    return { ok: false, error: 'invalid subdir segment' };
+  }
   if (subdirParts.some((p) => p === '..' || p === '.')) return { ok: false, error: 'traversal in subdir' };
   const subdir = subdirParts.join('/');
-  if (subdirParts.length > 0 && !subdirParts.every((p) => NAME.test(p))) return { ok: false, error: 'invalid subdir segment' };
+  if (subdirParts.length > 0 && !subdirParts.every((p) => SUBDIR_SEGMENT.test(p))) return { ok: false, error: 'invalid subdir segment' };
 
   return { ok: true, owner, repo: cleanRepo, ref, ...(subdir ? { subdir } : {}) };
 }

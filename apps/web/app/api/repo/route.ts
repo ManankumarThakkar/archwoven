@@ -20,7 +20,7 @@ import { startJobDeadline, JOB_TIMEOUT_COPY } from '../../lib/job-registry';
 export const runtime = 'nodejs';
 
 const safeSubdir = (s: string): boolean =>
-  /^[\w.-]+(\/[\w.-]+)*$/.test(s) && s.split('/').every((seg) => seg !== '.' && seg !== '..');
+  /^[\w@.-]+(\/[\w@.-]+)*$/.test(s) && s.split('/').every((seg) => seg !== '.' && seg !== '..');
 
 export async function POST(req: Request) {
   const { sessionId, minted } = readOrCreateSession(req);

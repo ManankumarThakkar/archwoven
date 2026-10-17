@@ -229,6 +229,12 @@ it.each(['../outside','htmlcov','api/htmlcov','api/a.generated.d.ts'])('rejects 
 });
 
 
+it('imports a scoped-package folder whose path contains @',async()=>{
+  const r=await ingestRepo({owner:'foo',repo:'r',subdir:'packages/@scope/api'},{fetcher:cannedFetcher([tarEntry('r-main/packages/@scope/api/main.go','package main'),tarEntry('r-main/packages/other/main.go','package other')]),extractSpringBoot,extractFastApi,tmpRoot:tmp()});
+  expect(r.ok,JSON.stringify(r)).toBe(true);if(!r.ok)return;expect(r.filesScanned).toBe(1);expect(r.fragment.sourceContext?.inventory).toEqual(['packages/@scope/api/main.go']);
+});
+
+
 it('a scoped hosted import cannot bypass hidden-directory source exclusions',async()=>{
   const r=await ingestRepo({owner:'foo',repo:'r',subdir:'.hidden'},{fetcher:cannedFetcher([tarEntry('r-main/.hidden/main.go','package main')]),extractSpringBoot,extractFastApi,tmpRoot:tmp()});expect(r.ok).toBe(false);
 });
