@@ -135,9 +135,9 @@ function GraphCanvas({ model, modelId, viewId, permalinkVersion = 0, onSelect, o
         const route = r.edges.find(route => route.id === id);
         return [{ id, source: e.from, target: e.to, type: route ? 'routed' : undefined, data: route ? { route } : undefined, label: view?.type === 'er' ? erLabel(e) : e.label ?? '', markerStart: markers.start, markerEnd: markers.end, ariaLabel: view?.type === 'er' ? `${e.from} to ${e.to}: ${erLabel(e)}` : undefined, animated: e.type === 'async' && motion === 'motion', style: { stroke: PROVENANCE_STYLE[e.provenance].border, strokeDasharray: e.type === 'async' ? '6 4' : undefined } }];
       });
-      const { boundaries, bounds } = graphScene(model, r);
+      const { boundaries, bounds, warnings } = graphScene(model, r);
       const hulls: Node[] = boundaries.map(b => ({ id: `bnd:${b.id}`, type: 'boundary', position: { x: b.x, y: b.y }, data: { label: b.label, lines: b.lines }, style: { width: b.width, height: b.height }, draggable: false, selectable: false, zIndex: -1 }));
-      setPlaced({ key: layoutKey, nodes: [...hulls, ...nodes], edges, bounds, warnings:r.warnings });
+      setPlaced({ key: layoutKey, nodes: [...hulls, ...nodes], edges, bounds, warnings });
     }).catch(() => { if (alive) setLayoutError('This view could not be laid out. Try another view or refine the diagram.'); });
     return () => { alive = false; };
   }, [model, viewId, motion, layoutKey]);
