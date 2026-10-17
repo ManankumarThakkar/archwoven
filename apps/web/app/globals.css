@@ -170,3 +170,11 @@ textarea::placeholder, input::placeholder { color: #8290aa; opacity: 1; }
 .aw-clarification-actions .aw-primary { background: #5eead4; border-color: #5eead4; color: #04211f; font-weight: 600; }
 .aw-clarification-actions button:disabled, .aw-clarification fieldset:disabled { opacity: .6; }
 .aw-clarification-cancel { border-color: #fb7185; color: #fda4af; }
+
+
+.aw-orientation { margin-left: auto; min-width: 0; }
+.aw-orientation [role=group] { display: flex; flex-wrap: wrap; gap: 6px; }
+.aw-view-tabs .aw-orientation button { min-height: 44px; text-transform: none; }
+.aw-orientation p { max-width: 360px; font-size: 11px; line-height: 1.6; margin: 6px 0 0; color: #a9b6ce; }
+.aw-orientation button:disabled { opacity: .65; }
+@media (max-width: 900px) { .aw-orientation { margin-left: 0; } }

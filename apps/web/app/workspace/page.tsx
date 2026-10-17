@@ -7,6 +7,7 @@ import { initial, next } from './states';
 import type { Mode, Stage } from './states';
 import { ControlPanel, type RepoForm } from './ControlPanel';
 import { Canvas } from './Canvas';
+import { ArchitectureOrientation } from './ArchitectureOrientation';
 import { ClarificationPanel } from './ClarificationPanel';
 import { Inspector } from './InspectorPanel';
 import { inspectorFor } from './inspector';
@@ -317,7 +318,7 @@ export default function WorkspacePage() {
       if(response.status===409){const body=await response.json();const latest=SystemModelSchema.parse(body.model);setModel(latest);setHistory([latest]);setSummary('The diagram changed elsewhere. Review the latest version and try again.');return false;}
       if(!response.ok){setSummary(await responseMessage(response,'Could not save this change. Try again.'));return false;}
       const accepted=SystemModelSchema.parse((await response.json()).model);
-      setModel(accepted);setHistory(h=>pushHistory(h,accepted));setSummary(action.type==='rename'?'Name saved.':'Positions saved.');return true;
+      setModel(accepted);if(accepted.revision!==model.revision)setHistory(h=>pushHistory(h,accepted));setSummary(action.type==='rename'?'Name saved.':action.type==='orient'?`${action.orientation==='LR'?'Horizontal':'Vertical'} layout saved.`:'Positions saved.');return true;
     }catch{setSummary('Could not save this change. Check your connection and try again.');return false;}
     finally{mutationRef.current=false;setRefining(false);}
   };
@@ -362,6 +363,7 @@ export default function WorkspacePage() {
 
   const showCanvas = (state.kind === 'success' || state.kind === 'partial') && model;
   const viewTabs = model?.views ?? [];
+  const currentView = viewTabs.find(v => v.id === activeView) ?? viewTabs[0];
   const passport = model && selected ? passportFor(model, selected) : null;
   // Pre-model chip states the deployment's processing location — never a hardcoded claim.
   const privacy = model ? `🔒 ${model.privacy.classification} · ${model.privacy.boundary}` : `🔒 ${deploy === 'local' ? 'private · local-only' : 'public · external-allowed'}`;
@@ -412,6 +414,7 @@ export default function WorkspacePage() {
                   window.history.replaceState(null, '', `#${hash}`);
                 }}>{v.type === 'er' ? 'Data model' : v.type.replace('-', ' ')}</button>
               ))}
+              {currentView && <ArchitectureOrientation model={model} view={currentView} busy={refining} onChange={orientation=>{void directEdit({type:'orient',viewId:currentView.id,orientation});}} />}
             </div>
             <div style={{ flex: 1, minHeight: 0 }}><Canvas model={model} modelId={modelId ?? ''} viewId={activeView || viewTabs[0]?.id || ''} busy={refining} onMove={positions=>directEdit({type:'move',positions})} onSelect={setSelected} onDeselect={() => setSelected(null)} /></div>
             <RefineBar busy={refining} summary={summary} canUndo={history.length > 1} onRefine={refine} onUndo={doUndo} onExport={doExport} />

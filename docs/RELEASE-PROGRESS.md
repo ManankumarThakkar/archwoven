@@ -12,8 +12,8 @@ Completed foundation: PR #11 clean-download instructions; PR #12 authoritative e
 | 4 | ER fields, keys and cardinalities | Merged to main as PR #17; verified |
 | 5 | SVG/PNG routing, self-relations and label readability | Merged to main as PR #18; verified |
 | 6 | Direct rename/drag and persistent manual positions | Merged to main as PR #19; verified |
-| 7 | Clarification answer/skip flow | PR #20 open; verified |
-| 8 | Architecture orientation control | Pending |
+| 7 | Clarification answer/skip flow | Merged to main as PR #20; verified |
+| 8 | Architecture orientation control | PR #21 open; verified |
 | 9 | Privacy-aware model JSON download | Pending |
 | 10 | Existing-model component drill-down | Pending |
 | 11 | Local-clone UI, accurate credits copy and stable warnings | Pending |
