@@ -369,3 +369,28 @@ describe('secrets in typed text (hosted)', () => {
     expect(jobId).toBeTruthy();
   }));
 });
+
+describe('clarification prompts do not outlive their diagram', () => {
+  async function askThenContinue(continuation: () => Promise<{ ok: true; model: typeof validFullModel; usage: typeof usage } | { ok: false; errors: string[]; usage: typeof usage }>) {
+    serverDeps.generateModel = async () => ({ ok: true as const, questions: ['Store orders or keep them transient?'], usage });
+    const asked = await (await POST(req({ prompt: 'Our internal billing design.', view: 'architecture', idempotencyKey: 'scrub' }))).json();
+    for (let i = 0; i < 100 && serverDeps.store.getJob(asked.jobId)?.status !== 'clarifying'; i++) await new Promise(r => setTimeout(r, 10));
+    serverDeps.generateModel = continuation;
+    const continued = await (await POST(req({ clarification: { jobId: asked.jobId, answers: ['Store them.'] } }))).json();
+    for (let i = 0; i < 100 && ['queued', 'running'].includes(serverDeps.store.getJob(continued.jobId)?.status ?? 'queued'); i++) await new Promise(r => setTimeout(r, 10));
+    return { original: asked.jobId as string, continuation: continued.jobId as string };
+  }
+
+  it('scrubs the stored prompt and questions once the clarified diagram is saved', async () => {
+    const { original, continuation } = await askThenContinue(async () => ({ ok: true as const, model: validFullModel, usage }));
+    expect(serverDeps.store.getJob(continuation)?.status).toBe('succeeded');
+    expect(serverDeps.store.getJob(original)?.clarification).toBeUndefined();
+    serverDeps.store.deleteModel(continuation);
+    expect(JSON.stringify(serverDeps.store.getJob(original))).not.toContain('billing');
+  });
+
+  it('keeps the questions when the continuation fails, so the user can retry', async () => {
+    const { original } = await askThenContinue(async () => ({ ok: false as const, errors: ['provider down'], usage }));
+    expect(serverDeps.store.getJob(original)?.clarification?.prompt).toBe('Our internal billing design.');
+  });
+});

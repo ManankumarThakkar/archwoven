@@ -44,7 +44,15 @@ export interface CallRec {
  * SQLite-backed durable state: append-only revisions, job records with idempotency,
  * call accounting (powers §11 eval + stop-loss) and the weighted-credit ledger (§15).
  */
-export function openStore(path = 'data/archwoven.db') {
+/** SQLite `datetime()` text form, so stored timestamps compare correctly with SQL defaults. */
+const sqlTime = (d: Date): string => d.toISOString().slice(0, 19).replace('T', ' ');
+
+/** Retention (SPEC §1): diagram content lives 30 days after its last change; content-free metering 90 days. */
+export const CONTENT_RETENTION_DAYS = 30;
+export const METERING_RETENTION_DAYS = 90;
+
+export function openStore(path = 'data/archwoven.db', opts: { now?: () => Date } = {}) {
+  const now = opts.now ?? (() => new Date());
   if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
   const db = new DatabaseSync(path);
   // busy_timeout first so concurrent opens wait instead of throwing SQLITE_LOCKED;
@@ -134,8 +142,8 @@ export function openStore(path = 'data/archwoven.db') {
       return orphans.length;
     },
     saveRevision(modelId: string, model: SystemModel, sessionId?: string): void {
-      db.prepare('INSERT INTO revisions (model_id, revision, parent_id, json, session_id) VALUES (?, ?, ?, ?, ?)').run(
-        modelId, model.revision, model.parentId ?? null, JSON.stringify(model), sessionId ?? null,
+      db.prepare('INSERT INTO revisions (model_id, revision, parent_id, json, session_id, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(
+        modelId, model.revision, model.parentId ?? null, JSON.stringify(model), sessionId ?? null, sqlTime(now()),
       );
     },
     getRevisionOwner(modelId: string): string | null {
@@ -163,8 +171,8 @@ export function openStore(path = 'data/archwoven.db') {
       db.exec('BEGIN IMMEDIATE');
       try {
         if (job.idempotencyKey) db.prepare("UPDATE jobs SET idempotency_key = NULL WHERE session_id = ? AND idempotency_key = ? AND status IN ('failed', 'cancelled')").run(job.sessionId, job.idempotencyKey);
-        db.prepare('INSERT INTO jobs (id, model_id, kind, idempotency_key, session_id) VALUES (?, ?, ?, ?, ?)').run(
-          job.id, job.modelId, job.kind, job.idempotencyKey ?? null, job.sessionId,
+        db.prepare('INSERT INTO jobs (id, model_id, kind, idempotency_key, session_id, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(
+          job.id, job.modelId, job.kind, job.idempotencyKey ?? null, job.sessionId, sqlTime(now()),
         );
         db.exec('COMMIT');
       } catch (error) {
@@ -194,8 +202,8 @@ export function openStore(path = 'data/archwoven.db') {
 
     logCall(rec: CallRec): void {
       db.prepare(
-        'INSERT INTO call_log (session_id, tier, view, input_tokens, cache_write_tokens, cache_read_tokens, output_tokens, cost_usd, retries, outcome, task_json) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
-      ).run(rec.sessionId, rec.tier, rec.view, rec.inputTokens, rec.cacheWriteTokens, rec.cacheReadTokens, rec.outputTokens, rec.costUsd ?? 0, rec.retries, rec.outcome, rec.task ? JSON.stringify(rec.task) : null);
+        'INSERT INTO call_log (session_id, tier, view, input_tokens, cache_write_tokens, cache_read_tokens, output_tokens, cost_usd, retries, outcome, task_json, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+      ).run(rec.sessionId, rec.tier, rec.view, rec.inputTokens, rec.cacheWriteTokens, rec.cacheReadTokens, rec.outputTokens, rec.costUsd ?? 0, rec.retries, rec.outcome, rec.task ? JSON.stringify(rec.task) : null, sqlTime(now()));
     },
     listCalls(sessionId: string): CallRec[] {
       const rows = db.prepare('SELECT * FROM call_log WHERE session_id = ? ORDER BY id').all(sessionId) as Record<string, unknown>[];
@@ -251,6 +259,52 @@ export function openStore(path = 'data/archwoven.db') {
       db.prepare('INSERT INTO burst (key, ts) VALUES (?, ?)').run(key, now);
       const r = db.prepare('SELECT COUNT(*) AS n FROM burst WHERE key = ? AND ts >= ?').get(key, now - windowSec) as { n: number };
       return r.n;
+    },
+
+    /** Once a clarified diagram is saved, the original description and questions are no longer needed. */
+    scrubClarification(jobId: string): void {
+      db.prepare('UPDATE jobs SET clarification = NULL WHERE id = ?').run(jobId);
+    },
+
+    /** Owner-requested deletion: every revision of the diagram and every job that produced or changed it. */
+    deleteModel(modelId: string): { revisions: number; jobs: number } {
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        const revisions = Number(db.prepare('DELETE FROM revisions WHERE model_id = ?').run(modelId).changes);
+        const jobs = Number(db.prepare('DELETE FROM jobs WHERE model_id = ?').run(modelId).changes);
+        db.exec('COMMIT');
+        return { revisions, jobs };
+      } catch (error) {
+        db.exec('ROLLBACK');
+        throw error;
+      }
+    },
+
+    /** Nightly retention sweep. Diagrams expire 30 days after their last change (history included);
+     *  finished jobs — which can hold prompts, gaps and errors — after 30 days; content-free metering
+     *  after 90 days; burst counters after a day. Running and queued jobs are never touched. */
+    sweepExpired(): { models: number; jobs: number; calls: number; credits: number; burst: number } {
+      const at = now().getTime();
+      const content = sqlTime(new Date(at - CONTENT_RETENTION_DAYS * 86_400_000));
+      const metering = new Date(at - METERING_RETENTION_DAYS * 86_400_000);
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        const expired = (db.prepare('SELECT model_id FROM revisions GROUP BY model_id HAVING MAX(created_at) < ?').all(content) as { model_id: string }[]).map(r => r.model_id);
+        let jobs = 0;
+        for (const id of expired) {
+          db.prepare('DELETE FROM revisions WHERE model_id = ?').run(id);
+          jobs += Number(db.prepare("DELETE FROM jobs WHERE model_id = ? AND status NOT IN ('running', 'queued')").run(id).changes);
+        }
+        jobs += Number(db.prepare("DELETE FROM jobs WHERE created_at < ? AND status NOT IN ('running', 'queued')").run(content).changes);
+        const calls = Number(db.prepare('DELETE FROM call_log WHERE created_at < ?').run(sqlTime(metering)).changes);
+        const credits = Number(db.prepare('DELETE FROM credits WHERE day < ?').run(metering.toISOString().slice(0, 10)).changes);
+        const burst = Number(db.prepare('DELETE FROM burst WHERE ts < ?').run(at / 1000 - 86_400).changes);
+        db.exec('COMMIT');
+        return { models: expired.length, jobs, calls, credits, burst };
+      } catch (error) {
+        db.exec('ROLLBACK');
+        throw error;
+      }
     },
 
     close(): void {

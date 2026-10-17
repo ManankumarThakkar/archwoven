@@ -75,6 +75,7 @@ export default function WorkspacePage() {
   const [llmReady, setLlmReady] = useState(true);
   const [queuedPos, setQueuedPos] = useState<number | null>(null);
   const [cancelError, setCancelError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>('describe');
   const [restoring, setRestoring] = useState(true);
   const loadSequence = useRef(0);
@@ -259,14 +260,37 @@ export default function WorkspacePage() {
     } finally { generationRef.current = false; jobIdRef.current = null; void refreshUsage(); }
   };
 
+  /** Owner deletion: the server removes every revision and job; nothing is left to restore here either. */
+  const deleteDiagram = async () => {
+    if (!model || !modelId || mutationRef.current) return;
+    if (!window.confirm('Delete this diagram and its history? This cannot be undone.')) return;
+    mutationRef.current = true; setRefining(true);
+    try {
+      const res = await fetch(`/api/models/${encodeURIComponent(modelId)}`, { method: 'DELETE' });
+      // 404: already expired or deleted elsewhere — clear it here as well.
+      if (!res.ok && res.status !== 404) { setSummary(await responseMessage(res, 'Could not delete the diagram. Try again.')); return; }
+      try { sessionStorage.removeItem('aw_modelId'); } catch { /* storage can be disabled */ }
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      setModel(null); setModelId(null); setHistory([]); setSelected(null); setActiveView(''); setSummary('');
+      dispatch({ type: 'RESET' });
+      setNotice('Diagram deleted.');
+    } catch {
+      setSummary('Could not delete the diagram. Check your connection and try again.');
+    } finally {
+      mutationRef.current = false; setRefining(false);
+    }
+  };
+
   const generate = async (prompt: string, view: ViewType) => {
     if(mutationRef.current || generationRef.current)return;
+    setNotice(null);
     dispatch({ type: 'GENERATE' });
     await submitGeneration('/api/generate', { prompt, view, idempotencyKey: idempotencyKeyFor(prompt, view) }, view);
   };
 
   const generateRepo = async (form: RepoForm) => {
     if(mutationRef.current || generationRef.current)return;
+    setNotice(null);
     dispatch({ type: 'GENERATE_REPO' });
     await submitGeneration('/api/repo', { ...form, view: 'architecture', idempotencyKey: idempotencyKeyFor(`${form.localPath ? `local:${form.localPath}` : form.url}|${form.subdir ?? ''}|${form.ref ?? ''}`, 'architecture') }, 'architecture');
   };
@@ -547,10 +571,12 @@ export default function WorkspacePage() {
             {driftLines.length > 0 && <div role="status" className="aw-detail-drift">{driftLines.map(line => <p key={line}>{line}</p>)}</div>}
             {inDetail && expandBlocker(model, detailFocus) === null && <ExpandInternals key={detailFocus} label={focusLabel} cost={deploy === 'hosted'} busy={refining} onExpand={hint => expand(detailFocus, hint)} />}
             <div style={{ flex: 1, minHeight: 0 }}><Canvas model={model} modelId={modelId ?? ''} viewId={currentView?.id ?? ''} busy={refining} onMove={inDetail ? undefined : positions=>directEdit({type:'move',positions})} onSelect={setSelected} onDeselect={() => setSelected(null)} /></div>
-            <RefineBar busy={refining} summary={summary} canUndo={history.length > 1} onRefine={refine} onUndo={doUndo} onExport={doExport} sources={exportSources} />
+            <RefineBar busy={refining} summary={summary} canUndo={history.length > 1} onRefine={refine} onUndo={doUndo} onExport={doExport} sources={exportSources}
+              onDelete={() => { void deleteDiagram(); }} retention={deploy === 'local' ? 'Stored on this machine until you delete it.' : 'Kept for 30 days after the last change.'} />
           </main>
         ) : (
           <main className="aw-empty-main" aria-label="Diagram workspace" aria-live="polite">
+            {notice && <div role="status" className="aw-notice">{notice}</div>}
             {clarification && <ClarificationPanel key={clarification.jobId} questions={clarification.questions} busy={state.kind === 'running'} onContinue={continueClarification} onEdit={() => { setClarification(null); dispatch({ type: 'RESET' }); requestAnimationFrame(() => document.getElementById('system-description')?.focus()); }} />}
             {restoring ? <div role="status">Opening your workspace…</div> : state.kind !== 'clarifying' && <CanvasPlaceholder state={state} queuedPos={queuedPos} onReset={() => { if (!clarification) dispatch({ type: 'RESET' }); }} hideReset={!!clarification} />}
             {clarification && state.kind === 'running' && <button className="aw-clarification-cancel" onClick={cancelJob}>Cancel</button>}
