@@ -55,12 +55,14 @@ Later approved/runtime updates: the M5 ledger records the switch to `gpt-oss:20b
 
 | Construct | Spring Boot | FastAPI | Extraction | Provenance |
 |---|---|---|---|---|
-| REST endpoints | `@RestController`/`@RequestMapping` | `@app.get/post/...` | tree-sitter deterministic | source-supported |
-| Service/repo layers | `@Service` `@Repository` `@Autowired` | `Depends()` graph | tree-sitter | source-supported |
-| Datastores | `@Entity` + JPA relations, `application.yml` datasource | SQLAlchemy models, settings/env | tree-sitter + config parse | source-supported |
+| REST endpoints | `@RestController`, class and method `@RequestMapping`/`@*Mapping`, multiple paths | `@app`/`@router` `get/post/.../api_route`; nested `include_router` with constructor, include and settings-default prefixes | tree-sitter deterministic | source-supported |
+| Service/repo layers | `@Service` `@Repository` `@Autowired` | `Depends()` graph: return/`yield` factories, `Annotated` aliases, decorator dependencies, transitive chains | tree-sitter | source-supported |
+| Datastores | `@Entity` + owning-side JPA relations (N:1, 1:N, N:M), datasource config, embedded H2/HSQLDB/Derby from build dependencies | SQLAlchemy and SQLModel tables, settings URLs and DSN types | tree-sitter + config parse | source-supported |
 | Messaging | `@KafkaListener` etc. | `BackgroundTasks`, stream libs | tree-sitter (subset) | source-supported / gap-listed |
 | External calls | RestTemplate/WebClient/Feign targets | httpx/requests targets | tree-sitter | source-supported |
-| Runtime/dynamic behavior | reflection, SpEL/`${placeholder}` values, DI wiring order, dynamic routes | computed `include_router` prefixes, monkeypatching | **not statically provable** | labeled gap |
+| Runtime/dynamic behavior | reflection, SpEL/`${placeholder}` values, DI wiring order, dynamic routes, mapping-path constants | computed prefixes without a declared default, settings defaults (environment-overridable), unresolved `include_router` targets, monkeypatching | **not statically provable** | labeled gap |
+
+Measured coverage against hand-checked ground truth on pinned public repositories: [EXTRACTION-GROUND-TRUTH.md](EXTRACTION-GROUND-TRUTH.md).
 
 Anything outside the matrix renders as an explicit **analysis gap**, never silence.
 
