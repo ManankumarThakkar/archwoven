@@ -148,6 +148,18 @@ describe('POST /api/repo', () => {
     expect(serverDeps.store.creditsUsed('test-sess', day())).toBe(0);
   });
 
+  it('accepts a scoped-package folder containing @ from the URL or the subdirectory field', async () => {
+    const seen: (string | undefined)[] = [];
+    const ingest = serverDeps.ingestRepo;
+    serverDeps.ingestRepo = async (parsed, ...rest) => { seen.push(parsed.subdir); return ingest(parsed, ...rest); };
+    for (const body of [{ url: 'https://github.com/foo/bar/tree/main/packages/@scope/api' }, { url: 'https://github.com/foo/bar', subdir: 'packages/@scope/api' }]) {
+      const res = await POST(req(body));
+      expect(res.status).toBe(202);
+      await waitJob(((await res.json()) as { jobId: string }).jobId);
+    }
+    expect(seen).toEqual(['packages/@scope/api', 'packages/@scope/api']);
+  });
+
   it('traversal-shaped URL → 400 before quota', async () => {
     const res = await POST(req({ url: 'https://github.com/foo/bar/tree/main/../../etc' }));
     expect(res.status).toBe(400);

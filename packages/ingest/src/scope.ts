@@ -4,7 +4,7 @@ import type { Evidence } from '@archwoven/model';
 
 /** Validate both ingestion boundaries before git or network work. */
 export const isSafeSubdir = (value: string): boolean =>
-  /^[\w.-]+(\/[\w.-]+)*$/.test(value) && value.split('/').every(part => part !== '.' && part !== '..') && isSafeSourcePath(value) && !isVendor(value);
+  /^[\w@.-]+(\/[\w@.-]+)*$/.test(value) && value.split('/').every(part => part !== '.' && part !== '..') && isSafeSourcePath(value) && !isVendor(value);
 
 export const withinScope = (path: string, subdir?: string): boolean => !subdir || path.startsWith(subdir + '/');
 

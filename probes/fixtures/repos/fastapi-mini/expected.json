@@ -71,6 +71,14 @@
     [
       "POST",
       "/orders"
+    ],
+    [
+      "GET",
+      "/v1/{order_id}"
+    ],
+    [
+      "POST",
+      "/v1"
     ]
   ],
   "gaps": [

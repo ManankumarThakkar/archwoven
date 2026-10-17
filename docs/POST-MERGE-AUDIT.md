@@ -628,3 +628,91 @@ Two gaps are added to `OPEN-GAPS.md`:
 - the deferred escalation ladder
 
 The two task-18 rows are removed. Artifacts are in the session scratchpad (`live8`); no databases, credentials or cookies are published.
+
+## Task 15 — framework extraction gaps and measured coverage
+
+2026-10-17, America/Chicago. Branch `feat/framework-extraction`, based on merged PR #33 at `b13ce80`. Full numbers and protocol: [EXTRACTION-GROUND-TRUTH.md](EXTRACTION-GROUND-TRUTH.md).
+
+**Before.** On the official FastAPI full-stack template (pinned `b1125d8`, `backend/`):
+- endpoints matched 0 of 23 and edges 0 of 16, with 0% edge precision
+- every route lost its prefix
+- every router was wired straight to `app` instead of through `api_router`
+- SQLModel tables, the `PostgresDsn` datastore and `yield`-based session dependencies were missing
+
+Petclinic missed H2 and three JPA relations. Fixture tests used 90%/80% thresholds, which had already masked one real miss in probe C. Scoped-package folders (`packages/@scope/name`) were refused in three places: the URL parser, the repository route and ingest scoping.
+
+**Implementation.**
+- **FastAPI routing:**
+  - applications and routers are found under any name, including inside factories
+  - `include_router` resolves through module attributes, aliases, re-exports and relative imports, and supports nested and repeated includes
+  - full paths are composed from include, constructor and route prefixes, with `path=` and `api_route(methods=…)`
+  - module constants are resolved; settings defaults are used and reported as overridable; anything else becomes a `{expression}` placeholder with a gap
+  - route decorators count only on resolved applications and routers
+  - include edges come from the including router, with the include call as evidence
+- **FastAPI dependencies, tables and datastores:**
+  - `Depends` chains resolve through `return` and `yield` factories (direct, through a variable, or a `with` block), `Annotated` aliases, decorator `dependencies=[…]` and `Depends()` classes, transitively
+  - database sessions link to the single configured datastore
+  - SQLModel `table=True` tables and `foreign_key=` relations are found
+  - datastores are read from DSN types
+  - settings classes are recognised through their whole base chain; conflicting defaults stay unresolved
+- **Spring:**
+  - method-level `@RequestMapping` (several methods, or `ANY` when none)
+  - multiple class and method paths through `value`/`path`, with `produces` ignored
+  - Spring's leading-slash rule; path constants as placeholders with a gap
+  - `@ManyToMany` and unidirectional `@OneToMany` relations; `mappedBy` inverse sides skipped
+  - embedded H2/HSQLDB/Derby from non-test build dependencies, only when the default profile configures no datasource URL
+- **Scoped folders:** `@` is allowed in subdirectory segments in all three validators, and percent-encoded segments are decoded before validation.
+- **Measurement:**
+  - exact fixture matching
+  - two new fixtures, `fastapi-layered` and `spring-mappings`
+  - `apps/web/e2e/ground-truth.mjs` scores pinned public repositories through the product ingest pipeline against `probes/ground-truth/*.json`, where every expected item cites its file and line
+
+**Edge cases found and fixed.**
+- **Existing URL bug:** `tree/main/%2E%2E/etc` was normalised by `URL()` and silently analysed ref `etc`. Encoded dot segments are now refused, like literal ones.
+- **Held-out first run:** the two RealWorld repositories had truth written before the extractor ever ran on them. They found two general defects:
+  - FastAPI settings inherited indirectly left `/api` as a placeholder: 0/19 exact, though all 19 routes were present.
+  - Spring paths without a leading slash: 13/19.
+
+  Both are fixed and both runs are published.
+- **Recursion guards:** an `Annotated` alias referring to itself recursed without end, so a guard was added. Routers that include each other and dependency cycles also terminate.
+- **Dangling edges:** a foreign key to a table outside the analysed source used to leave a dangling edge. It is now a gap.
+- **Embedded-database detection:** my first check would have let an unrelated `*-url` setting hide an embedded database. It now looks only at datasource URLs (properties or nested YAML).
+
+**Results** (endpoints / nodes / edges, recall at 100% precision unless noted):
+
+| repository | before | after |
+|---|---|---|
+| FastAPI template | 0/23 · 7/12 · 0/16 (0% edge precision) | 23/23 · 10/12 · 12/16 |
+| petclinic | 17/17 · 18/19 · 7/10 | 17/17 · 19/19 · 10/10 |
+| fastapi-realworld (held out, endpoints) | 0/19 on first run | 19/19 |
+| spring-realworld (held out, endpoints) | 13/19 on first run (68% precision) | 19/19 |
+
+The remaining FastAPI-template misses (SMTP and Sentry behind helper functions) are recorded in `OPEN-GAPS.md`.
+
+**Tests: 26 new.**
+- Fixture tests now require an exact match.
+- Coverage:
+  - FastAPI edge cases: factory apps, constant prefixes, include and dependency cycles, self-referencing aliases, unresolved includes, two datastores, unknown foreign keys, inherited settings, conflicting defaults
+  - Spring: slash rule, datasource-URL detection, profile-only URLs
+  - scoped folders through the URL parser, ingest and the route
+- 18 mutations, all caught:
+  - include edge source; prefix composition
+  - `yield`-bound classes; aliases; transitive chains
+  - settings inheritance; conflicting defaults
+  - decorator owner resolution; SQLModel tables; unknown foreign-key gap
+  - include-cycle guard; alias-recursion guard
+  - Spring slash rule; `mappedBy` skip; `ANY`; test-scope drivers
+  - datasource-only URL detection; multiple class paths
+- The `@` and encoded-dot tests failed before the fix.
+
+Final checks:
+- 1,076 hosted tests passed; local 1,052 passed with 24 expected skips
+- all typechecks, an isolated production build and 18/18 benchmark selftests passed
+
+**Live acceptance** (isolated production build on a loopback port, fake model with `ARCHWOVEN_DEMO_ACK=1`; ingest and extraction run for real in fake mode):
+- **API:** importing the template `backend/` at the pinned commit succeeded and reported the resolved `/api/v1` default as a gap. This shows the new extractor runs inside the built server.
+- **API, scoped folders:** both forms succeeded, `…/tree/master/packages/@secretlint/…` in the URL and `packages/@secretlint/…` in the subdirectory field.
+- **Chrome, 4/4:** both scoped-folder forms imported from the workspace with no subdirectory refusal. The import showed the folder's own disclosures (6 masked secrets).
+- **Withdrawn check:** an evidence-path check first passed vacuously, because fake mode's canned diagram has no evidence. It was removed rather than counted. Path scoping is covered by the ingest test.
+
+Artifacts are in the session scratchpad (`gt`). Cloned repositories were read as data and never executed; no databases, credentials or cookies are published.

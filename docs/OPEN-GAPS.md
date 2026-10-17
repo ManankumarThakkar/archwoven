@@ -2,15 +2,13 @@
 
 A single, living list of known gaps that are not yet fixed, so none is lost between tasks. Each entry links to where it was found. When a gap is fixed, delete its row in the same PR; when one is found, add it here in the PR that found it.
 
-Last reviewed: 2026-10-17, after PR #30 (main `2fc0168`). Release tasks refer to `RELEASE-PROGRESS.md`.
+Last reviewed: 2026-10-17, after PR #33 (main `b13ce80`). Release tasks refer to `RELEASE-PROGRESS.md`.
 
 ## Scheduled into a release task
 
 | Gap | User impact | Found in | Planned |
 |---|---|---|---|
-| Subdirectory paths with `@` segments are rejected (`packages/@scope/name`) by both `safeSubdir` and the URL parser | Scoped-package folders in JavaScript monorepos cannot be imported | Task 17 live check | Task 15 |
-| FastAPI custom router binding, `yield`-based `Depends`, Spring method-level `@RequestMapping` with multiple paths, endpoint scoring | Some framework routes and dependencies are missed | M1 ledger; post-merge audit | Task 15 |
-| No hand-checked ground truth; extraction precision/recall is unmeasured | Coverage claims cannot be quantified | Post-merge audit | Task 15 |
+| Assembled-diagram precision/recall against human truth is unmeasured (task 15 measured the extracted fragment only); held-out ground truth covers endpoints only | Diagram-level and node/edge coverage on unseen repositories cannot be quantified | Task 15 | Task 19 |
 | Suite A oracle rejects valid alias matches (`Orders Service`, `Catalog DB (PostgreSQL)`); report exits 1 | Evaluation understates quality | Post-merge audit | Task 19 |
 | Named-person visual reviews of benchmark diagrams are missing | Evaluation not eligible for publication | Post-merge audit | Task 19 |
 | Timing-ratio gzip test and one repair selftest case failed once under concurrent build load | Occasional flaky CI signal | Cancellation and direct-edit follow-ups | Task 19 |
@@ -28,6 +26,8 @@ Last reviewed: 2026-10-17, after PR #30 (main `2fc0168`). Release tasks refer to
 
 | Gap | User impact | Found in | Notes |
 |---|---|---|---|
+| Third-party SDK clients reached through helper functions (SMTP via `emails`/`smtplib`, Sentry) are not extracted | External services such as email delivery are missing from FastAPI diagrams | Task 15 ground truth (full-stack template) | Needs call-graph inference; candidate for a later extractor pass |
+| FastAPI dependencies built by factory calls (`Depends(get_repository(UsersRepository))`) are not resolved | Repository/service links behind parameterised dependency factories are missing | Task 15 held-out reading (fastapi-realworld) | Same call-graph limitation; disclosed only implicitly by the missing edges |
 | SVG/PNG exports omit the dashed marker for inferred internals and the "Inside …" caption | Exported detail views lose context | Task 10 step 2 | Could be added to the existing export renderer |
 | Boundaries are drawn after layout, so a boundary box can visually enclose non-members (all views) | Diagrams can imply wrong grouping | Task 10 step 2 | A grouped (compound) layout would fix this and enable real containers for internals; touches shared layout and routing |
 | Schema v1 stores manual positions in one global node-id map | Dragging a node in one view moves it in other graph views | Tasks 6 and 8 | Disclosed in the orientation control; a per-view layout needs schema v2 |

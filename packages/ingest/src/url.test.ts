@@ -79,6 +79,18 @@ describe('parseRepoUrl (§14 URL validation + SSRF block)', () => {
     expect(parseRepoUrl('https://github.com/foo/bar/tree/').ok).toBe(false); // empty ref
   });
 
+  it('accepts scoped-package folders written with @ or its percent-encoding', () => {
+    const want = { ok: true, owner: 'secretlint', repo: 'secretlint', ref: 'master', subdir: 'packages/@secretlint/core' };
+    expect(parseRepoUrl('https://github.com/secretlint/secretlint/tree/master/packages/@secretlint/core')).toEqual(want);
+    expect(parseRepoUrl('https://github.com/secretlint/secretlint/tree/master/packages/%40secretlint/core')).toEqual(want);
+  });
+
+  it('rejects encoded separators and traversal hidden in a subdir segment', () => {
+    expect(parseRepoUrl('https://github.com/foo/bar/tree/main/a%2F..%2Fetc').ok).toBe(false);
+    expect(parseRepoUrl('https://github.com/foo/bar/tree/main/%2E%2E/etc').ok).toBe(false);
+    expect(parseRepoUrl('https://github.com/foo/bar/tree/main/%E0%A4%A').ok).toBe(false);
+  });
+
   it('rejects traversal in the subdir', () => {
     expect(parseRepoUrl('https://github.com/foo/bar/tree/main/../etc').ok).toBe(false);
   });

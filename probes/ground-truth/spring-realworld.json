@@ -1,0 +1,33 @@
+{
+  "repo": "gothinkster/spring-boot-realworld-example-app",
+  "sha": "ee17e31aafe733d98c4853c8b9a74d7f2f6c924a",
+  "framework": "spring-boot",
+  "heldOut": true,
+  "scope": ["endpoints"],
+  "method": "Held out: written from the source at the pinned commit before the extractor was ever run on this repository. Endpoints only, relative to src/main/java/io/spring. Spring prepends a missing leading slash to mapping paths (\"tags\" serves /tags). GraphQL data fetchers under graphql/ are not HTTP endpoints.",
+  "excluded": ["graphql/*Datafetcher.java and *Mutation.java are GraphQL resolvers served through one GraphQL endpoint, not REST mappings."],
+  "nodes": [],
+  "edges": [],
+  "endpoints": [
+    ["GET", "/articles/{slug}", "api/ArticleApi.java:35"],
+    ["PUT", "/articles/{slug}", "api/ArticleApi.java:44"],
+    ["DELETE", "/articles/{slug}", "api/ArticleApi.java:65"],
+    ["POST", "/articles/{slug}/favorite", "api/ArticleFavoriteApi.java:29"],
+    ["DELETE", "/articles/{slug}/favorite", "api/ArticleFavoriteApi.java:39"],
+    ["POST", "/articles", "api/ArticlesApi.java:28"],
+    ["GET", "/articles/feed", "api/ArticlesApi.java:40"],
+    ["GET", "/articles", "api/ArticlesApi.java:48"],
+    ["POST", "/articles/{slug}/comments", "api/CommentsApi.java:40"],
+    ["GET", "/articles/{slug}/comments", "api/CommentsApi.java:53"],
+    ["DELETE", "/articles/{slug}/comments/{id}", "api/CommentsApi.java:67"],
+    ["GET", "/user", "api/CurrentUserApi.java:31"],
+    ["PUT", "/user", "api/CurrentUserApi.java:40"],
+    ["GET", "/profiles/{username}", "api/ProfileApi.java:28"],
+    ["POST", "/profiles/{username}/follow", "api/ProfileApi.java:37"],
+    ["DELETE", "/profiles/{username}/follow", "api/ProfileApi.java:51"],
+    ["GET", "/tags", "api/TagsApi.java:17"],
+    ["POST", "/users", "api/UsersApi.java:39"],
+    ["POST", "/users/login", "api/UsersApi.java:47"]
+  ],
+  "gaps": []
+}
