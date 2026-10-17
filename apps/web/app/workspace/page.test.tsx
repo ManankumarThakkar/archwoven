@@ -887,6 +887,61 @@ describe('refinement refusals keep the instruction', () => {
   });
 });
 
+describe('links pasted into an open tab', () => {
+  beforeEach(() => window.history.replaceState(null, '', '/workspace#model=m1'));
+
+  it('opens the diagram a changed #model= names without a reload', async () => {
+    const other = structuredClone(validFullModelExtended); other.openQuestions = [{ id: 'q.other', text: 'Only the other diagram asks this.' }];
+    const requested: string[] = [];
+    transport = (input, init) => {
+      if (typeof input === 'string' && input.startsWith('/api/models/')) requested.push(input);
+      if (input === '/api/models/m1' && !init) return Response.json({ model: validFullModelExtended });
+      if (input === '/api/models/m2' && !init) return Response.json({ model: other });
+      return undefined;
+    };
+    await mount();
+    expect(container.textContent).not.toContain('Only the other diagram asks this.');
+    await act(async () => { window.location.hash = '#model=m2'; window.dispatchEvent(new HashChangeEvent('hashchange')); await new Promise((r) => setTimeout(r, 0)); });
+    for (let i = 0; i < 50 && !container.textContent!.includes('Only the other diagram asks this.'); i++) await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
+    expect(requested).toEqual(['/api/models/m1', '/api/models/m2']);
+    expect(container.textContent).toContain('Only the other diagram asks this.');
+    expect(sessionStorage.getItem('aw_modelId')).toBe('m2');
+    expect(new URLSearchParams(window.location.hash.slice(1)).get('model')).toBe('m2');
+  });
+
+  it('ignores hash changes that keep the same diagram', async () => {
+    const calls: string[] = [];
+    transport = (input, init) => {
+      if (input === '/api/models/m1' && !init) { calls.push(input); return Response.json({ model: validFullModelExtended }); }
+      return undefined;
+    };
+    await mount();
+    await act(async () => { window.location.hash = '#model=m1&focus=gateway.api'; window.dispatchEvent(new HashChangeEvent('hashchange')); await new Promise((r) => setTimeout(r, 0)); });
+    expect(calls).toHaveLength(1);
+  });
+});
+
+describe('refine status', () => {
+  beforeEach(() => window.history.replaceState(null, '', '/workspace#model=m1'));
+
+  it('announces the full refusal as a live status that is never cut to one line', async () => {
+    const reason = 'Customer → API Gateway is backed by source evidence and can\'t be removed by refinement. Edit the source or regenerate the diagram instead.';
+    transport = (input, init) => {
+      if (input === '/api/models/m1' && !init) return Response.json({ model: validFullModelExtended });
+      if (input === '/api/refine') return Response.json({ reason: 'refine-failed', errors: [reason] }, { status: 502 });
+      return undefined;
+    };
+    await mount();
+    await fill('input[aria-label="Refinement instruction"]', 'Remove the link');
+    await click('Refine');
+    const status = container.querySelector<HTMLElement>('.aw-refine-bar [role="status"]')!;
+    expect(status.textContent).toContain(reason);
+    expect(status.style.whiteSpace).not.toBe('nowrap');
+    expect(status.style.textOverflow).toBe('');
+    expect(status.style.overflow).not.toBe('hidden');
+  });
+});
+
 describe('stable warnings', () => {
   it('shows the same gaps on the first load and after a reload, from the saved model only', async () => {
     const saved = structuredClone(validFullModelExtended);

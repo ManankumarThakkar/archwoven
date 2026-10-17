@@ -62,6 +62,9 @@ textarea::placeholder, input::placeholder { color: #8290aa; opacity: 1; }
 .aw-flow-area { flex: 1; min-height: 180px; min-width: 0; }
 .aw-refine-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 12px; border-top: 1px solid #253044; background: #0c1523; }
 .aw-refine-bar input { min-width: 140px; }
+/* 44 px touch targets; the status wraps in full instead of hiding refusals behind a hover title. */
+.aw-refine-bar input, .aw-refine-bar button { min-height: 44px; }
+.aw-refine-status { flex: 1 1 260px; min-width: 0; font-size: 12px; line-height: 1.4; color: #93c5fd; overflow-wrap: anywhere; }
 .aw-finder { max-width: calc(100% - 24px); }
 
 /* Visible focus for keyboard users on every interactive element. */

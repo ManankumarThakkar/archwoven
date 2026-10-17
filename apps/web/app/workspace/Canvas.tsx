@@ -74,6 +74,8 @@ function GraphCanvas({ model, modelId, viewId, onSelect, onDeselect, busy=false,
   const previousViewRef = useRef(viewId);
   const fittedCameraRef = useRef<string | null>(null);
   const preserveCameraRef=useRef<string|null>(null);
+  const userCameraRef = useRef(false);
+  const flowAreaRef = useRef<HTMLDivElement>(null);
   const layoutKey = JSON.stringify([modelId, model.revision, viewId]);
   const editing=useGraphEditing({model,viewId,placed,setPlaced,layout:currentLayout,busy,onMove:onMove?async positions=>{
     const nextKey=JSON.stringify([modelId,model.revision+1,viewId]);preserveCameraRef.current=nextKey;
@@ -186,18 +188,44 @@ function GraphCanvas({ model, modelId, viewId, onSelect, onDeselect, busy=false,
 
   // Fit after the replacement layout reaches React Flow, never against the old
   // view's nodes. React Flow queues fitView until node measurement completes.
-  const fitCamera = useCallback((wholeView = false) => {
+  // `auto` fits once per layout and chapter, `resize` refits instantly after the canvas
+  // changes size, `whole` is the explicit Fit View. Each hands the camera back to auto fitting.
+  const fitCamera = useCallback((mode: 'auto' | 'resize' | 'whole' = 'auto') => {
     if (!rfRef.current || placed.key !== layoutKey || !placed.nodes.length) return;
     const cameraKey = JSON.stringify([placed.key, chapter?.id ?? null]);
-    if (!wholeView && fittedCameraRef.current === cameraKey) return;
-    if(!wholeView&&preserveCameraRef.current===layoutKey){fittedCameraRef.current=cameraKey;preserveCameraRef.current=null;return;}
-    const ids = wholeView ? [] : chapter?.focus.filter((id) => placed.nodes.some((node) => node.id === id)) ?? [];
+    if (mode === 'auto' && fittedCameraRef.current === cameraKey) return;
+    if(mode==='auto'&&preserveCameraRef.current===layoutKey){fittedCameraRef.current=cameraKey;preserveCameraRef.current=null;return;}
+    const ids = mode === 'whole' ? [] : chapter?.focus.filter((id) => placed.nodes.some((node) => node.id === id)) ?? [];
     fittedCameraRef.current = cameraKey;
-    const options = { duration: motion === 'still' ? 0 : 600, minZoom: 0.05, maxZoom: 2, padding: 0.15 };
+    userCameraRef.current = false;
+    const options = { duration: mode === 'resize' || motion === 'still' ? 0 : 600, minZoom: 0.05, maxZoom: 2, padding: 0.15 };
     if (ids.length) void rfRef.current.fitView({ ...options, nodes: ids.map(id => ({ id })), padding: 0.25 });
     else void rfRef.current.fitBounds(placed.bounds, options);
   }, [placed, layoutKey, chapter, motion]);
   useEffect(() => { fitCamera(); }, [fitCamera]);
+
+  // Resizing or rotating keeps the diagram in view unless the user has panned or zoomed
+  // since the last fit; their camera then stays put and Fit View remains available.
+  const fitCameraRef = useRef(fitCamera);
+  fitCameraRef.current = fitCamera;
+  useEffect(() => {
+    const area = flowAreaRef.current;
+    if (!area || typeof ResizeObserver === 'undefined') return;
+    let last: string | null = null;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const observer = new ResizeObserver(([entry]) => {
+      if (!entry) return;
+      const size = `${Math.round(entry.contentRect.width)}x${Math.round(entry.contentRect.height)}`;
+      if (size === last) return;
+      const first = last === null;
+      last = size;
+      if (first) return; // the first report is the size the initial fit already used
+      clearTimeout(timer);
+      timer = setTimeout(() => { if (!userCameraRef.current) fitCameraRef.current('resize'); }, 100);
+    });
+    observer.observe(area);
+    return () => { observer.disconnect(); clearTimeout(timer); };
+  }, []);
 
   const stopTimer = () => { if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; } };
 
@@ -386,7 +414,7 @@ function GraphCanvas({ model, modelId, viewId, onSelect, onDeselect, busy=false,
           <strong style={{ color: '#c4b5fd' }}>{chapter.label}</strong> — {chapter.note}
         </div>
       )}
-      <div className="aw-flow-area"><ReactFlow
+      <div className="aw-flow-area" ref={flowAreaRef}><ReactFlow
         {...editing}
         nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
         colorMode="dark"
@@ -395,13 +423,14 @@ function GraphCanvas({ model, modelId, viewId, onSelect, onDeselect, busy=false,
         nodesConnectable={false}
         edgesReconnectable={false}
         onInit={(inst) => { rfRef.current = inst as ReactFlowInstance<Node, Edge>; fitCamera(); }}
+        onMoveStart={(event) => { if (event) userCameraRef.current = true; }}
         onNodeClick={(_, n) => { if (n.type === 'boundary') return; focusNode(n.id); }}
         onPaneClick={() => { setFocusId(null); setRelationId(null); writeHash({ focus: null, relation: null }); onDeselect(); }}
         onEdgeClick={(_, e) => { setRelationId(e.id); onSelect(e.id); writeHash({ relation: e.id }); }}
         proOptions={{ hideAttribution: true }}
       >
         <Background gap={16} color="#1a2333" />
-        <Controls showFitView={false}><ControlButton aria-label="Fit View" title="Fit View" onClick={() => fitCamera(true)}>⛶</ControlButton></Controls>
+        <Controls showFitView={false}><ControlButton aria-label="Fit View" title="Fit View" onClick={() => fitCamera('whole')}>⛶</ControlButton></Controls>
         {viewNodes.length > 12 && <MiniMap pannable zoomable />}
       </ReactFlow></div>
       <OutlineRail model={model} viewNodes={viewNodes} activeId={focusId} onFocusNode={focusNode} />
