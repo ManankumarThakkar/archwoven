@@ -1,5 +1,10 @@
 # M2 demo walkthrough (recruiter, ~10 min)
 
+> Historical milestone transcript. The setup commands, credential status and feature
+> limits below describe that earlier run. Use the current [README](../README.md)
+> for installation and the [release acceptance record](RELEASE-ACCEPTANCE.md) for
+> current verification. The demo evidence below does not establish real-provider behavior.
+
 A scripted end-to-end run of the plain-English vertical slice with §15 fair-use enforcement. Honest note up front: the **live hosted-model** step requires a valid direct `sk-ant-…` key (the current `.env.local` key 401s against `api.anthropic.com`, and Claude Code's local proxy drops structured-output config — see `docs/probes/B-claude-structured.md`). The flow below is **verified end-to-end in `ARCHWOVEN_FAKE=1` mode** (canned model, zero spend); swapping in a working key changes only the model's output, not the plumbing.
 
 ## Setup

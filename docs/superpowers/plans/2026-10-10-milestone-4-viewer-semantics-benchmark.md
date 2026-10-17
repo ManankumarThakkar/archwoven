@@ -9,7 +9,7 @@
 **Tech Stack:** Zod, vitest, @xyflow/react 15, @resvg/resvg-wasm (already a dep), node:zlib-free (no new deps).
 
 **Spec:** `docs/SPEC.md` (§5 schema, §6 UI, §11 evaluation, §15 quotas — LOCKED numbers untouched).
-**Brief (input):** `.superpowers/archify-brief.md` — license gate: **no vendored files at all** in this milestone (concepts ported only), so no copyright-notice task; `generated-brand-marks.mjs` stays un-vendored.
+**Historical input:** an ignored reference brief, not distributed with the repository (current viewer scope: `docs/SPEC.md` §6) — license gate: **no vendored files at all** in this milestone (concepts ported only), so no copyright-notice task; `generated-brand-marks.mjs` stays un-vendored.
 
 ## Global Constraints
 

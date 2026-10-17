@@ -27,11 +27,14 @@ Completed foundation: PR #11 clean-download instructions; PR #12 authoritative e
 | 18 | Public abuse controls and honest exhausted-credit copy | Merged to main as PR #33; verified |
 | 19 | Evaluation oracle, representative real-provider results and human-review handoff | Merged to main as PR #35; verified (named visual reviews await the owner) |
 | 19b | Hosted first-pass validity: give the model the evidence shape | Merged to main as PR #36; verified |
-| 20 | Cross-browser/accessibility/device acceptance, clean-install rerun and documented cleanup | Pending |
+| 20 | Cross-browser/accessibility/device acceptance, clean-install rerun and documented cleanup | Automated parts done (20a–20g); human, device and remaining browser acceptance pending |
 | 20a | Workspace fixes: refusal text, camera on resize, 44 px controls, pasted links | Merged to main as PR #37; verified |
 | 20b | Include Suite A review images in fresh checkouts, verify their integrity and correct the review instructions | Merged to main as PR #38; named human verdicts still pending |
-| 20c | Preserve inferred internals and parent context in SVG/PNG detail exports | Export renderer fixed with SVG and raster regression checks; browser download acceptance still pending |
-| 20d | Safe Docker build context, Compose inference routing and native loopback defaults | Fixes prepared; real Compose smoke added to CI, successful model inference remains a separate gate |
+| 20c | Preserve inferred internals and parent context in SVG/PNG detail exports | Merged to main as PR #39; automated checks and actual Chrome SVG/PNG delivery verified |
+| 20d | Safe Docker build context, Compose inference routing and native loopback defaults | PR #40, landing on main via PR #43; real Compose CI smoke passed, successful container model inference remains separate |
+| 20e | Apply live same-diagram links and clear stale interaction state | PR #41, landing on main via PR #43; regressions and real browser view/focus/lens/route checks passed |
+| 20f | Prevent misleading boundary enclosures, including edit previews and rollback | PR #42, landing on main via PR #43; geometry/raster/viewer tests passed; bounded warning disclosure |
+| 20g | Clean-install acceptance, current setup/docs and the already selected MIT license | PR open after PR #43; clean install reproduced independently; record in RELEASE-ACCEPTANCE.md |
 
 Known gaps not yet fixed are tracked in one place: [OPEN-GAPS.md](OPEN-GAPS.md). Update it in every PR that finds or fixes a gap.
 
