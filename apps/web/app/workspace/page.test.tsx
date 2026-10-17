@@ -1049,3 +1049,15 @@ it('waits for late provider accounting after cancellation without blocking a new
   expect(container.textContent).not.toContain('Usage pending');
   expect(container.querySelector('.aw-task-usage')!.textContent).toContain('Usage incomplete');
 });
+
+describe('secret refusals', () => {
+  it('shows why a description was refused and keeps it for editing', async () => {
+    const message = 'Your description contains what looks like a GitHub token on line 2. Remove it and try again. Archwoven never sends detected secrets to the AI provider, and no credit was used.';
+    transport = (input) => input === '/api/generate' ? Response.json({ reason: 'secret-detected', error: message }, { status: 400 }) : undefined;
+    await mount();
+    await fill('#system-description', 'An API gateway.\nToken: (pasted)');
+    await click('Generate diagram');
+    await act(async () => { await vi.waitFor(() => expect(container.textContent).toContain(message)); });
+    expect(container.querySelector<HTMLTextAreaElement>('#system-description')!.value).toBe('An API gateway.\nToken: (pasted)');
+  });
+});

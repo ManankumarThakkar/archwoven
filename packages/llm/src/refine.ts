@@ -2,7 +2,7 @@ import { newUsageLedger, startAttempt, captureUsage } from './usage';
 import { z } from 'zod';
 import { EditOpSchema, applyEditOps, isSourceEvidenceRefusal, sameModelContent, type EditOp, type SystemModel, type ViewType } from '@archwoven/model';
 import {
-  CONTEXT_TOKEN_LIMIT, MAX_REPAIRS, MODEL, STRUCTURED_OUTPUTS_BETA, fakeMode, makeAnthropic, resolveApiKey, usageFrom, wireSchema,
+  CONTEXT_TOKEN_LIMIT, MAX_REPAIRS, MODEL, STRUCTURED_OUTPUTS_BETA, fakeMode, countFailureMessage, hostedClient, usageFrom, wireSchema,
   type Effort, type StructuredClient,
 } from './client';
 import type { RawUsage } from './client';
@@ -57,7 +57,7 @@ export async function generateRefinement(
     return { ok: true, ops, usage: { ...usageFrom({}, effort, 0, 0), provider: 'demo' } };
   }
   const client: StructuredClient =
-    opts.client ?? (makeAnthropic(resolveApiKey()) as unknown as StructuredClient);
+    hostedClient(opts.client);
 
   const t0 = Date.now();
   const messages: unknown[] = [
@@ -72,7 +72,7 @@ export async function generateRefinement(
       return { ok: false, errors: ['assembled context exceeds the 25k token limit — scope the instruction down'], usage: usageFrom({}, effort, Date.now() - t0, 0) };
     }
   } catch (e) {
-    return { ok: false, errors: [`context token count failed: ${e instanceof Error ? e.message : String(e)}`], usage: usageFrom({}, effort, Date.now() - t0, 0) };
+    return { ok: false, errors: [countFailureMessage(e)], usage: usageFrom({}, effort, Date.now() - t0, 0) };
   }
 
   let lastErrors: string[] = [];

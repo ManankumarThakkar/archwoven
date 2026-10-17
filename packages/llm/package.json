@@ -12,6 +12,8 @@
     "@anthropic-ai/sdk": "^0.131.0",
     "@archwoven/extract": "workspace:*",
     "@archwoven/model": "workspace:*",
+    "@secretlint/core": "13.0.7",
+    "@secretlint/secretlint-rule-preset-recommend": "13.0.7",
     "zod": "^4.6.5"
   },
   "devDependencies": {

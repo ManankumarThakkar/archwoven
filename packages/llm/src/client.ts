@@ -1,4 +1,5 @@
 import { newUsageLedger, startAttempt, captureUsage, type UsageLedger } from './usage';
+import { guardEgress, SecretEgressError } from './secrets';
 import type { TaskUsage } from '@archwoven/model';
 export type { TaskUsage } from '@archwoven/model';
 import { ClarificationSchema, CLARIFICATION_SYSTEM, type DescriptionOutcome } from './clarification';
@@ -44,6 +45,14 @@ export const resolveApiKey = (raw = process.env.ANTHROPIC_API_KEY): string =>
  *  ignores output_config.format and free-generates markdown. The SDK's beta namespace
  *  does NOT add it for us on .create(); we must pass it explicitly. */
 export const STRUCTURED_OUTPUTS_BETA = 'structured-outputs-2025-12-15';
+
+/** Every hosted call goes through the secret egress guard, including injected clients. */
+export const hostedClient = (injected?: StructuredClient): StructuredClient =>
+  guardEgress(injected ?? (makeAnthropic(resolveApiKey()) as unknown as StructuredClient));
+
+/** A refused-for-secrets request explains itself; any other counting failure keeps its technical cause. */
+export const countFailureMessage = (e: unknown): string =>
+  e instanceof SecretEgressError ? e.message : `context token count failed: ${e instanceof Error ? e.message : String(e)}`;
 
 export type Effort = 'low' | 'medium' | 'high';
 
@@ -302,7 +311,7 @@ export async function generateModel(
   if (opts.signal?.aborted) return { ok: false, errors: ['Generation cancelled.'], usage: usageFrom({}, effort, 0, 0) };
   if (!opts.client && fakeMode()) return { ok: true, model: structuredClone(validFullModelExtended), usage: fakeUsage(effort) };
   const client: StructuredClient =
-    opts.client ?? (makeAnthropic(resolveApiKey()) as unknown as StructuredClient);
+    hostedClient(opts.client);
 
   const t0 = Date.now();
   const messages: unknown[] = [{ role: 'user', content: `View: ${view}\n\n${prompt}` }];
@@ -316,7 +325,7 @@ export async function generateModel(
       return { ok: false, errors: ['assembled context exceeds the 25k token limit — scope the description down to one system or flow'], usage: usageFrom({}, effort, Date.now() - t0, 0) };
     }
   } catch (e) {
-    return { ok: false, errors: [`context token count failed: ${e instanceof Error ? e.message : String(e)}`], usage: usageFrom({}, effort, Date.now() - t0, 0) };
+    return { ok: false, errors: [countFailureMessage(e)], usage: usageFrom({}, effort, Date.now() - t0, 0) };
   }
 
   let lastErrors: string[] = [];

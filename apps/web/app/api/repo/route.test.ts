@@ -461,3 +461,41 @@ describe('POST /api/repo local folder paths', () => {
     expect(((await again.json()) as { remaining: unknown }).remaining).toBeNull();
   }));
 });
+
+describe('repository secrets are masked before hosted analysis', () => {
+  const KEY = ['sk_', 'live_'].join('') + 'Z9'.repeat(12);
+  const secretFragment = (): Fragment => ({
+    nodes: [{ id: 'svc.api', kind: 'service', label: 'API', provenance: 'source-supported', evidence: [{ path: 'main.py', lines: [1, 2], repo: 'foo/bar', commit: SHA, note: `configures ${KEY}` }] }],
+    edges: [], endpoints: [], gaps: [],
+  });
+
+  it('sends the provider a masked fragment and records the disclosure with the model', async () => {
+    const prev = process.env.ARCHWOVEN_MODE; delete process.env.ARCHWOVEN_MODE;
+    try {
+      let sent = '';
+      serverDeps.ingestRepo = async () => ({ ...okIngest, fragment: secretFragment() });
+      const base = serverDeps.assembleRepoModel;
+      serverDeps.assembleRepoModel = async (fragment, meta, opts) => { sent = JSON.stringify(fragment); return base(fragment, meta, opts); };
+      const res = await POST(req({ url: 'https://github.com/foo/bar', idempotencyKey: 'masked' }));
+      const { jobId } = (await res.json()) as { jobId: string };
+      expect((await waitJob(jobId)).status).toBe('succeeded');
+      expect(sent).not.toContain(KEY);
+      expect(sent).toContain('[REDACTED:Stripe key]');
+      expect(serverDeps.store.getRevision(jobId)!.openQuestions.map(q => q.text)).toContain('Masked 1 likely secret (1 Stripe key) before analysis; their values were never sent to the AI provider.');
+    } finally { if (prev !== undefined) process.env.ARCHWOVEN_MODE = prev; }
+  });
+
+  it('leaves local analysis untouched', async () => {
+    const prev = process.env.ARCHWOVEN_MODE; process.env.ARCHWOVEN_MODE = 'local';
+    try {
+      let sent = '';
+      serverDeps.ingestLocal = async () => ({ ...okIngest, fragment: secretFragment() });
+      const base = serverDeps.assembleRepoModel;
+      serverDeps.assembleRepoModel = async (fragment, meta, opts) => { sent = JSON.stringify(fragment); return base(fragment, meta, opts); };
+      const res = await POST(req({ localPath: '/home/user/private-shop', idempotencyKey: 'local-unmasked' }));
+      const { jobId } = (await res.json()) as { jobId: string };
+      await waitJob(jobId);
+      expect(sent).toContain(KEY);
+    } finally { if (prev === undefined) delete process.env.ARCHWOVEN_MODE; else process.env.ARCHWOVEN_MODE = prev; }
+  });
+});

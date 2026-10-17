@@ -326,3 +326,46 @@ describe('local mode job replay', () => {
     }
   });
 });
+
+describe('secrets in typed text (hosted)', () => {
+  const KEY = ['gh', 'p_'].join('') + 'Q7'.repeat(18);
+  const withMode = async (mode: 'hosted' | 'local', fn: () => Promise<void>) => {
+    const prev = process.env.ARCHWOVEN_MODE;
+    if (mode === 'local') process.env.ARCHWOVEN_MODE = 'local'; else delete process.env.ARCHWOVEN_MODE;
+    try { await fn(); } finally { if (prev === undefined) delete process.env.ARCHWOVEN_MODE; else process.env.ARCHWOVEN_MODE = prev; }
+  };
+
+  it('refuses a description containing a secret before any credit, job or provider call', () => withMode('hosted', async () => {
+    let called = false;
+    serverDeps.generateModel = async () => { called = true; return { ok: true as const, model: validFullModel, usage }; };
+    const res = await POST(req({ prompt: `An API gateway.\nDeploy with ${KEY}`, view: 'architecture', idempotencyKey: 'secret' }));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.reason).toBe('secret-detected');
+    expect(body.error).toBe('Your description contains what looks like a GitHub token on line 2. Remove it and try again. Archwoven never sends detected secrets to the AI provider, and no credit was used.');
+    expect(called).toBe(false);
+    expect(serverDeps.store.creditsUsed('test-sess', new Date().toISOString().slice(0, 10))).toBe(0);
+    expect(serverDeps.store.findJobByIdempotencyKey('secret', 'test-sess')).toBeFalsy();
+  }));
+
+  it('refuses a clarification answer containing a secret', () => withMode('hosted', async () => {
+    serverDeps.generateModel = async () => ({ ok: true as const, questions: ['Which token does CI use?', 'Who deploys?'], usage });
+    const first = await POST(req({ prompt: 'A CI pipeline.', view: 'architecture', idempotencyKey: 'q' }));
+    const { jobId } = await first.json();
+    for (let i = 0; i < 100 && serverDeps.store.getJob(jobId)?.status !== 'clarifying'; i++) await new Promise(r => setTimeout(r, 10));
+    const res = await POST(req({ clarification: { jobId, answers: [`It uses ${KEY}`, 'Platform team'] } }));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/^Answer 1 contains what looks like a GitHub token on line 1\./);
+  }));
+
+  it('does not scan in local mode, where nothing leaves the machine', () => withMode('local', async () => {
+    let called = false;
+    serverDeps.generateModel = async () => { called = true; return { ok: true as const, model: validFullModel, usage }; };
+    const res = await POST(req({ prompt: `A gateway using ${KEY}`, view: 'architecture', idempotencyKey: 'local-secret' }));
+    expect(res.status).toBe(202);
+    const { jobId } = await res.json();
+    for (let i = 0; i < 100 && !called; i++) await new Promise(r => setTimeout(r, 10));
+    expect(called).toBe(true);
+    expect(jobId).toBeTruthy();
+  }));
+});

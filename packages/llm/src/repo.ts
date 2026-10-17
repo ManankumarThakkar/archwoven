@@ -4,7 +4,7 @@ import { buildSourceModel, SOURCE_PRESENTATION_SYSTEM } from './source-presentat
 import { validateModel, validFullModelExtended, type Evidence } from '@archwoven/model';
 import {
   MODEL, MAX_REPAIRS, MAX_TOKENS, CONTEXT_TOKEN_LIMIT, MODEL_JSON_CONTRACT, NATIVE_MODEL_JSON_CONTRACT,
-  makeAnthropic, resolveApiKey, fakeMode, decodeWireModel, usageFrom,
+  countFailureMessage, hostedClient, fakeMode, decodeWireModel, usageFrom,
   type StructuredClient, type Effort, type GenerateOutcome,
 } from './client';
 
@@ -102,7 +102,7 @@ export async function assembleRepoModel(
     pinEvidence(model, repoFull, meta.sha);
     return { ok: true, model, usage: { ...usageFrom({}, effort, 0, 0), provider: 'demo' } };
   }
-  const client: StructuredClient = opts.client ?? (makeAnthropic(resolveApiKey()) as unknown as StructuredClient);
+  const client: StructuredClient = hostedClient(opts.client);
 
   const t0 = Date.now();
   const context = fenceEscape(JSON.stringify({ framework: meta.framework, repo: repoFull, sha: meta.sha, fragment }));
@@ -117,7 +117,7 @@ export async function assembleRepoModel(
       return { ok: false, errors: ['repo fragment exceeds the 25k token limit — narrow the subdirectory or reduce endpoints'], usage: usageFrom({}, effort, Date.now() - t0, 0) };
     }
   } catch (e) {
-    return { ok: false, errors: [`context token count failed: ${e instanceof Error ? e.message : String(e)}`], usage: usageFrom({}, effort, Date.now() - t0, 0) };
+    return { ok: false, errors: [countFailureMessage(e)], usage: usageFrom({}, effort, Date.now() - t0, 0) };
   }
 
   let lastErrors: string[] = [];

@@ -2,7 +2,7 @@ import { newUsageLedger, startAttempt, captureUsage } from './usage';
 import { z } from 'zod';
 import { applyExpansion, expandBlocker, ExpansionSchema, type Expansion, type SystemModel } from '@archwoven/model';
 import {
-  CONTEXT_TOKEN_LIMIT, MAX_REPAIRS, MODEL, STRUCTURED_OUTPUTS_BETA, fakeMode, makeAnthropic, resolveApiKey, usageFrom, wireSchema,
+  CONTEXT_TOKEN_LIMIT, MAX_REPAIRS, MODEL, STRUCTURED_OUTPUTS_BETA, fakeMode, countFailureMessage, hostedClient, usageFrom, wireSchema,
   type Effort, type RawUsage, type StructuredClient,
 } from './client';
 import { fenceEscape } from './repo';
@@ -85,7 +85,7 @@ export async function expandComponent(
     const r = applyExpansion(model, focus, fakeExpansion(model, focus));
     return r.ok ? { ok: true, model: r.model, usage: zero } : { ok: false, errors: r.errors, usage: zero };
   }
-  const client: StructuredClient = opts.client ?? (makeAnthropic(resolveApiKey()) as unknown as StructuredClient);
+  const client: StructuredClient = hostedClient(opts.client);
   const t0 = Date.now();
   const system = [{ type: 'text', text: EXPANSION_SYSTEM, cache_control: { type: 'ephemeral' } }];
   const messages: { role: string; content: string }[] = [{ role: 'user', content: expansionUserMessage(model, focus, hint) }];
@@ -93,7 +93,7 @@ export async function expandComponent(
     const counted = await client.messages.countTokens({ model: MODEL, system, messages }, { signal: opts.signal });
     if (counted.input_tokens > CONTEXT_TOKEN_LIMIT) return { ok: false, errors: ['This component has too many connections to expand within the context limit.'], usage: usageFrom({}, effort, Date.now() - t0, 0) };
   } catch (e) {
-    return { ok: false, errors: [`context token count failed: ${e instanceof Error ? e.message : String(e)}`], usage: usageFrom({}, effort, Date.now() - t0, 0) };
+    return { ok: false, errors: [countFailureMessage(e)], usage: usageFrom({}, effort, Date.now() - t0, 0) };
   }
 
   let lastErrors: string[] = [];
