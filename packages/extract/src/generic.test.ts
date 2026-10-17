@@ -5,6 +5,11 @@ const analyze = (files: Record<string, string>, opts?: Parameters<typeof extract
   extractGeneric(Object.keys(files), (path) => files[path] ?? '', opts);
 
 describe('bounded generic repository analysis', () => {
+  it('excludes compound generated declarations from source evidence', () => {
+    const fragment = analyze({ 'a.generated.d.ts': 'export declare const a: boolean;', 'main.go': 'package main' });
+    expect(fragment.sourceContext?.inventory).toEqual(['main.go']);
+    expect(fragment.nodes.map(node => node.label)).toEqual(['main.go']);
+  });
   it('maps Python CLI modules and actual import lines without inventing runtime calls', () => {
     const fragment = analyze({
       'pyproject.toml': '[project]\nname = "observatory"',

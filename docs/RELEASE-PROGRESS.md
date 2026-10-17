@@ -17,8 +17,8 @@ Completed foundation: PR #11 clean-download instructions; PR #12 authoritative e
 | 9 | Privacy-aware model JSON download | Merged to main as PR #22; verified |
 | 10 | Existing-model component drill-down | Merged to main as PRs #23 (detail views) and #24 (expand internals); verified |
 | 10b | Refinement keeps semantic checks consistent when adding or removing sources and sinks | Merged to main as PR #25; verified |
-| 11 | Local-clone UI, accurate credits copy and stable warnings | PR open against main; verified |
-| 12 | Subdirectory-first scanning and generated-file exclusions | Pending |
+| 11 | Local-clone UI, accurate credits copy and stable warnings | Merged to main as PR #26; verified |
+| 12 | Subdirectory-first scanning and generated-file exclusions | PR #27 open against main; verified |
 | 13 | Truthful working-tree/commit evidence | Pending |
 | 14 | Accurate task/repair usage and provider-aware costs | Pending |
 | 15 | Supported framework extraction gaps and coverage measurements | Pending |

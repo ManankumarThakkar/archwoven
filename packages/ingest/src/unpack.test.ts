@@ -147,3 +147,36 @@ describe('unpackTarball (§14 tarball safety)', () => {
     expect(existsSync(dest)).toBe(false);
   });
 });
+
+
+describe('scope before materialization and file limits',()=>{
+  it('never writes or charges out-of-scope entries against the selected file count',async()=>{
+    const dest=mkDest();const result=await unpackTarball(tar([
+      tarEntry('repo-a/outside/a.go','package outside'),tarEntry('repo-a/api-sibling/large.go','x'.repeat(200)),tarEntry('repo-a/api/large.go','x'.repeat(200)),
+      tarEntry('repo-a/api/main.go','package api'),tarEntry('repo-a/outside/link','','2','/'),
+    ]),dest,{...CAPS,maxFiles:1,maxFileBytes:100},{subdir:'api'});
+    expect(result.files).toEqual(['api/main.go']);expect(existsSync(join(dest,'outside'))).toBe(false);expect(existsSync(join(dest,'api-sibling'))).toBe(false);
+    expect(result.skipped).toEqual([{path:'api/large.go',reason:'size:200>100'}]);
+  });
+  it('keeps archive integrity limits global even for a tiny selected folder',async()=>{
+    const buf=gzipSync(new Uint8Array(tar([tarEntry('repo-a/outside/huge.go','x'.repeat(100000)),tarEntry('repo-a/api/main.go','package api')])));
+    await expect(unpackTarball(buf,mkDest(),{...CAPS,maxExpandedBytes:10000},{subdir:'api'})).rejects.toThrow(/oversized/i);
+  });
+  it.each(['../escape','/escape','api/../escape','api\\escape'])('rejects unsafe unpack scope %s',async subdir=>{
+    await expect(unpackTarball(tar([tarEntry('repo-a/main.go','package main')]),mkDest(),CAPS,{subdir})).rejects.toThrow(/subdir/i);
+  });
+  it('skips generated outputs before the cap while keeping ordinary source names',async()=>{
+    const entries=['.next-dev/cache/a.ts','dist/a.ts','out/a.ts','coverage/a.ts','__generated__/a.ts','generated/a.ts','.nuxt-build/a.ts','a.generated.d.ts','a.generated.ts','a.js.map','a.tsbuildinfo'].map(n=>tarEntry('repo-a/'+n,'x'));
+    const result=await unpackTarball(tar([...entries,tarEntry('repo-a/src/next.ts','source')]),mkDest(),{...CAPS,maxFiles:1});
+    expect(result.files).toEqual(['src/next.ts']);expect(result.skipped.filter(s=>s.reason==='file-count-cap')).toEqual([]);
+  });
+});
+
+
+it('rejects truncated out-of-scope bodies instead of silently ending the selected inventory',async()=>{
+  const broken=tar([tarEntry('repo-a/outside/huge.go','x'.repeat(1000))]).slice(0,600);
+  await expect(unpackTarball(broken,mkDest(),CAPS,{subdir:'api'})).rejects.toThrow(/truncated|archive/i);
+});
+it('enforces the expanded archive guard for uncompressed library input too',async()=>{
+  await expect(unpackTarball(tar([tarEntry('repo-a/outside/huge.go','x'.repeat(10000))]),mkDest(),{...CAPS,maxExpandedBytes:3000},{subdir:'api'})).rejects.toThrow(/oversized/i);
+});

@@ -5,6 +5,7 @@ import { extractGeneric, isAnalysisFile, isExtractionFile, type Fragment, type S
 import { pinCommit, fetchTarball, type GithubApiFetch } from './fetch';
 import { unpackTarball, cleanupDir, type UnpackCaps } from './unpack';
 import { detectFramework, useGenericAnalysis } from './detect';
+import { isSafeSubdir, scopedEvidence } from './scope';
 import { summarizeSkipped } from './disclosures';
 
 /**
@@ -35,6 +36,7 @@ export async function ingestRepo(
   opts: { signal?: AbortSignal; caps?: UnpackCaps; onStage?: (stage: 'fetching' | 'extracting') => void } = {},
 ): Promise<IngestResult> {
   const caps = opts.caps ?? DEFAULT_CAPS;
+  if (parsed.subdir && !isSafeSubdir(parsed.subdir)) return { ok: false, reason: 'invalid-subdir', message: 'Invalid subdir: choose a relative source directory without traversal, hidden or excluded folders.' };
 
   opts.onStage?.('fetching');
   const pinned = await pinCommit(deps.fetcher, { owner: parsed.owner, repo: parsed.repo }, parsed.ref, opts.signal);
@@ -50,17 +52,17 @@ export async function ingestRepo(
 
   const workDir = mkdtempSync(join(deps.tmpRoot ?? tmpdir(), 'aw-ingest-'));
   try {
-    const { files, skipped } = await unpackTarball(tarball, workDir, caps);
+    const { files, skipped, declarations } = await unpackTarball(tarball, workDir, caps, { subdir: parsed.subdir });
     const gaps: string[] = summarizeSkipped(skipped);
 
-    if (files.length === 0) return { ok: false, reason: 'empty-repository', message: 'The repository has no analyzable source files after safety filtering.' };
+    if (files.length === 0) return { ok: false, reason: parsed.subdir ? 'empty-subdir' : 'empty-repository', message: 'The selected repository directory has no analyzable source files after safety filtering.' };
 
     // A requested subdir narrows both detection and source analysis.
     const scoped = parsed.subdir ? files.filter((f) => f.startsWith(parsed.subdir + '/')).map((f) => f.slice(parsed.subdir!.length + 1)) : files;
     if (scoped.length === 0) return { ok: false, reason: 'empty-subdir', message: `No files under ${parsed.subdir} after safety filtering.` };
 
-    if (files.includes('.gitmodules')) gaps.push('submodule(s) declared — codeload excludes submodule contents; they were not analyzed');
-    if (files.includes('.gitattributes') && /filter=lfs/.test(readSafe(workDir, '.gitattributes'))) gaps.push('Git LFS pointers — large binary files were not downloaded');
+    if (declarations?.submodules || files.includes('.gitmodules')) gaps.push('submodule(s) declared — codeload excludes submodule contents; they were not analyzed');
+    if (declarations?.lfs || (files.includes('.gitattributes') && /filter=lfs/.test(readSafe(workDir, '.gitattributes')))) gaps.push('Git LFS pointers — large binary files were not downloaded');
 
     const sources = new Map(scoped.filter(isExtractionFile).map((rel) => [rel, readSafe(workDir, joinDir(parsed.subdir, rel))]));
     const read = (rel: string) => sources.get(rel) ?? '';
@@ -73,7 +75,7 @@ export async function ingestRepo(
     try {
       const fragment = framework === 'generic'
         ? extractGeneric(scoped, read, { pathPrefix: parsed.subdir })
-        : framework === 'spring-boot' ? await deps.extractSpringBoot(extractDir, sources) : await deps.extractFastApi(extractDir, sources);
+        : scopedEvidence(framework === 'spring-boot' ? await deps.extractSpringBoot(extractDir, sources) : await deps.extractFastApi(extractDir, sources), parsed.subdir);
       return { ok: true, sha: pinned.sha, framework, fragment, gaps: [...gaps, ...fragment.gaps], filesScanned: scoped.length };
     } catch (e) {
       return { ok: false, reason: 'extraction-failed', message: e instanceof Error ? e.message : String(e) };

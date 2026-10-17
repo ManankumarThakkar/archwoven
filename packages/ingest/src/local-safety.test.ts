@@ -149,3 +149,31 @@ it('rejects an ancestor directory swapped after canonicalization but before open
     syncBuiltinESMExports();
   }
 });
+
+
+it.each(['fastapi','spring-boot'] as const)('scoped %s parser evidence remains repository-relative',async framework=>{
+  const dir=tmp();mkdirSync(join(dir,'services/api'),{recursive:true});
+  const filename=framework==='fastapi'?'main.py':'App.java';
+  writeFileSync(join(dir,'services/api',filename),framework==='fastapi'?'from fastapi import FastAPI\napp = FastAPI()\n@app.get("/ping")\ndef ping(): return "ok"':'@SpringBootApplication @RestController class App { @GetMapping("/ping") public String ping() { return "ok"; } }');
+  const result=await ingestLocal(dir,deps,{subdir:'services/api'});expect(result.ok).toBe(true);if(!result.ok)return;expect(result.framework).toBe(framework);
+  const paths=[...result.fragment.nodes.flatMap(n=>n.evidence),...result.fragment.edges.flatMap(e=>e.evidence),...result.fragment.endpoints.map(e=>e.evidence)].map(e=>e.path).filter(Boolean);
+  expect(paths.length).toBeGreaterThan(0);expect(new Set(paths)).toEqual(new Set(['services/api/'+filename]));
+});
+
+
+it.each(['.hidden','tests','__generated__'])('a selected %s directory cannot bypass the repository path policy',async subdir=>{
+  const dir=tmp();mkdirSync(join(dir,subdir));writeFileSync(join(dir,subdir,'main.go'),'package main');
+  const result=await ingestLocal(dir,deps,{subdir});expect(result.ok).toBe(false);
+});
+it('does not follow a clone root replaced with a directory symlink before enumeration',async()=>{
+  const parent=fs.realpathSync(tmp()),dir=join(parent,'clone'),outside=tmp();mkdirSync(dir);writeFileSync(join(dir,'main.go'),'package approved');writeFileSync(join(outside,'outside.go'),'package outside');
+  const result=await ingestLocal(dir,deps,{onStage:stage=>{if(stage==='fetching'){renameSync(dir,join(parent,'saved'));symlinkSync(outside,dir);}}});
+  expect(result.ok).toBe(false);
+});
+
+
+it('never enumerates a sibling directory during a scoped import',async()=>{
+  const dir=fs.realpathSync(tmp());mkdirSync(join(dir,'outside'));mkdirSync(join(dir,'api'));writeFileSync(join(dir,'outside/a.go'),'package outside');writeFileSync(join(dir,'api/main.go'),'package api');
+  const original=fs.readdirSync;const visited:string[]=[];const spy=vi.spyOn(fs,'readdirSync').mockImplementation(((path:fs.PathLike,...args:unknown[])=>{visited.push(String(path));return Reflect.apply(original,fs,[path,...args]);}) as typeof fs.readdirSync);
+  syncBuiltinESMExports();try{const result=await ingestLocal(dir,deps,{subdir:'api'});expect(result.ok).toBe(true);expect(visited).toEqual([join(dir,'api')]);}finally{spy.mockRestore();syncBuiltinESMExports();}
+});

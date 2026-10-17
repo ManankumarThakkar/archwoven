@@ -106,3 +106,39 @@ describe('ingestLocal disclosures', () => {
     expect(r.gaps.filter(g => g.startsWith('Skipped'))).toEqual(['Skipped 2 vendored, generated or lock files and folders: go.sum, package-lock.json.']);
   });
 });
+
+
+const scopedDeps = { revParse: cannedRev, extractSpringBoot: async () => emptyFragment(), extractFastApi: async () => emptyFragment() };
+describe('subdirectory-first local scan',()=>{
+  it('does not let outside files or warnings consume the selected scope budget',async()=>{
+    const d=tmp();mkdirSync(join(d,'a-outside'));mkdirSync(join(d,'services/api'),{recursive:true});
+    writeFileSync(join(d,'a-outside/a.py'),'x'.repeat(60));writeFileSync(join(d,'outside.bin'),'x'.repeat(100));
+    symlinkSync(tmp(),join(d,'outside-link'));writeFileSync(join(d,'services/api/main.go'),'package main');
+    const result=await ingestLocal(d,scopedDeps,{subdir:'services/api',caps:{maxFiles:1,maxTotalBytes:40,maxFileBytes:80}});
+    expect(result.ok,JSON.stringify(result)).toBe(true);if(!result.ok)return;
+    expect(result.filesScanned).toBe(1);expect(result.fragment.sourceContext?.inventory).toEqual(['services/api/main.go']);
+    expect(result.gaps.join(' ')).not.toMatch(/outside|file limit|size limit|symlink/);
+  });
+  it('rejects a symlinked selected scope rather than reading it or treating it as an empty folder',async()=>{
+    const d=tmp(),outside=tmp();writeFileSync(join(outside,'main.go'),'package main');symlinkSync(outside,join(d,'api'));
+    const result=await ingestLocal(d,scopedDeps,{subdir:'api'});expect(result.ok).toBe(false);if(result.ok)return;expect(result.message).toMatch(/symlink|link/i);
+  });
+  it.each(['../outside','/outside','api/../../outside','api\\outside','api//nested','api/./nested','htmlcov','api/htmlcov','api/a.generated.d.ts'])('refuses unsafe direct-library scope %s before git',async subdir=>{
+    let git=false;const result=await ingestLocal(tmp(),{...scopedDeps,revParse:async()=>{git=true;return 'sha';}},{subdir});
+    expect(result.ok).toBe(false);expect(git).toBe(false);
+  });
+  it('reports in-scope omissions with full repository-relative paths only',async()=>{
+    const d=tmp();mkdirSync(join(d,'api'));writeFileSync(join(d,'api/a.go'),'package api');writeFileSync(join(d,'api/b.go'),'package api');writeFileSync(join(d,'outside.go'),'package outside');
+    const result=await ingestLocal(d,scopedDeps,{subdir:'api',caps:{maxFiles:1,maxTotalBytes:1000,maxFileBytes:500}});
+    expect(result.ok).toBe(true);if(!result.ok)return;expect(result.gaps.join(' ')).toContain('api/b.go');expect(result.gaps.join(' ')).not.toContain('outside.go');
+  });
+  it.each(['missing','main.go'])('reports a missing or non-directory scope: %s',async subdir=>{
+    const d=tmp();writeFileSync(join(d,'main.go'),'package main');const result=await ingestLocal(d,scopedDeps,{subdir});expect(result.ok).toBe(false);if(result.ok)return;expect(result.reason).toBe('invalid-subdir');
+  });
+  it('excludes generated directories and files before counting or reading source',async()=>{
+    const d=tmp();for(const folder of ['.next-hosted','dist','out','coverage','__generated__','generated','.turbo']){mkdirSync(join(d,folder));writeFileSync(join(d,folder,'index.ts'),'export const generated=true;');}
+    writeFileSync(join(d,'a.generated.d.ts'),'export const a=1;');writeFileSync(join(d,'a.generated.ts'),'export const generated=true;');writeFileSync(join(d,'a.js.map'),'{}');writeFileSync(join(d,'a.tsbuildinfo'),'{}');writeFileSync(join(d,'main.go'),'package main');
+    const result=await ingestLocal(d,scopedDeps,{caps:{maxFiles:1,maxTotalBytes:30,maxFileBytes:1000}});
+    expect(result.ok).toBe(true);if(!result.ok)return;expect(result.filesScanned).toBe(1);expect(result.fragment.sourceContext?.inventory).toEqual(['main.go']);expect(result.gaps.join(' ')).not.toContain('file limit');
+  });
+});
