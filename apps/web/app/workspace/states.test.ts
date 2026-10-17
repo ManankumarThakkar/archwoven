@@ -120,3 +120,10 @@ describe('workspace state machine', () => {
     expect(s).toEqual({ kind: 'cancelled' });
   });
 });
+
+
+it('a running description can pause for clarification, then resume',()=>{
+  const s=next(next(initial,{type:'GENERATE'}),{type:'CLARIFY',questions:['Persist orders?']});
+  expect(s).toEqual({kind:'clarifying',questions:['Persist orders?']});
+  expect(next(s,{type:'GENERATE'})).toEqual({kind:'running',stage:'validating'});
+});

@@ -1,14 +1,17 @@
-import { randomUUID } from 'node:crypto';
-import { reserve, refundCredits, recordUsage, TIERS } from '@archwoven/jobs';
+import { createHash, randomUUID } from 'node:crypto';
+import { reserve, refundCredits, recordUsage, TIERS, type Clarification } from '@archwoven/jobs';
 import { validateModel, type ViewType } from '@archwoven/model';
 import {
   serverDeps, estimateTokens, PROMPT_TOKEN_LIMIT, readOrCreateSession, sessionCookie, tierOf,
   creditsExhaustedCopy, STOP_LOSS_COPY, OVERSIZED_COPY, BURST_COPY,
   llmNotConfigured, LLM_NOT_CONFIGURED_COPY,
 } from '../../lib/server';
-import { withSlot, slotPosition } from '../../lib/llm-limiter';
+import { withSlot } from '../../lib/llm-limiter';
 import { deployMode, privacyForMode } from '../../lib/mode';
 import { jobRegistry, startJobDeadline, JOB_TIMEOUT_COPY } from '../../lib/job-registry';
+
+import { ClarificationSchema } from '@archwoven/llm';
+import { parseReply, continuationPrompt, preserveClarification, type ClarificationReply } from '../../lib/clarification';
 
 export const runtime = 'nodejs';
 
@@ -19,21 +22,33 @@ export async function POST(req: Request) {
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (minted) headers['set-cookie'] = sessionCookie(sessionId);
 
-  let body: { prompt?: string; view?: string; idempotencyKey?: string };
+  let body: { prompt?: string; view?: string; idempotencyKey?: string; clarification?: unknown };
   try {
     body = await req.json();
   } catch {
     return Response.json({ error: 'invalid JSON body' }, { status: 400, headers });
   }
 
-  const prompt = String(body.prompt ?? '');
-  const view = VALID_VIEWS.includes(body.view as ViewType) ? (body.view as ViewType) : null;
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return Response.json({ error: 'invalid request body' }, { status: 400, headers });
+  let context: Clarification | undefined, reply: ClarificationReply | null = null;
+  if (body.clarification !== undefined) {
+    const raw = body.clarification as { jobId?: unknown } | null;
+    if (!raw || typeof raw.jobId !== 'string') return Response.json({ error: 'A clarification job is required.' }, { status: 400, headers });
+    const previous = serverDeps.store.getJob(raw.jobId);
+    if (!previous || previous.sessionId !== sessionId) return Response.json({ error: 'clarification not found' }, { status: 404, headers });
+    if (previous.status !== 'clarifying' || !previous.clarification) return Response.json({ error: 'This job has no pending clarification.' }, { status: 409, headers });
+    context = previous.clarification;
+    reply = parseReply(raw, context.questions.length);
+    if (!reply) return Response.json({ error: 'Answer at least one question (up to 1,000 characters each), or choose Skip for now.' }, { status: 400, headers });
+  }
+  const prompt = context && reply ? continuationPrompt(context, reply) : String(body.prompt ?? '');
+  const view = context?.view ?? (VALID_VIEWS.includes(body.view as ViewType) ? (body.view as ViewType) : null);
   if (!prompt.trim() || !view) return Response.json({ error: 'prompt and view are required' }, { status: 400, headers });
   if (estimateTokens(prompt) > PROMPT_TOKEN_LIMIT) return Response.json({ reason: 'oversized', message: OVERSIZED_COPY }, { status: 413, headers });
   if (llmNotConfigured()) return Response.json({ reason: 'llm-not-configured', message: LLM_NOT_CONFIGURED_COPY }, { status: 503, headers });
 
   const tier = tierOf(sessionId);
-  const key = body.idempotencyKey ? String(body.idempotencyKey) : undefined;
+  const key = reply ? `clarification:${createHash('sha256').update(JSON.stringify(reply)).digest('hex')}` : body.idempotencyKey ? String(body.idempotencyKey) : undefined;
   if (key) {
     const existing = serverDeps.store.findJobByIdempotencyKey(key, sessionId);
     if (existing) {
@@ -54,12 +69,13 @@ export async function POST(req: Request) {
   try {
     serverDeps.store.createJob({ id: jobId, modelId: jobId, kind: 'generate', idempotencyKey: key, sessionId });
   } catch (e) {
+    // This request lost the insert race: its separate reservation is never spent.
+    refundCredits(serverDeps.store, sessionId, new Date().toISOString().slice(0, 10), 1);
     // concurrent POST with the same (session, key): dedupe to the winner's job
     if (key && e instanceof Error && /UNIQUE/i.test(e.message)) {
       const winner = serverDeps.store.findJobByIdempotencyKey(key, sessionId);
       if (winner) return Response.json({ jobId: winner.id, remaining: quota.remaining }, { status: 202, headers });
     }
-    refundCredits(serverDeps.store, sessionId, new Date().toISOString().slice(0, 10), 1);
     throw e;
   }
 
@@ -81,10 +97,20 @@ export async function POST(req: Request) {
     try {
       serverDeps.store.updateJob(jobId, { status: 'running', stage: 'validating' });
       serverDeps.store.updateJob(jobId, { stage: 'generating' });
-      const out = await serverDeps.generateModel(prompt, view, { signal: entry.controller.signal });
+      const out = await serverDeps.generateModel(prompt, view, { signal: entry.controller.signal, allowClarification: !context });
       if (!entry.settled) serverDeps.store.updateJob(jobId, { stage: 'validating-output' });
       if (!out.ok) return fail(out.errors.join('; '), out.usage, out.usage.repairs);
-      const checked = validateModel(out.model);
+      if ('questions' in out) {
+        const questions = ClarificationSchema.safeParse({ clarificationQuestions: out.questions });
+        if (context || !questions.success) return fail('Invalid clarification response. Please retry.', out.usage, out.usage.repairs);
+        recordUsage(serverDeps.store, { sessionId, tier, action: 'generate', usage: out.usage, retries: out.usage.repairs, outcome: entry.settled ? 'failed' : 'ok' });
+        if (entry.settled) return;
+        serverDeps.store.updateJob(jobId, { status: 'clarifying', clarification: { prompt, view, questions: questions.data.clarificationQuestions } });
+        refundCredits(serverDeps.store, sessionId, day, 1);
+        claim();
+        return;
+      }
+      const checked = validateModel(context && reply ? preserveClarification(out.model, context, reply) : out.model);
       if (!checked.ok) return fail(checked.errors.join('; '), out.usage, out.usage.repairs);
       if (entry.settled) {
         recordUsage(serverDeps.store, { sessionId, tier, action: 'generate', usage: out.usage, retries: out.usage.repairs, outcome: 'failed' });

@@ -215,3 +215,29 @@ describe('STABLE_SYSTEM — M4 semantic fields', () => {
     expect(STABLE_SYSTEM).toContain('guidedViews');
   });
 });
+
+
+describe('description clarification decision', () => {
+  it('returns focused questions and billed usage instead of forcing a model on conflicting requirements', async () => {
+    const { client } = fakeClient([{ clarificationQuestions: ['Should orders persist, or must all storage be forbidden?'] }]);
+    const out = await generateModel('Persist orders. Do not store any data.', 'architecture', { client, allowClarification: true });
+    expect(out).toMatchObject({ ok: true, questions: ['Should orders persist, or must all storage be forbidden?'], usage: { inputTokens: 1200, outputTokens: 800 } });
+  });
+  it.each([[], [' '], ['a','b','c','d'], ['Same?', 'Same?'], ['x'.repeat(501)]].map(questions => ({questions})))('repairs invalid question lists without displaying them: $questions', async ({questions}) => {
+    const { client } = fakeClient([{ clarificationQuestions: questions }, validFull]);
+    const out = await generateModel('A system', 'architecture', { client, allowClarification: true });
+    expect(out).toMatchObject({ ok: true, model: { title: validFull.title }, usage: { repairs: 1 } });
+  });
+  it('does not ask another round when clarification is disabled for continuation', async () => {
+    const { client } = fakeClient([{ clarificationQuestions: ['Again?'] }, validFull]);
+    const out = await generateModel('Use no storage.', 'architecture', { client });
+    expect(out).toMatchObject({ ok: true, model: { title: validFull.title }, usage: { repairs: 1 } });
+  });
+});
+
+
+it('clear descriptions still produce a model in one decision call',async()=>{
+  const {client,calls}=fakeClient([validFull]);
+  const out=await generateModel('A client sends orders to an API which writes them to PostgreSQL.', 'architecture',{client,allowClarification:true});
+  expect(out).toMatchObject({ok:true,model:{title:validFull.title},usage:{repairs:0}});expect(calls).toHaveLength(1);
+});

@@ -7,6 +7,7 @@ import { initial, next } from './states';
 import type { Mode, Stage } from './states';
 import { ControlPanel, type RepoForm } from './ControlPanel';
 import { Canvas } from './Canvas';
+import { ClarificationPanel } from './ClarificationPanel';
 import { Inspector } from './InspectorPanel';
 import { inspectorFor } from './inspector';
 import { passportFor } from './passport';
@@ -70,6 +71,8 @@ export default function WorkspacePage() {
   const loadSequence = useRef(0);
   const jobIdRef = useRef<string | null>(null);
   const mutationRef = useRef(false);
+  const generationRef = useRef(false);
+  const [clarification, setClarification] = useState<{ jobId: string; questions: string[]; preferredView?: ViewType } | null>(null);
 
   const rememberModel = (id: string) => {
     try { sessionStorage.setItem('aw_modelId', id); } catch { /* storage can be disabled */ }
@@ -101,7 +104,8 @@ export default function WorkspacePage() {
       const hash = new URLSearchParams(window.location.hash.slice(1));
       if (chosen) hash.set('view', chosen);
       window.history.replaceState(null, '', `#${hash}`);
-      dispatch({ type: 'RESTORED', modelId: id, revision: m.revision, gaps: gaps ?? m.openQuestions.map((q) => q.text) });
+      dispatch({ type: 'RESTORED', modelId: id, revision: m.revision, gaps: [...new Set([...(gaps ?? []), ...m.openQuestions.map((q) => q.text)])] });
+      return true;
     } catch (err) {
       if (sequence !== loadSequence.current) return;
       dispatch({ type: 'RESTORE_FAILED', message: err instanceof Error ? err.message : 'Could not open the saved diagram. Reload to try again.' });
@@ -137,13 +141,13 @@ export default function WorkspacePage() {
     let runningSince: number | null = null;
     let misses = 0;
     for (;;) {
-      let job: { status: string; stage?: Stage | null; modelId: string; revision: number; queuePosition?: number | null; deadlineAt?: number | null; gaps?: string[]; error?: string | null } | null = null;
+      let job: { status: string; stage?: Stage | null; modelId: string; revision: number; queuePosition?: number | null; deadlineAt?: number | null; gaps?: string[]; questions?: string[]; remaining?: number | null; error?: string | null } | null = null;
       try {
         const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}`);
         if (res.status === 404) { dispatch({ type: 'ERROR', message: 'This generation no longer exists — please try again.' }); return; }
         if (!res.ok) throw new Error('Could not read job status');
         job = await res.json();
-        if (!job || !['queued', 'running', 'cancelled', 'succeeded', 'failed'].includes(job.status)
+        if (!job || !['queued', 'running', 'cancelled', 'succeeded', 'failed', 'clarifying'].includes(job.status)
           || (job.status === 'succeeded' && (typeof job.modelId !== 'string' || !job.modelId))) {
           throw new Error('Invalid job status');
         }
@@ -168,10 +172,20 @@ export default function WorkspacePage() {
         await new Promise((r) => setTimeout(r, 400));
         continue;
       }
+      if (job.status === 'clarifying') {
+        if (!Array.isArray(job.questions) || job.questions.length < 1 || job.questions.length > 3 || job.questions.some(q => typeof q !== 'string' || !q.trim())) {
+          dispatch({ type: 'ERROR', message: 'Could not read the clarification. Retry the same description to reconnect.' }); return;
+        }
+        setQueuedPos(null);
+        if (typeof job.remaining === 'number') setRemaining(job.remaining);
+        setClarification({ jobId, questions: job.questions, preferredView });
+        dispatch({ type: 'CLARIFY', questions: job.questions });
+        return;
+      }
       if (job.status === 'cancelled') { setQueuedPos(null); dispatch({ type: 'CANCEL' }); return; }
       if (job.status === 'succeeded') {
         setQueuedPos(null);
-        await loadModel(job.modelId, job.gaps, preferredView);
+        if (await loadModel(job.modelId, job.gaps, preferredView)) setClarification(null);
         return;
       }
       dispatch({ type: 'ERROR', message: job.error ?? 'generation failed' });
@@ -179,7 +193,9 @@ export default function WorkspacePage() {
     }
   };
 
-  const submitGeneration = async (url: string, body: object, preferredView: ViewType = 'architecture') => {
+  const submitGeneration = async (url: string, body: object, preferredView?: ViewType) => {
+    generationRef.current = true;
+    jobIdRef.current = null;
     setCancelError(null);
     try {
       const res = await fetch(url, {
@@ -195,22 +211,30 @@ export default function WorkspacePage() {
       if (typeof jobId !== 'string' || !jobId) throw new Error('Missing job ID');
       if (typeof remaining === 'number') setRemaining(remaining);
       jobIdRef.current = jobId;
-      void poll(jobId, preferredView);
+      await poll(jobId, preferredView);
     } catch {
       dispatch({ type: 'ERROR', message: 'Could not start generation. Check your connection and try again; retrying the same input will reconnect to any job already started.' });
-    }
+    } finally { generationRef.current = false; jobIdRef.current = null; }
   };
 
   const generate = async (prompt: string, view: ViewType) => {
-    if(mutationRef.current)return;
+    if(mutationRef.current || generationRef.current)return;
     dispatch({ type: 'GENERATE' });
     await submitGeneration('/api/generate', { prompt, view, idempotencyKey: idempotencyKeyFor(prompt, view) }, view);
   };
 
   const generateRepo = async (form: RepoForm) => {
-    if(mutationRef.current)return;
+    if(mutationRef.current || generationRef.current)return;
     dispatch({ type: 'GENERATE_REPO' });
-    await submitGeneration('/api/repo', { ...form, view: 'architecture', idempotencyKey: idempotencyKeyFor(`${form.url}|${form.subdir ?? ''}|${form.ref ?? ''}`, 'architecture') });
+    await submitGeneration('/api/repo', { ...form, view: 'architecture', idempotencyKey: idempotencyKeyFor(`${form.url}|${form.subdir ?? ''}|${form.ref ?? ''}`, 'architecture') }, 'architecture');
+  };
+
+  const continueClarification = async (answers: string[] | null) => {
+    if (!clarification || mutationRef.current || generationRef.current) return;
+    dispatch({ type: 'GENERATE' });
+    await submitGeneration('/api/generate', { clarification: answers === null
+      ? { jobId: clarification.jobId, skip: true }
+      : { jobId: clarification.jobId, answers } }, clarification.preferredView);
   };
 
   const cancelJob = async () => {
@@ -366,7 +390,7 @@ export default function WorkspacePage() {
       {cancelError && state.kind === 'running' && <div role="alert" style={{ padding: '10px 16px', color: '#fda4af' }}>{cancelError}</div>}
       <div className="workspace-shell" style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         <ControlPanel
-          locked={refining}
+          locked={refining || !!clarification}
           running={state.kind === 'running' || restoring}
           remaining={remaining ?? pool}
           mode={mode}
@@ -394,7 +418,9 @@ export default function WorkspacePage() {
           </main>
         ) : (
           <main className="aw-empty-main" aria-label="Diagram workspace" aria-live="polite">
-            {restoring ? <div role="status">Opening your workspace…</div> : <CanvasPlaceholder state={state} queuedPos={queuedPos} onReset={() => dispatch({ type: 'RESET' })} />}
+            {clarification && <ClarificationPanel key={clarification.jobId} questions={clarification.questions} busy={state.kind === 'running'} onContinue={continueClarification} onEdit={() => { setClarification(null); dispatch({ type: 'RESET' }); requestAnimationFrame(() => document.getElementById('system-description')?.focus()); }} />}
+            {restoring ? <div role="status">Opening your workspace…</div> : state.kind !== 'clarifying' && <CanvasPlaceholder state={state} queuedPos={queuedPos} onReset={() => { if (!clarification) dispatch({ type: 'RESET' }); }} hideReset={!!clarification} />}
+            {clarification && state.kind === 'running' && <button className="aw-clarification-cancel" onClick={cancelJob}>Cancel</button>}
           </main>
         )}
         {showCanvas && <Inspector payload={selected ? inspectorFor(model, selected) : null} gaps={state.kind === 'partial' ? state.gaps : undefined} passport={passport} busy={refining} onRename={(target,label)=>{void directEdit({type:'rename',target,label});}} />}
@@ -403,7 +429,7 @@ export default function WorkspacePage() {
   );
 }
 
-function CanvasPlaceholder({ state, queuedPos, onReset }: { state: ReturnType<typeof next>; queuedPos: number | null; onReset: () => void }) {
+function CanvasPlaceholder({ state, queuedPos, onReset, hideReset = false }: { state: ReturnType<typeof next>; queuedPos: number | null; onReset: () => void; hideReset?: boolean }) {
   if (state.kind === 'running') {
     const label = STAGE_LABEL[state.stage] ?? state.stage;
     return <div style={{ textAlign: 'center' }}>
@@ -417,12 +443,12 @@ function CanvasPlaceholder({ state, queuedPos, onReset }: { state: ReturnType<ty
     return <div style={{ textAlign: 'center', maxWidth: 360 }}>
       <div style={{ fontSize: '1.1rem', color: '#fbbf24', marginBottom: 8 }}>{QUOTA_TITLE[state.reason] ?? 'Generations paused'}</div>
       <div>{state.message || (mins !== null ? `Resets in ${Math.floor(mins / 60)}h ${mins % 60}m.` : 'Please try again later.')}</div>
-      <button onClick={onReset} style={{ marginTop: 12, padding: '6px 12px', borderRadius: 8, border: '1px solid #334155', background: 'transparent', color: '#e5e7eb', cursor: 'pointer' }}>Start over</button>
+      {!hideReset && <button onClick={onReset} style={{ marginTop: 12, padding: '6px 12px', borderRadius: 8, border: '1px solid #334155', background: 'transparent', color: '#e5e7eb', cursor: 'pointer' }}>Start over</button>}
     </div>;
   }
-  if (state.kind === 'error') return <div style={{ textAlign: 'center', color: '#f87171' }}>Something went wrong: {state.message}<div><button onClick={onReset} style={{ marginTop: 12, padding: '6px 12px', borderRadius: '8px', border: '1px solid #334155', background: 'transparent', color: '#e5e7eb', cursor: 'pointer' }}>Try again</button></div></div>;
+  if (state.kind === 'error') return <div style={{ textAlign: 'center', color: '#f87171' }}>Something went wrong: {state.message}<div>{!hideReset && <button onClick={onReset} style={{ marginTop: 12, padding: '6px 12px', borderRadius: '8px', border: '1px solid #334155', background: 'transparent', color: '#e5e7eb', cursor: 'pointer' }}>Try again</button>}</div></div>;
   if (state.kind === 'success' || state.kind === 'partial') return <div role="status">Opening diagram revision {state.revision}…</div>;
-  if (state.kind === 'cancelled') return <div>Cancelled. <button onClick={onReset} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #334155', background: 'transparent', color: '#e5e7eb', cursor: 'pointer' }}>Reset</button></div>;
+  if (state.kind === 'cancelled') return <div>Cancelled. {!hideReset && <button onClick={onReset} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #334155', background: 'transparent', color: '#e5e7eb', cursor: 'pointer' }}>Reset</button>}</div>;
   if (state.kind === 'stale') return <div style={{ color: '#fbbf24' }}>This diagram changed elsewhere (latest rev {state.latestRevision}). Reload to continue.</div>;
   if (state.kind === 'clarifying') return <div>A few clarifying questions: {state.questions.join(' · ')}</div>;
   if (state.kind === 'paused') return <div>Paused: {state.message}</div>;

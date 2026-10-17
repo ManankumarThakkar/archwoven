@@ -1,3 +1,4 @@
+import { ClarificationSchema, CLARIFICATION_SYSTEM, type DescriptionOutcome } from './clarification';
 import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import { generatedViewErrors } from './generated-view';
@@ -293,11 +294,14 @@ const textOf = (content: { type: string; text?: string }[]) =>
  * truncated or invalid response still yields the raw text we can quote back to
  * the model — .parse() throws and discards it, so repairs never converge.
  */
+type GenerateOptions = { client?: StructuredClient; effort?: Effort; signal?: AbortSignal };
+export function generateModel(prompt: string, view: ViewType, opts?: GenerateOptions & { allowClarification?: false }): Promise<GenerateOutcome>;
+export function generateModel(prompt: string, view: ViewType, opts: GenerateOptions & { allowClarification: boolean }): Promise<DescriptionOutcome>;
 export async function generateModel(
   prompt: string,
   view: ViewType,
-  opts: { client?: StructuredClient; effort?: Effort; signal?: AbortSignal } = {},
-): Promise<GenerateOutcome> {
+  opts: GenerateOptions & { allowClarification?: boolean } = {},
+): Promise<DescriptionOutcome> {
   const effort: Effort = opts.effort ?? 'medium';
   if (opts.signal?.aborted) return { ok: false, errors: ['Generation cancelled.'], usage: usageFrom({}, effort, 0, 0) };
   if (!opts.client && fakeMode()) return { ok: true, model: structuredClone(validFullModelExtended), usage: fakeUsage(effort) };
@@ -306,7 +310,7 @@ export async function generateModel(
 
   const t0 = Date.now();
   const messages: unknown[] = [{ role: 'user', content: `View: ${view}\n\n${prompt}` }];
-  const system = [{ type: 'text', text: STABLE_SYSTEM, cache_control: { type: 'ephemeral' } }];
+  const system = [{ type: 'text', text: STABLE_SYSTEM + (opts.allowClarification ? CLARIFICATION_SYSTEM : ''), cache_control: { type: 'ephemeral' } }];
 
   // §15 per-request gate: exact token count before send. Fail closed — an
   // uncounted send is exactly the oversized context the gate exists to stop.
@@ -367,6 +371,8 @@ export async function generateModel(
       continue;
     }
 
+    const decision = opts.allowClarification ? ClarificationSchema.safeParse(parsed) : null;
+    if (decision?.success) return { ok: true, questions: decision.data.clarificationQuestions, usage: usageFrom(billed, effort, Date.now() - t0, repairs) };
     const result = validateModel(parsed);
     lastErrors = result.ok ? generatedViewErrors(result.model, view) : result.errors;
     if (result.ok && !lastErrors.length) return { ok: true, model: result.model, usage: usageFrom(billed, effort, Date.now() - t0, repairs) };
