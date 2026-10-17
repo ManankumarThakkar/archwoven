@@ -4,14 +4,17 @@
 
 AI-assisted architecture workspace: plain-English requirements or public GitHub repositories become clear, interactive, editable architecture diagrams — generated from one typed system model with provenance, controlled edits, and an enforceable choice of where processing happens.
 
-> Early-stage portfolio project. See `docs/SPEC.md` for the working specification and honest scope; nothing here is production-ready or enterprise-grade.
+Release scope and acceptance results: [release tracker](docs/RELEASE-PROGRESS.md),
+[verification record](docs/RELEASE-ACCEPTANCE.md), and [remaining gaps](docs/OPEN-GAPS.md).
 
 ## Status
 
-- **M0:** monorepo scaffold + the versioned system-model schema and referential-integrity validator that every later milestone writes against.
-- **M1:** technical probes (rendering, structured-output validity/cost, tree-sitter extraction, local model on Apple Silicon).
-- **M2+:** plain-English vertical slice → public repo analysis → private/local mode → evaluations & hardening.
-- **M6 merged (PR #9):** saved-diagram restoration, viewer fixes, responsive workspace, generation repairs, broader repository maps and benchmark safeguards. Fresh end-to-end results and unfinished first-release work: [post-merge audit](docs/POST-MERGE-AUDIT.md). Historical checks: [M6 checks](docs/M6-CHECKS.md).
+- Generate architecture, sequence and ER diagrams from descriptions; inspect and expand component details.
+- Analyze public GitHub repositories or local committed clones, with source evidence and disclosed coverage limits.
+- Rename, arrange, refine, undo and download diagrams; recover saved work and inspect task usage.
+- Use a hosted provider or run inference locally with Ollama. Release acceptance remains open for the checks recorded above.
+
+Earlier milestone evidence is preserved in the [post-merge audit](docs/POST-MERGE-AUDIT.md) and [M6 checks](docs/M6-CHECKS.md).
 
 ## Layout
 
@@ -65,6 +68,13 @@ curl -s http://localhost:3000/api/config
 The config response must contain `"mode":"hosted"`, `"fake":false`, and `"llmReady":true`. A demo warning means fixed sample data is enabled; that mode deliberately repeats the same sample. Real generation consumes provider tokens and application credits. The workspace’s **Last task** summary shows reported token usage, repairs/retries and an estimated hosted API cost; open it for the breakdown. Ollama has no external API charge (hardware/electricity are not measured). Interrupted or missing usage is marked incomplete, and reports survive reload separately from diagram JSON. Restart an already running server after changing environment variables.
 
 Compare two unrelated descriptions (for example a library and a greenhouse), then import your public repository. Inspect labels and connection evidence; refinement should modify only the requested parts, and undo should restore them. [Live verification](docs/LIVE-CHECKS.md) records the exercised cases and limitations.
+
+For a local production-build check with the same configured key:
+
+```bash
+pnpm build
+ARCHWOVEN_MODE=hosted ARCHWOVEN_FAKE=0 pnpm --filter web start --hostname 127.0.0.1 --port 3000
+```
 
 ```bash
 pnpm test
@@ -140,3 +150,7 @@ mode, exports carry no evidence paths, and the same suite runs green in both mod
 3. **Privacy is enforced in the router, not the prompt** — private content never reaches an external provider, with tests that prove it.
 4. Token efficiency is measured **per successful task** and shown to users.
 5. Honest states: no fake progress bars, no fabricated components, no invented metrics.
+
+## License
+
+[MIT](LICENSE). Third-party dependencies retain their own licenses.

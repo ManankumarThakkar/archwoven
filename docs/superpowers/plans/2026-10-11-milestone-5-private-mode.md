@@ -181,4 +181,4 @@ The spec implies these inputs/failures but no single task's tests name them all 
 ## Deferred (ledgered, not forgotten)
 
 - **GitHub OAuth** (hosted private repos): needs GitHub App registration — external dependency; local mode covers private repos via the user's own clone. M6. (`tierOf` comment updated in Task 1.)
-- **Suite B repair-rounds harness**, **remaining archify viewer UX** (node-finder `/`, semantic-lens `#lens=`, relationship passport, outline rail, flow-token pulses), **M4 deferred minors** — M6 backlog; `.superpowers/archify-brief.md` retains the list.
+- **Suite B repair-rounds harness**, **remaining archify viewer UX** (node-finder `/`, semantic-lens `#lens=`, relationship passport, outline rail, flow-token pulses), **M4 deferred minors** — M6 backlog; the original ignored reference brief is not distributed. Current scope is recorded in `docs/SPEC.md` and `docs/RELEASE-PROGRESS.md`.
