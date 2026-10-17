@@ -1,0 +1,192 @@
+{
+  "about": "Representative real-provider evaluation set. Cases run in the order of `order` so that, if the budget runs out, the least important cases are the ones skipped.",
+  "generations": [
+    {
+      "id": "todo-api",
+      "view": "architecture",
+      "prompt": "A todo app: customers call an API gateway; an orders service handles requests and persists to PostgreSQL.",
+      "suiteA": "todo-api"
+    },
+    {
+      "id": "checkout",
+      "view": "architecture",
+      "prompt": "A checkout flow: customers hit an API gateway routed to an order service which charges Stripe.",
+      "suiteA": "checkout"
+    },
+    {
+      "id": "boring-crud",
+      "view": "architecture",
+      "prompt": "A catalog app: customers call an API gateway; a catalog service serves items from PostgreSQL.",
+      "suiteA": "boring-crud"
+    },
+    {
+      "id": "streaming",
+      "view": "architecture",
+      "prompt": "A video streaming platform: viewers use web and TV apps through a CDN; an API gateway routes to catalog, playback and recommendation services; playback writes view events to Kafka, consumed by an analytics service that stores aggregates in ClickHouse; user accounts live in PostgreSQL and sessions in Redis."
+    },
+    {
+      "id": "ride-hailing",
+      "view": "architecture",
+      "prompt": "Riders and drivers use mobile apps that talk to an API over WebSockets for live location. A matching service pairs riders with nearby drivers using a geospatial index in Redis; trips are stored in PostgreSQL; payments go through Stripe; push notifications go through Firebase."
+    },
+    {
+      "id": "vague-blog",
+      "view": "architecture",
+      "prompt": "A blog."
+    },
+    {
+      "id": "hr-tool",
+      "view": "architecture",
+      "prompt": "An internal HR tool: employees sign in with Okta SSO and submit leave requests through a React app to a Django backend, which stores data in MySQL and emails managers through SendGrid. A nightly Celery job syncs leave balances to Workday."
+    },
+    {
+      "id": "iot",
+      "view": "architecture",
+      "prompt": "Thousands of temperature sensors publish readings over MQTT to a broker; an ingestion service validates them and writes to TimescaleDB; an alerting service watches thresholds and pages on-call engineers through PagerDuty; a Grafana dashboard reads from TimescaleDB."
+    },
+    {
+      "id": "search-cdc",
+      "view": "architecture",
+      "prompt": "Shoppers search products in a Next.js storefront; a search service queries Elasticsearch, which is kept in sync with the product database (PostgreSQL) by a change-data-capture pipeline using Debezium and Kafka."
+    },
+    {
+      "id": "fraud-ml",
+      "view": "architecture",
+      "prompt": "A fraud-detection system: the payments service sends each transaction to a scoring service that loads a model from S3 and features from a Redis feature store, returns a risk score, and logs decisions to BigQuery for retraining in a weekly Airflow pipeline."
+    },
+    {
+      "id": "login-seq",
+      "view": "sequence",
+      "prompt": "A user logs in with email and password: the web app calls the auth service, which checks the password hash in PostgreSQL and issues a JWT; the web app stores the token and loads the dashboard."
+    },
+    {
+      "id": "checkout-seq",
+      "view": "sequence",
+      "prompt": "Checkout: the customer submits an order; the order service reserves stock with the inventory service and charges the card through Stripe. If payment fails it releases the reserved stock and returns an error; on success it publishes an OrderPlaced event."
+    },
+    {
+      "id": "reset-seq",
+      "view": "sequence",
+      "prompt": "Password reset: the user requests a reset link; the account service generates a one-time token, stores it in Redis with a 15-minute expiry and emails the link through SES. When the user opens the link, the token is verified and deleted."
+    },
+    {
+      "id": "upload-seq",
+      "view": "sequence",
+      "prompt": "File upload: the browser asks the API for a pre-signed S3 URL, uploads the file directly to S3, then notifies the API, which enqueues a virus scan; the scanner marks the file clean or quarantined."
+    },
+    {
+      "id": "library-er",
+      "view": "er",
+      "prompt": "Data model for a library: books have many copies; members borrow copies through loans with due dates; a loan belongs to one member and one copy; members can reserve books."
+    },
+    {
+      "id": "tracker-er",
+      "view": "er",
+      "prompt": "Data model for a multi-tenant project tracker: organizations have users and projects; projects have tasks; each task has an assignee (a user), comments, and labels (many-to-many)."
+    },
+    {
+      "id": "courses-er",
+      "view": "er",
+      "prompt": "Data model for an online course platform: instructors create courses with ordered lessons; students enroll in courses; each enrollment tracks progress per lesson and a final certificate."
+    },
+    {
+      "id": "order-component",
+      "view": "component-detail",
+      "prompt": "Component detail of an order service: an HTTP controller, an order application service, a pricing component, an order repository backed by PostgreSQL, and an outbox publisher that sends events to Kafka."
+    },
+    {
+      "id": "notify-component",
+      "view": "component-detail",
+      "prompt": "Component detail of a notification service: a queue consumer reads notification requests, a template renderer builds messages, a channel router picks email, SMS or push, and adapters call SendGrid, Twilio and Firebase; delivery results are stored in DynamoDB."
+    },
+    {
+      "id": "auth-component",
+      "view": "component-detail",
+      "prompt": "Component detail of an authentication service: login and token endpoints, a password verifier using bcrypt, a token issuer that signs JWTs with keys from a KMS, a refresh-token store in Redis, and an audit logger that writes to Kafka."
+    }
+  ],
+  "refinements": [
+    {
+      "id": "refine-add-cache",
+      "on": "todo-api",
+      "instruction": "Add a Redis cache that the orders service reads from."
+    },
+    {
+      "id": "refine-add-notify",
+      "on": "checkout",
+      "instruction": "Add a notification service that emails the customer a receipt after the order service charges Stripe."
+    },
+    {
+      "id": "refine-remove",
+      "on": "streaming",
+      "instruction": "Remove the recommendation service."
+    },
+    {
+      "id": "refine-rename",
+      "on": "ride-hailing",
+      "instruction": "Rename the matching service to Dispatch Service."
+    },
+    {
+      "id": "refine-extend",
+      "on": "hr-tool",
+      "instruction": "The nightly job should also export a CSV report to an S3 bucket."
+    },
+    {
+      "id": "refine-group",
+      "on": "boring-crud",
+      "instruction": "Put the catalog service and PostgreSQL inside a Catalog domain boundary."
+    }
+  ],
+  "repositories": [
+    {
+      "id": "repo-fastapi-template",
+      "url": "https://github.com/fastapi/full-stack-fastapi-template/tree/b1125d8839482cb7bbae603ddc6d0081bf87532e/backend",
+      "truth": "fastapi-template.json"
+    },
+    {
+      "id": "repo-petclinic",
+      "url": "https://github.com/spring-projects/spring-petclinic/tree/500158f732419217507c7656904b8e6aa1bcc0d6",
+      "truth": "petclinic.json"
+    },
+    {
+      "id": "repo-fastapi-realworld",
+      "url": "https://github.com/nsidnev/fastapi-realworld-example-app/tree/029eb7781c60d5f563ee8990a0cbfb79b244538c"
+    },
+    {
+      "id": "repo-spring-realworld",
+      "url": "https://github.com/gothinkster/spring-boot-realworld-example-app/tree/ee17e31aafe733d98c4853c8b9a74d7f2f6c924a"
+    }
+  ],
+  "order": [
+    "todo-api",
+    "checkout",
+    "boring-crud",
+    "repo-fastapi-template",
+    "repo-petclinic",
+    "streaming",
+    "ride-hailing",
+    "vague-blog",
+    "hr-tool",
+    "iot",
+    "search-cdc",
+    "fraud-ml",
+    "login-seq",
+    "checkout-seq",
+    "reset-seq",
+    "upload-seq",
+    "library-er",
+    "tracker-er",
+    "courses-er",
+    "order-component",
+    "notify-component",
+    "auth-component",
+    "refine-add-cache",
+    "refine-add-notify",
+    "refine-remove",
+    "refine-rename",
+    "refine-extend",
+    "refine-group",
+    "repo-fastapi-realworld",
+    "repo-spring-realworld"
+  ]
+}

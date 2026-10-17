@@ -8,7 +8,7 @@
     "build": "pnpm -r build",
     "test": "vitest run",
     "typecheck": "pnpm -r typecheck",
-    "bench:selftest": "pnpm --filter @archwoven/model build && node benchmarks/ordinary-model-floor/harness.selftest.mjs",
+    "bench:selftest": "pnpm --filter @archwoven/model build && node benchmarks/ordinary-model-floor/harness.selftest.mjs && node benchmarks/provider-eval/score.selftest.mjs",
     "build:packages": "pnpm -r --filter \"./packages/**\" build"
   },
   "devDependencies": {
