@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ReactFlow, Background, Controls, ControlButton, MiniMap, Position, type Node, type Edge, type ReactFlowInstance } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import type { SystemModel, NodeKind } from '@archwoven/model';
+import { isDetailView, type SystemModel, type NodeKind } from '@archwoven/model';
 import { layoutModel, type LayoutResult } from '../../lib/layout';
 import type { Point } from '../../lib/direct-edit';
 import { useGraphEditing, type GraphPlacement } from './useGraphEditing';
@@ -270,6 +270,7 @@ function GraphCanvas({ model, modelId, viewId, onSelect, onDeselect, busy=false,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [placed, motion]);
 
+  const detailFocus = view && isDetailView(view) ? view.focus : null;
   const decorate = (n: Node): Node => {
     if (n.type === 'boundary') return n;
     // semantic lens is a filter channel: non-matching kinds dim before any focus decoration
@@ -286,6 +287,7 @@ function GraphCanvas({ model, modelId, viewId, onSelect, onDeselect, busy=false,
     } else if (chapter) {
       cls = chapter.focus.includes(n.id) ? 'aw-chapter-focus' : 'aw-dim';
     }
+    if (!cls && detailFocus === n.id) cls = 'aw-detail-focus';
     return cls ? { ...n, className: cls } : n;
   };
 

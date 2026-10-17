@@ -3,7 +3,7 @@ import { validFullModel } from '@archwoven/model';
 import { layoutModel } from './layout';
 import { manualLayout } from './manual-layout';
 import { buildSvg } from './export-svg';
-import { validateModel } from '@archwoven/model';
+import { openDetailView, validateModel } from '@archwoven/model';
 import stressRaw from '../probes/render/stress-fixture.json';
 it('honors saved positions exactly and routes around the moved node interiors', async () => {
     const model = structuredClone(validFullModel), view = model.views.find(v => v.type === 'architecture')!;
@@ -87,4 +87,18 @@ it('bounds total routing work for irregular 80-node views without discarding con
     expect(result.nodes).toHaveLength(80);
     expect(result.edges).toHaveLength(160);
     expect(result.edges.every(e => e.points.every(p => Number.isFinite(p.x) && Number.isFinite(p.y)))).toBe(true);
+});
+it('arranges detail views automatically even when their nodes have saved overview positions', async () => {
+    const opened = openDetailView(structuredClone(validFullModel), 'svc.orders');
+    if (!opened.ok) throw new Error(opened.errors.join('; '));
+    const saved = { 'svc.orders': { x: 4000, y: -3000 }, 'gateway.api': { x: -2500, y: 900 } };
+    const model = { ...opened.model, layout: saved };
+    const auto = await layoutModel(opened.model, 'detail:svc.orders');
+    const detail = await layoutModel(model, 'detail:svc.orders');
+    expect(detail.nodes.map(n => ({ id: n.id, x: n.x, y: n.y }))).toEqual(auto.nodes.map(n => ({ id: n.id, x: n.x, y: n.y })));
+    expect(detail.warnings ?? []).toEqual([]);
+    const overview = await layoutModel(model, 'view.architecture');
+    expect(overview.nodes.find(n => n.id === 'svc.orders')).toMatchObject(saved['svc.orders']);
+    const svg = await buildSvg(model, 'detail:svc.orders');
+    expect(svg).not.toContain('4000');
 });
