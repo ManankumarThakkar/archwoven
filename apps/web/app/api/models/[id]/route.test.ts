@@ -48,7 +48,7 @@ describe('POST /api/models/:id/undo — pre-M4 shape (C2)', () => {
     const rev2 = structuredClone(validFullModel);
     rev2.revision = 2; rev2.parentId = 1;
     serverDeps.store.saveRevision('m1', rev2, 'test-sess');
-    const res = await UNDO(undoReq({ prevRevision: 1 }), ctx);
+    const res = await UNDO(undoReq({ prevRevision: 1, baseRevision: 2 }), ctx);
     expect(res.status).toBe(200);
     const { model } = (await res.json()) as { model: Record<string, unknown> };
     expect(model.boundaries).toEqual([]);

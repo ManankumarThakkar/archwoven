@@ -2,12 +2,14 @@
 import React, { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Edge, Node } from '@xyflow/react';
+import type { Edge, Node, NodeChange } from '@xyflow/react';
 import { validFullModel, type SystemModel } from '@archwoven/model';
 import { Canvas } from './Canvas';
 import { NodeFinder } from './NodeFinder';
+import * as manualRouting from '../../lib/manual-layout';
 
 const camera = vi.hoisted(() => ({ requests: [] as { bounds?: { x: number; y: number; width: number; height: number }; options: { nodes?: { id: string }[]; duration?: number }; ids: string[] }[], ids: [] as string[] }));
+const flow = vi.hoisted(() => ({ events: null as unknown as {onNodesChange:(changes:NodeChange[])=>void;onNodeDragStart:(event:unknown,node:Node)=>void;onNodeDragStop:(event:unknown,node:Node)=>Promise<void>;nodesDraggable:boolean;deleteKeyCode?:string|null} }));
 
 // Layout and React Flow own geometry, which is unavailable in a DOM simulator.
 // Keep Canvas, finder, outline, selection state, effects and DOM events real.
@@ -20,11 +22,13 @@ vi.mock('../../lib/layout', () => ({
 }));
 vi.mock('@xyflow/react', async (importOriginal) => ({
   Position: (await importOriginal<typeof import('@xyflow/react')>()).Position,
-  ReactFlow: ({ nodes, edges, onNodeClick, onEdgeClick, onInit, colorMode, children }: {
+  applyNodeChanges: (await importOriginal<typeof import('@xyflow/react')>()).applyNodeChanges,
+  ReactFlow: ({ nodes, edges, onNodeClick, onEdgeClick, onInit, colorMode, children, ...events }: {
     nodes: Node[]; edges: Edge[]; onNodeClick: (e: unknown, n: Node) => void;
     onEdgeClick: (e: unknown, edge: Edge) => void;
     onInit: (instance: unknown) => void; colorMode?: string; children: React.ReactNode;
-  }) => {
+  } & typeof flow.events) => {
+    flow.events=events;
     camera.ids = nodes.map((n) => n.id);
     React.useEffect(() => { onInit({ fitBounds: (bounds: { x: number; y: number; width: number; height: number }, options: { duration?: number }) => {
       camera.requests.push({ bounds, options, ids: [...camera.ids] }); return Promise.resolve(true);
@@ -33,7 +37,7 @@ vi.mock('@xyflow/react', async (importOriginal) => ({
       return Promise.resolve(true);
     } }); }, []);
     return <div data-flow-theme={colorMode}>
-    {nodes.map((n) => <button key={n.id} data-node={n.id} data-node-type={n.type} data-inline-shadow={n.style?.boxShadow} data-source-position={n.sourcePosition} data-target-position={n.targetPosition} className={n.className} onClick={() => onNodeClick(null, n)}>{n.id}</button>)}
+    {nodes.map((n) => <button key={n.id} data-node={n.id} data-position={JSON.stringify(n.position)} data-node-type={n.type} data-inline-shadow={n.style?.boxShadow} data-source-position={n.sourcePosition} data-target-position={n.targetPosition} className={n.className} onClick={() => onNodeClick(null, n)}>{n.id}</button>)}
     {edges.map((e) => <button key={e.id} data-edge={e.id} data-edge-type={e.type} data-route={JSON.stringify(e.data?.route)} title={String(e.label ?? '')} data-start={typeof e.markerStart === 'string' ? e.markerStart : ''} data-end={typeof e.markerEnd === 'string' ? e.markerEnd : ''} className={e.className} data-animated={String(e.animated)} onClick={() => onEdgeClick(null, e)}>{e.id}</button>)}
     {children}
   </div>;
@@ -83,6 +87,53 @@ async function renderCanvas() {
   }
   await act(async () => root.render(<Workspace />));
 }
+
+describe('persisted graph dragging',()=>{
+  it('uses lightweight geometry during pointer movement and routes on completion',async()=>{
+    const save=vi.fn(async(_positions:unknown)=>true),routing=vi.spyOn(manualRouting,'manualLayout');
+    await act(async()=>root.render(<Canvas model={model} modelId="m" viewId="v" onSelect={()=>{}} onDeselect={()=>{}} onMove={save}/>));
+    routing.mockClear();const node={id:'a',position:{x:30,y:100}} as Node;
+    await act(async()=>{flow.events.onNodeDragStart(null,node);flow.events.onNodesChange([{type:'position',id:'a',position:node.position,dragging:true}]);});
+    expect(routing).not.toHaveBeenCalled();expect(host.querySelector('[data-node="a"]')!.getAttribute('data-position')).toBe(JSON.stringify(node.position));
+    await act(async()=>{await flow.events.onNodeDragStop(null,node);});expect(routing).toHaveBeenCalledOnce();
+  });
+  it('preserves the viewport after a saved move and keeps explicit Fit View available',async()=>{
+    function Editable(){const [current,setCurrent]=useState(model);return <Canvas model={current} modelId="m" viewId="v" onSelect={()=>{}} onDeselect={()=>{}} onMove={async positions=>{setCurrent({...current,revision:current.revision+1,layout:positions});return true;}}/>;}
+    await act(async()=>root.render(<Editable/>));camera.requests=[];const node={id:'a',position:{x:30,y:100}} as Node;
+    await act(async()=>{flow.events.onNodeDragStart(null,node);await flow.events.onNodeDragStop(null,node);});
+    expect(camera.requests).toHaveLength(0);await click(button('Fit View'));expect(camera.requests).toHaveLength(1);
+  });
+  it.each([true,false])('ignores implicit deletion events even when busy=%s',async busy=>{
+    const save=vi.fn(async(_positions:unknown)=>true);
+    await act(async()=>root.render(<Canvas model={model} modelId="m" viewId="v" onSelect={()=>{}} onDeselect={()=>{}} onMove={save} busy={busy}/>));
+    await act(async()=>flow.events.onNodesChange([{type:'remove',id:'a'}]));
+    expect(host.querySelector('[data-node="a"]')).toBeTruthy();expect(save).not.toHaveBeenCalled();expect(flow.events.deleteKeyCode).toBeNull();
+  });
+  it.each([true,false])('saves all visible positions and rolls back a failed save (%s)',async accepted=>{
+    const save=vi.fn(async(_positions:unknown)=>accepted);
+    await act(async()=>root.render(<Canvas model={model} modelId="m" viewId="v" onSelect={()=>{}} onDeselect={()=>{}} onMove={save}/>));
+    const node={id:'a',position:{x:40,y:130}} as Node;
+    await act(async()=>{flow.events.onNodeDragStart(null,node);flow.events.onNodesChange([{type:'position',id:'a',position:node.position,dragging:true}]);});
+    expect(host.querySelector('[data-node="a"]')!.getAttribute('data-position')).toBe(JSON.stringify(node.position));
+    await act(async()=>{await flow.events.onNodeDragStop(null,node);});
+    expect(save).toHaveBeenCalledTimes(1);expect(save.mock.calls[0]![0]).toEqual({a:{x:40,y:130},b:{x:200,y:0},c:{x:400,y:0}});
+    expect(host.querySelector('[data-node="a"]')!.getAttribute('data-position')).toBe(JSON.stringify(accepted?node.position:{x:0,y:0}));
+  });
+  it('persists keyboard position changes and disables movement while busy',async()=>{
+    const save=vi.fn(async(_positions:unknown)=>true);
+    const show=async(busy:boolean)=>act(async()=>root.render(<Canvas model={model} modelId="m" viewId="v" onSelect={()=>{}} onDeselect={()=>{}} onMove={save} busy={busy}/>));
+    await show(false);await act(async()=>flow.events.onNodesChange([{type:'position',id:'a',position:{x:10,y:0},dragging:false}]));
+    expect(save).toHaveBeenCalledOnce();await show(true);expect(flow.events.nodesDraggable).toBe(false);
+  });
+  it('preserves positions for node ids that shadow object prototype names',async()=>{
+    const named={...model,nodes:[...model.nodes,{...model.nodes[0]!,id:'constructor'}],views:[{...model.views[0]!,nodes:['a','b','c','constructor']}]};
+    const save=vi.fn(async(_positions:unknown)=>true);
+    await act(async()=>root.render(<Canvas model={named} modelId="m" viewId="v" onSelect={()=>{}} onDeselect={()=>{}} onMove={save}/>));
+    const node={id:'a',position:{x:20,y:30}} as Node;
+    await act(async()=>{flow.events.onNodeDragStart(null,node);await flow.events.onNodeDragStop(null,node);});
+    expect((save.mock.calls[0]![0] as Record<string,unknown>)['constructor']).toEqual({x:600,y:0});
+  });
+});
 async function click(el: Element | null) {
   expect(el).toBeTruthy();
   await act(async () => (el as HTMLElement).click());

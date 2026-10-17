@@ -13,6 +13,7 @@ import { passportFor } from './passport';
 import { RefineBar } from './RefineBar';
 import { summarizeOps, pushHistory, undo, idempotencyKeyFor } from './refine-flow';
 import { buildSvg } from '../../lib/export-svg';
+import type { DirectEdit } from '../../lib/direct-edit';
 
 const STAGE_LABEL: Record<Stage, string> = {
   queued: 'Queued for a free slot',
@@ -68,6 +69,7 @@ export default function WorkspacePage() {
   const [restoring, setRestoring] = useState(true);
   const loadSequence = useRef(0);
   const jobIdRef = useRef<string | null>(null);
+  const mutationRef = useRef(false);
 
   const rememberModel = (id: string) => {
     try { sessionStorage.setItem('aw_modelId', id); } catch { /* storage can be disabled */ }
@@ -200,11 +202,13 @@ export default function WorkspacePage() {
   };
 
   const generate = async (prompt: string, view: ViewType) => {
+    if(mutationRef.current)return;
     dispatch({ type: 'GENERATE' });
     await submitGeneration('/api/generate', { prompt, view, idempotencyKey: idempotencyKeyFor(prompt, view) }, view);
   };
 
   const generateRepo = async (form: RepoForm) => {
+    if(mutationRef.current)return;
     dispatch({ type: 'GENERATE_REPO' });
     await submitGeneration('/api/repo', { ...form, view: 'architecture', idempotencyKey: idempotencyKeyFor(`${form.url}|${form.subdir ?? ''}|${form.ref ?? ''}`, 'architecture') });
   };
@@ -223,7 +227,8 @@ export default function WorkspacePage() {
   };
 
   const refine = async (instruction: string) => {
-    if (!model || !modelId) return;
+    if (!model || !modelId || mutationRef.current) return;
+    mutationRef.current=true;
     setRefining(true);
     try {
       const res = await fetch('/api/refine', {
@@ -245,25 +250,28 @@ export default function WorkspacePage() {
       }
       if (!res.ok) { setSummary(await responseMessage(res, 'Refinement failed. Please try again.')); return; }
       const { ops, model: nextModel, remaining } = (await res.json()) as { ops: EditOp[]; model: SystemModel; remaining?: number };
-      setHistory((h) => pushHistory(h, model));
+      setHistory((h) => pushHistory(h, nextModel));
       setModel(nextModel);
       setSummary(summarizeOps(ops));
       if (typeof remaining === 'number') setRemaining(remaining);
     } catch {
       setSummary('Could not refine the diagram. Check your connection before trying again.');
     } finally {
+      mutationRef.current=false;
       setRefining(false);
     }
   };
 
   const doUndo = async () => {
     const { model: prev, stack } = undo(history);
-    if (!prev || !modelId) return;
+    if (!prev || !modelId || !model || mutationRef.current || history.length<2) return;
+    mutationRef.current=true;setRefining(true);
     try {
       const res = await fetch(`/api/models/${modelId}/undo`, {
         method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ prevRevision: prev.revision }),
+        body: JSON.stringify({ prevRevision: prev.revision, baseRevision:model.revision }),
       });
+      if(res.status===409){const body=await res.json();setModel(body.model);setHistory([body.model]);setSummary('The diagram changed elsewhere. Review the latest version before undoing.');return;}
       if (!res.ok) { setSummary(await responseMessage(res, 'Undo failed. Please try again.')); return; }
       const { model: undone } = (await res.json()) as { model: SystemModel };
       setModel(undone);
@@ -272,7 +280,22 @@ export default function WorkspacePage() {
       setSelected(null);
     } catch {
       setSummary('Could not undo the change. Check your connection before trying again.');
+    } finally {
+      mutationRef.current=false;setRefining(false);
     }
+  };
+
+  const directEdit = async(action:DirectEdit):Promise<boolean> => {
+    if(!model||!modelId||mutationRef.current)return false;
+    mutationRef.current=true;setRefining(true);setSummary('Saving change…');
+    try {
+      const response=await fetch(`/api/models/${modelId}/edit`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({baseRevision:model.revision,action})});
+      if(response.status===409){const body=await response.json();const latest=SystemModelSchema.parse(body.model);setModel(latest);setHistory([latest]);setSummary('The diagram changed elsewhere. Review the latest version and try again.');return false;}
+      if(!response.ok){setSummary(await responseMessage(response,'Could not save this change. Try again.'));return false;}
+      const accepted=SystemModelSchema.parse((await response.json()).model);
+      setModel(accepted);setHistory(h=>pushHistory(h,accepted));setSummary(action.type==='rename'?'Name saved.':'Positions saved.');return true;
+    }catch{setSummary('Could not save this change. Check your connection and try again.');return false;}
+    finally{mutationRef.current=false;setRefining(false);}
   };
 
   const doExport = async (kind: 'svg' | 'png') => {
@@ -343,6 +366,7 @@ export default function WorkspacePage() {
       {cancelError && state.kind === 'running' && <div role="alert" style={{ padding: '10px 16px', color: '#fda4af' }}>{cancelError}</div>}
       <div className="workspace-shell" style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         <ControlPanel
+          locked={refining}
           running={state.kind === 'running' || restoring}
           remaining={remaining ?? pool}
           mode={mode}
@@ -365,7 +389,7 @@ export default function WorkspacePage() {
                 }}>{v.type === 'er' ? 'Data model' : v.type.replace('-', ' ')}</button>
               ))}
             </div>
-            <div style={{ flex: 1, minHeight: 0 }}><Canvas model={model} modelId={modelId ?? ''} viewId={activeView || viewTabs[0]?.id || ''} onSelect={setSelected} onDeselect={() => setSelected(null)} /></div>
+            <div style={{ flex: 1, minHeight: 0 }}><Canvas model={model} modelId={modelId ?? ''} viewId={activeView || viewTabs[0]?.id || ''} busy={refining} onMove={positions=>directEdit({type:'move',positions})} onSelect={setSelected} onDeselect={() => setSelected(null)} /></div>
             <RefineBar busy={refining} summary={summary} canUndo={history.length > 1} onRefine={refine} onUndo={doUndo} onExport={doExport} />
           </main>
         ) : (
@@ -373,7 +397,7 @@ export default function WorkspacePage() {
             {restoring ? <div role="status">Opening your workspace…</div> : <CanvasPlaceholder state={state} queuedPos={queuedPos} onReset={() => dispatch({ type: 'RESET' })} />}
           </main>
         )}
-        {showCanvas && <Inspector payload={selected ? inspectorFor(model, selected) : null} gaps={state.kind === 'partial' ? state.gaps : undefined} passport={passport} />}
+        {showCanvas && <Inspector payload={selected ? inspectorFor(model, selected) : null} gaps={state.kind === 'partial' ? state.gaps : undefined} passport={passport} busy={refining} onRename={(target,label)=>{void directEdit({type:'rename',target,label});}} />}
       </div>
     </div>
   );

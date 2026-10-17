@@ -45,6 +45,10 @@ export function applyEditOps(
     }
 
     if (o.op === 'move') {
+      if (o.target === '__proto__') {
+        errors.push(`move "${o.target}": unsupported layout key`);
+        continue;
+      }
       if (!findNode(o.target) && !findEdge(o.target)) {
         errors.push(`move "${o.target}": unknown target`);
         continue;
@@ -54,7 +58,7 @@ export function applyEditOps(
         errors.push(`move "${o.target}": patch needs numeric x and y`);
         continue;
       }
-      (m.layout ??= {})[o.target] = { x, y };
+      m.layout = { ...m.layout, [o.target]: { x, y } };
       continue;
     }
 

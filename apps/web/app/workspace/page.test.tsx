@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 
 // Layout is covered separately in Canvas tests and the real-browser pass.
-vi.mock('./Canvas', () => ({ Canvas: ({ viewId }: { viewId: string }) => <output aria-label="Rendered view">{viewId}</output> }));
+vi.mock('./Canvas', () => ({ Canvas: ({ viewId, model, onSelect }: { viewId: string; model: typeof validFullModelExtended; onSelect: (id: string) => void }) => <><output aria-label="Rendered view">{viewId}</output><output aria-label="Rendered API">{model.nodes.find(n=>n.id==='gateway.api')?.label}</output><button onClick={()=>onSelect('gateway.api')}>Inspect API</button></> }));
 const rasterizer = vi.hoisted(() => ({ ensureResvg: vi.fn(), renderPng: vi.fn() }));
 vi.mock('../../probes/render/export', () => rasterizer);
 
@@ -55,6 +55,38 @@ async function mount() {
 }
 
 const canRefine = () => !!container.querySelector('input[placeholder^="Refine:"]');
+
+describe('direct edits and revision history',()=>{
+  it('saves two names and undoes each accepted revision in order',async()=>{
+    window.history.replaceState(null,'','/workspace#model=m1');
+    let stored=structuredClone(validFullModelExtended);const revisions=new Map([[stored.revision,stored]]),undone:number[]=[];
+    transport=(input,init)=>{
+      if(input==='/api/models/m1'&&!init)return Response.json({model:stored});
+      if(input==='/api/models/m1/edit'){
+        const body=JSON.parse(String(init?.body));expect(body.baseRevision).toBe(stored.revision);
+        stored=structuredClone(stored);stored.parentId=stored.revision;stored.revision++;stored.nodes.find(n=>n.id==='gateway.api')!.label=body.action.label;revisions.set(stored.revision,stored);return Response.json({model:stored});
+      }
+      if(input==='/api/models/m1/undo'){
+        const body=JSON.parse(String(init?.body));expect(body.baseRevision).toBe(stored.revision);undone.push(body.prevRevision);
+        const prev=structuredClone(revisions.get(body.prevRevision)!);prev.parentId=stored.revision;prev.revision=stored.revision+1;stored=prev;return Response.json({model:stored});
+      }
+      return undefined;
+    };
+    await mount();await click('Inspect API');
+    await fill('input[aria-label="Element name"]','First name');await click('Save name');
+    await fill('input[aria-label="Element name"]','Second name');await click('Save name');
+    await click('↶ Undo');expect(container.querySelector('[aria-label="Rendered API"]')!.textContent).toBe('First name');
+    await click('↶ Undo');expect(undone).toEqual([2,1]);expect(container.querySelector('[aria-label="Rendered API"]')!.textContent).toBe(validFullModelExtended.nodes.find(n=>n.id==='gateway.api')!.label);
+    expect(requests).not.toContain('/api/refine');
+  });
+  it('keeps a failed rename draft and original diagram available for retry',async()=>{
+    window.history.replaceState(null,'','/workspace#model=m1');
+    transport=input=>input.endsWith('/edit')?Response.json({error:'Edit unavailable'},{status:503}):undefined;
+    await mount();await click('Inspect API');await fill('input[aria-label="Element name"]','Retry this name');await click('Save name');
+    expect(container.textContent).toContain('Edit unavailable');expect(container.querySelector<HTMLInputElement>('input[aria-label="Element name"]')!.value).toBe('Retry this name');
+    expect(container.querySelector('[aria-label="Rendered API"]')!.textContent).toBe(validFullModelExtended.nodes.find(n=>n.id==='gateway.api')!.label);
+  });
+});
 
 async function fill(selector: string, value: string) {
   const input = container.querySelector<HTMLInputElement | HTMLTextAreaElement>(selector)!;

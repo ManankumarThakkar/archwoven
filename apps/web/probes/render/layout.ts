@@ -3,6 +3,7 @@ import type { LayoutOptions, ElkNode, ElkExtendedEdge, ElkPoint } from 'elkjs';
 import type { SystemModel, View } from '@archwoven/model';
 import { entityLayout } from '../../lib/entity';
 import { systemNodeLayout, edgeCaption } from '../../lib/graph-geometry';
+import { manualLayout } from '../../lib/manual-layout';
 
 const elk = new ELK();
 
@@ -25,6 +26,8 @@ export interface LayoutResult {
   height: number;
   nodes: PlacedNode[];
   edges: RoutedEdge[];
+  bounds?: { x: number; y: number; width: number; height: number };
+  warnings?: string[];
 }
 
 /** Node box sizing: ER entities size with their fields; everything else is label-based. */
@@ -104,7 +107,7 @@ export async function layoutModel(model: SystemModel, viewId: string): Promise<L
     const caption = captions.get(id), box = edge.labels?.[0];
     return { id, points: [section.startPoint, ...(section.bendPoints ?? []), section.endPoint], ...(caption && box ? { label: { x: box.x ?? 0, y: box.y ?? 0, ...caption } } : {}) };
   });
-  return { width: layout.width ?? 0, height: layout.height ?? 0, nodes, edges: routed };
+  return manualLayout(model, view, { width: layout.width ?? 0, height: layout.height ?? 0, nodes, edges: routed });
 }
 
 /** Axis-aligned overlap count — the readability check the memo cites. */

@@ -26,6 +26,12 @@ const mkModel = (): SystemModel => ({
 const op = (o: Omit<EditOp, 'baseRevision' | 'summary'>): EditOp => ({ baseRevision: 1, summary: 't', ...o });
 
 describe('applyEditOps', () => {
+  it('rejects unsupported prototype layout keys without losing the requested position silently', () => {
+    const model=mkModel();model.nodes.push({id:'__proto__',kind:'service',label:'Prototype service',provenance:'user-specified',evidence:[]});
+    const result=applyEditOps(model,[op({op:'move',target:'__proto__',patch:{x:20,y:30}})]);
+    expect(result.ok).toBe(false);if(result.ok)return;
+    expect(result.errors.join(' ')).toContain('unsupported layout key');
+  });
   it('adds node + edge: revision+1, parentId=old, untouched layout preserved', async () => {
     const m = mkModel();
     const r = applyEditOps(m, [
