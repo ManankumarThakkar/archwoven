@@ -341,6 +341,109 @@ describe('diagram export', () => {
     expect(download[0]).toMatch(/\.svg$/);
     expect(container.textContent).toMatch(/PNG.*unavailable.*SVG/i);
   });
+
+  it('keeps the SVG object URL alive until the download has started', async () => {
+    sessionStorage.setItem('aw_modelId', 'saved-model');
+    const download = exportAssets();
+    await mount();
+    vi.useFakeTimers();
+    await click('SVG');
+    await act(async () => { await vi.waitFor(() => expect(download).toHaveLength(1)); });
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(40_000);
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:diagram-export');
+  });
+});
+
+describe('model JSON export', () => {
+  const SHA = 'd66599cceb3a151f64d45eb1cc46afe59c386c1f';
+  const privateRepository = () => {
+    const m = structuredClone(validFullModelExtended);
+    m.privacy = { classification: 'private', boundary: 'local-only' };
+    m.nodes[0]!.evidence = [{ repo: 'local/archwoven', commit: SHA, path: 'packages/jobs/src/queue.ts', lines: [1, 42] }];
+    return m;
+  };
+
+  function captureDownloads(model = validFullModelExtended) {
+    sessionStorage.setItem('aw_modelId', 'saved-model');
+    transport = (input) => input === '/api/models/saved-model' ? Response.json({ model }) : undefined;
+    const blobs: Blob[] = [];
+    vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => { blobs.push(blob as Blob); return 'blob:model-json'; });
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const names: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) { names.push(this.download); });
+    return { blobs, names };
+  }
+  const button = (text: string) => [...container.querySelectorAll('button')].find((b) => b.textContent?.trim() === text);
+  const press = async (text: string) => { const b = button(text); expect(b, `Button ${text}`).toBeDefined(); await act(async () => b!.click()); };
+
+  it('downloads the exact saved model without any server call or rasterizing', async () => {
+    const { blobs, names } = captureDownloads();
+    await mount();
+    const before = requests.length;
+    await press('JSON');
+    await act(async () => { await vi.waitFor(() => expect(names).toHaveLength(1)); });
+    expect(names[0]).toBe('archwoven-e-commerce-platform-r1.json');
+    expect(blobs[0]!.type).toBe('application/json');
+    expect(JSON.parse(await blobs[0]!.text())).toEqual(validFullModelExtended);
+    expect(requests.slice(before)).toEqual([]);
+    expect(rasterizer.renderPng).not.toHaveBeenCalled();
+    expect(container.textContent).toContain('JSON downloaded.');
+  });
+
+  it('exports JSON for a valid model that has no views to draw', async () => {
+    const model = { ...structuredClone(validFullModelExtended), views: [] };
+    const { blobs, names } = captureDownloads(model);
+    await mount();
+    await press('JSON');
+    await act(async () => { await vi.waitFor(() => expect(names).toHaveLength(1)); });
+    expect(JSON.parse(await blobs[0]!.text()).views).toEqual([]);
+  });
+
+  it('offers no evidence-free copy or source notice when evidence carries only notes', async () => {
+    captureDownloads();
+    await mount();
+    expect(button('JSON')).toBeDefined();
+    expect(button('JSON (no evidence)')).toBeUndefined();
+    expect(container.textContent).not.toMatch(/repository, commit and file references/);
+  });
+
+  it('warns before a private full download and offers a copy without source references', async () => {
+    const model = privateRepository();
+    const { blobs, names } = captureDownloads(model);
+    await mount();
+    const notice = container.querySelector('[role="note"]');
+    expect(notice?.textContent).toContain('Full JSON includes repository, commit and file references (local/archwoven).');
+    expect(notice?.textContent).toContain('names and IDs may still mention files');
+    expect(button('JSON (no evidence)')?.getAttribute('aria-describedby')).toBe(notice?.id);
+    await press('JSON (no evidence)');
+    await act(async () => { await vi.waitFor(() => expect(names).toHaveLength(1)); });
+    expect(names[0]).toBe('archwoven-e-commerce-platform-r1-no-evidence.json');
+    const text = await blobs[0]!.text();
+    expect(text).not.toContain(SHA);
+    expect(text).not.toContain('local/archwoven');
+    expect(JSON.parse(text).nodes[0].evidence).toEqual([]);
+    expect(container.textContent).toContain('JSON without evidence downloaded.');
+  });
+
+  it('explains the evidence-free copy for public repository maps without a private warning', async () => {
+    const model = privateRepository();
+    model.privacy = { classification: 'public', boundary: 'external-allowed' };
+    captureDownloads(model);
+    await mount();
+    const notice = container.querySelector('[role="note"]');
+    expect(notice?.textContent).not.toContain('Full JSON includes');
+    expect(notice?.textContent).toContain('names and IDs may still mention files');
+    expect(button('JSON (no evidence)')).toBeDefined();
+  });
+
+  it('treats a local-only boundary as private even when classification says public', async () => {
+    const model = privateRepository();
+    model.privacy = { classification: 'public', boundary: 'local-only' };
+    captureDownloads(model);
+    await mount();
+    expect(container.querySelector('[role="note"]')?.textContent).toContain('Full JSON includes repository, commit and file references (local/archwoven).');
+  });
 });
 
 

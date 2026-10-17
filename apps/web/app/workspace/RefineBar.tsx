@@ -1,18 +1,24 @@
 'use client';
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
+
+export type ExportKind = 'svg' | 'png' | 'json' | 'json-no-evidence';
 
 export function RefineBar({
-  busy, summary, canUndo, onRefine, onUndo, onExport,
+  busy, summary, canUndo, onRefine, onUndo, onExport, sources,
 }: {
   busy: boolean;
   summary: string;
   canUndo: boolean;
   onRefine: (instruction: string) => void;
   onUndo: () => void;
-  onExport: (kind: 'svg' | 'png') => void;
+  onExport: (kind: ExportKind) => void;
+  /** Source references in the model's evidence; null when evidence carries none. */
+  sources: { private: boolean; repos: string[] } | null;
 }) {
   const [instruction, setInstruction] = useState('');
+  const noteId = useId();
+  const exportButton = { padding: '8px 12px', borderRadius: 8, border: '1px solid #334155', background: 'transparent', color: '#e5e7eb', cursor: 'pointer' } as const;
   return (
     <div className="aw-refine-bar" aria-label="Refine and export">
       <input aria-label="Refinement instruction" value={instruction} onChange={(e) => setInstruction(e.target.value)} disabled={busy}
@@ -24,8 +30,14 @@ export function RefineBar({
       {summary && <span style={{ fontSize: 12, color: '#93c5fd', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={summary}>{summary}</span>}
       <button onClick={onUndo} disabled={busy || !canUndo} title="Undo last change"
         style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #334155', background: 'transparent', color: '#e5e7eb', cursor: canUndo ? 'pointer' : 'default', opacity: canUndo ? 1 : 0.4 }}>↶ Undo</button>
-      <button disabled={busy} onClick={() => onExport('svg')} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #334155', background: 'transparent', color: '#e5e7eb', cursor: 'pointer' }}>SVG</button>
-      <button disabled={busy} onClick={() => onExport('png')} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #334155', background: 'transparent', color: '#e5e7eb', cursor: 'pointer' }}>PNG</button>
+      <button disabled={busy} onClick={() => onExport('svg')} style={exportButton}>SVG</button>
+      <button disabled={busy} onClick={() => onExport('png')} style={exportButton}>PNG</button>
+      <button disabled={busy} onClick={() => onExport('json')} title="Download the saved model as JSON" aria-describedby={sources ? noteId : undefined} style={exportButton}>JSON</button>
+      {sources && <button disabled={busy} onClick={() => onExport('json-no-evidence')} title="Download the model JSON without evidence records" aria-describedby={noteId} style={exportButton}>JSON (no evidence)</button>}
+      {sources && <p id={noteId} role="note" style={{ flexBasis: '100%', margin: 0, fontSize: 12, color: '#94a3b8' }}>
+        {sources.private && <>Full JSON includes repository, commit and file references{sources.repos.length ? ` (${sources.repos.join(', ')})` : ''}. </>}
+        No-evidence JSON removes evidence records; names and IDs may still mention files.
+      </p>}
     </div>
   );
 }
