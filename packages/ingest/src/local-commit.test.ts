@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -20,6 +20,40 @@ const tree = () => {
 };
 
 describe('local commit evidence uses actual git objects', () => {
+  it('reads the selected clone when its mounted owner differs from the server user', async () => {
+    const { dir, sha } = tree(), other = tree(), bin = tmp();
+    const untrustedEnv = { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' };
+    const realGit = execFileSync('which', ['git'], { encoding: 'utf8' }).trim();
+    const wrapper = join(bin, 'git');
+    // Inject Git's ownership simulation after gitEnv sanitizes inherited GIT_ variables.
+    // All commands still run the real Git executable against real commit objects.
+    writeFileSync(wrapper, `#!${process.execPath}
+const { spawnSync } = require('node:child_process');
+const result = spawnSync(${JSON.stringify(realGit)}, process.argv.slice(2), {
+  env: { ...process.env, GIT_TEST_ASSUME_DIFFERENT_OWNER: '1' }, stdio: 'inherit',
+});
+process.exit(result.status ?? 1);
+`, { mode: 0o755 });
+    vi.stubEnv('PATH', `${bin}:${process.env.PATH}`);
+    try {
+      expect(() => execFileSync(wrapper, ['-C', dir, 'rev-parse', 'HEAD'], { env: untrustedEnv, stdio: 'pipe' })).toThrow(/dubious ownership/);
+      await expect(gitRevParse(dir)).resolves.toBe(sha);
+      const result = await ingestLocal(dir, deps, {
+        subdir: 'api', caps: { maxFiles: 1, maxTotalBytes: 1000, maxFileBytes: 1000 },
+      });
+      expect(result.ok, JSON.stringify(result)).toBe(true);
+      if (result.ok) {
+        expect(result.sha).toBe(sha);
+        expect(result.filesScanned).toBe(1);
+        expect(result.fragment.nodes.map(node => node.label)).toEqual(['Committed']);
+      }
+      // The import must not leave persistent trust for unrelated clones.
+      expect(() => execFileSync(wrapper, ['-C', other.dir, 'rev-parse', 'HEAD'], { env: untrustedEnv, stdio: 'pipe' })).toThrow(/dubious ownership/);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('analyzes committed content while ignoring staged, unstaged and untracked replacements', async () => {
     const { dir, sha } = tree();
     writeFileSync(join(dir, 'api/main.py'), app('Staged'));

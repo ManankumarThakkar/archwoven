@@ -25,7 +25,9 @@ function gitReader(dir: string, signal?: AbortSignal) {
   };
   return async (args: string[], maxBuffer = METADATA_LIMIT, input?: string): Promise<Buffer> => {
     check();
-    const pending = execFileP('git', ['--no-replace-objects', '--literal-pathspecs', '-c', 'protocol.allow=never', '-c', 'core.hooksPath=/dev/null', ...args], {
+    // A read-only container mount can retain a different owner's UID. Trust only
+    // this identity-checked clone for this command, never global Git configuration.
+    const pending = execFileP('git', ['--no-replace-objects', '--literal-pathspecs', '-c', `safe.directory=${dir}`, '-c', 'protocol.allow=never', '-c', 'core.hooksPath=/dev/null', ...args], {
       cwd: dir, env: gitEnv(), encoding: 'buffer', timeout: 10000, maxBuffer, signal,
     });
     // Only fixed-format object ids enter the batch protocol, never source paths.
