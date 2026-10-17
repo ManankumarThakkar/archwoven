@@ -31,10 +31,11 @@ Completed foundation: PR #11 clean-download instructions; PR #12 authoritative e
 | 20a | Workspace fixes: refusal text, camera on resize, 44 px controls, pasted links | Merged to main as PR #37; verified |
 | 20b | Include Suite A review images in fresh checkouts, verify their integrity and correct the review instructions | Merged to main as PR #38; named human verdicts still pending |
 | 20c | Preserve inferred internals and parent context in SVG/PNG detail exports | Merged to main as PR #39; automated checks and actual Chrome SVG/PNG delivery verified |
-| 20d | Safe Docker build context, Compose inference routing and native loopback defaults | PR #40, landing on main via PR #43; real Compose CI smoke passed, successful container model inference remains separate |
-| 20e | Apply live same-diagram links and clear stale interaction state | PR #41, landing on main via PR #43; regressions and real browser view/focus/lens/route checks passed |
-| 20f | Prevent misleading boundary enclosures, including edit previews and rollback | PR #42, landing on main via PR #43; geometry/raster/viewer tests passed; bounded warning disclosure |
-| 20g | Clean-install acceptance, current setup/docs and the already selected MIT license | PR open after PR #43; clean install reproduced independently; record in RELEASE-ACCEPTANCE.md |
+| 20d | Safe Docker build context, Compose inference routing and native loopback defaults | Merged to main via PR #43 (reviewed as PR #40); real Compose CI smoke passed, successful container model inference remains separate |
+| 20e | Apply live same-diagram links and clear stale interaction state | Merged to main via PR #43 (reviewed as PR #41); regressions and real browser view/focus/lens/route checks passed |
+| 20f | Prevent misleading boundary enclosures, including edit previews and rollback | Merged to main via PR #43 (reviewed as PR #42); geometry/raster/viewer tests passed; bounded warning disclosure |
+| 20g | Clean-install acceptance, current setup/docs and the already selected MIT license | Merged to main as PR #44; clean install reproduced independently; record in RELEASE-ACCEPTANCE.md |
+| 20h | Cross-browser and accessibility acceptance: downloads, axe and keyboard in Chromium and WebKit | PR open against main; Firefox could not launch here, Safari app and assistive technology remain |
 
 Known gaps not yet fixed are tracked in one place: [OPEN-GAPS.md](OPEN-GAPS.md). Update it in every PR that finds or fixes a gap.
 
