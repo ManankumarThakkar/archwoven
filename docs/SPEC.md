@@ -201,8 +201,8 @@ R01→§12 ranges · R02→§6 · R03→§3A/6 · R04→§3/8 · R05→§6 · R0
 ### Quota model — weighted credits, server-enforced
 | Tier | Daily credit pool | Weights | Notes |
 |---|---|---|---|
-| Anonymous (session cookie + IP) | **6 credits/24h** | generation = 1 · repo analysis = 2 · refinement patch = 0.25 · view switch / layout / export / example click = **0** | Cookie session id minted at first visit; IP as secondary bucket key |
-| GitHub signed-in | **30 credits/24h** | same | Identity = attribution = higher trust |
+| Anonymous (session cookie + IP) | **6 credits/24h** per session, **24 credits/24h** per network address | generation = 1 · repo analysis = 2 · refinement patch = 0.25 · view switch / layout / export / example click = **0** | Cookie session id minted at first visit; the network pool (the address appended by the nearest proxy) stops session-minting scripts; unknown addresses fall back to the session pool only |
+| GitHub signed-in | **Deferred** (30 credits/24h when built) | same | Not in the first release: hosted GitHub sign-in is excluded (M6 scope) |
 | Local/private mode | **no quotas** | — | User's own key/hardware; quota code compiled out |
 
 Refinements are deliberately nearly-free: the core product loop (generate → refine → export) must not feel paywalled mid-flow.
@@ -213,11 +213,12 @@ Refinements are deliberately nearly-free: the core product loop (generate → re
 - **Global stop-loss:** $15/day across all users → generation pauses with an honest maintenance message (never a silent failure). Typical healthy traffic: <$2/day.
 - **Concurrency cap:** N parallel model calls; excess jobs queue with visible position.
 
-### Abuse ladder (metadata-only logging — never content)
-1. Normal → 2. anomalous pattern (script-like cadence, no UI events) → throttle + JS-challenge once → 3. confirmed abuse → block session+IP, 24h → 4. repeat → permanent. No CAPTCHA on the happy path — recruiters never see friction; challenges only at step 2. Bots that pass step 2 still hit credit + stop-loss ceilings.
+### Abuse ladder (metadata-only logging — never content) — deferred 2026-10-17
+Challenges and temporary/permanent blocks are **not** in the first release. Designing them without traffic data risks punishing real users, and the enforced controls already bound cost: per-session and per-network credit pools, burst limits, concurrency slots, the per-request token gate and the $15/day stop-loss. Revisit when any of these appear in metering: the stop-loss trips on more than one day in a week, a single network exhausts its pool on most days, or burst refusals exceed 5% of model-calling requests. When built, keep the original shape: normal → anomalous pattern (throttle + one challenge) → confirmed abuse (24 h block) → repeat (permanent), with no CAPTCHA on the happy path.
 
 ### UX copy (clear, friendly, never punitive)
-- Credits exhausted: *"You've used today's free generations — resets in 7h 23m. Sign in with GitHub for 30/day."* (live reset countdown, sign-in CTA)
+- Credits exhausted: *"You've used today's free credits. They reset in 7h 23m. You can still view, rearrange, rename and export your diagrams."* No sign-in offer until a sign-in tier exists.
+- Network pool exhausted: *"Today's free credits for your network are used up. They reset in 7h 23m. You can still view, rearrange, rename and export your diagrams."
 - Stop-loss tripped: *"Generations are temporarily paused while we stay within today's budget — try again tomorrow."*
 - Oversized prompt: *"That description is bigger than a single diagram can hold — try focusing on one system or flow."*
 - Token-meter chip shows the user what their task actually cost in tokens — efficiency as a visible product behavior, not a hidden tax.

@@ -119,3 +119,37 @@ describe('session cookie transport', () => {
     }
   });
 });
+
+describe('client address for abuse limits', () => {
+  it.each([
+    ['the address appended by the nearest proxy', '198.51.100.1, 203.0.113.7', '203.0.113.7'],
+    ['a single forwarded address', '203.0.113.7', '203.0.113.7'],
+    ['an IPv6 address', '2001:db8::1', '2001:db8::1'],
+    ['surrounding whitespace', '  203.0.113.7  ', '203.0.113.7'],
+  ])('uses %s', async (_name, header, expected) => {
+    const { clientIp } = await import('./server');
+    expect(clientIp(new Headers({ 'x-forwarded-for': header }))).toBe(expected);
+  });
+
+  it.each([
+    ['a missing header', undefined],
+    ['an empty header', ''],
+    ['a non-address value', 'unknown'],
+    ['a hostname', 'evil.example'],
+  ])('reports no address for %s, so no shared bucket is formed', async (_name, header) => {
+    const { clientIp } = await import('./server');
+    expect(clientIp(new Headers(header === undefined ? {} : { 'x-forwarded-for': header }))).toBeNull();
+  });
+});
+
+describe('quota messages', () => {
+  it('never advertises a sign-in that does not exist, and says what still works', async () => {
+    const { quotaMessage } = await import('./server');
+    const resetAt = Date.now() + (7 * 60 + 23) * 60_000 + 10_000;
+    expect(quotaMessage({ reason: 'credits-exhausted', resetAt })).toBe("You've used today's free credits. They reset in 7h 23m. You can still view, rearrange, rename and export your diagrams.");
+    expect(quotaMessage({ reason: 'network-credits-exhausted', resetAt })).toBe("Today's free credits for your network are used up. They reset in 7h 23m. You can still view, rearrange, rename and export your diagrams.");
+    expect(quotaMessage({ reason: 'stop-loss' })).toMatch(/temporarily paused/);
+    expect(quotaMessage({ reason: 'burst' })).toMatch(/Try again in a minute/);
+    for (const reason of ['credits-exhausted', 'network-credits-exhausted'] as const) expect(quotaMessage({ reason, resetAt })).not.toMatch(/sign in|github/i);
+  });
+});

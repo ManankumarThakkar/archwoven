@@ -139,7 +139,7 @@ describe('POST /api/repo', () => {
     expect(blocked.status).toBe(429);
     const body = (await blocked.json()) as { reason: string; message: string };
     expect(body.reason).toBe('credits-exhausted');
-    expect(body.message).toMatch(/resets in/i);
+    expect(body.message).toMatch(/reset in \d+h \d+m/);
   });
 
   it('SSRF-shaped URL → 400 before any quota reservation', async () => {

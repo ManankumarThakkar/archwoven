@@ -77,8 +77,8 @@ describe('POST /api/generate', () => {
       expect(res.status).toBe(429);
       const body = (await res.json()) as { reason: string; message: string; resetAt: number };
       expect(body.reason).toBe('credits-exhausted');
-      expect(body.message).toMatch(/resets in \d+h \d+m/);
-      expect(body.message).toMatch(/GitHub/);
+      expect(body.message).toMatch(/reset in \d+h \d+m/);
+      expect(body.message).not.toMatch(/sign in|GitHub/i); // no sign-in tier exists in this release
     } finally {
       delete process.env.ARCHWOVEN_BURST_WINDOW_SEC;
     }
@@ -392,5 +392,25 @@ describe('clarification prompts do not outlive their diagram', () => {
   it('keeps the questions when the continuation fails, so the user can retry', async () => {
     const { original } = await askThenContinue(async () => ({ ok: false as const, errors: ['provider down'], usage }));
     expect(serverDeps.store.getJob(original)?.clarification?.prompt).toBe('Our internal billing design.');
+  });
+});
+
+describe('network credit pool through the route', () => {
+  it.runIf(QUOTA)('cannot be escaped by minting sessions or rotating a spoofed forwarded prefix', async () => {
+    const prevWindow = process.env.ARCHWOVEN_BURST_WINDOW_SEC;
+    process.env.ARCHWOVEN_BURST_WINDOW_SEC = '0.001';
+    try {
+      const { IP_POOL } = await import('@archwoven/jobs');
+      const fresh = (i: number) => new Request('http://localhost/api/generate', { method: 'POST', headers: { 'content-type': 'application/json', 'x-forwarded-for': `10.0.0.${i % 250}, 203.0.113.7` }, body: JSON.stringify({ prompt: `shop ${i}`, view: 'architecture' }) });
+      for (let i = 0; i < IP_POOL; i++) { await new Promise(r => setTimeout(r, 2)); expect((await POST(fresh(i))).status, `request ${i}`).toBe(202); }
+      await new Promise(r => setTimeout(r, 2));
+      const refused = await POST(fresh(IP_POOL));
+      expect(refused.status).toBe(429);
+      const body = await refused.json();
+      expect(body.reason).toBe('network-credits-exhausted');
+      expect(body.message).toMatch(/^Today's free credits for your network are used up\./);
+    } finally {
+      if (prevWindow === undefined) delete process.env.ARCHWOVEN_BURST_WINDOW_SEC; else process.env.ARCHWOVEN_BURST_WINDOW_SEC = prevWindow;
+    }
   });
 });

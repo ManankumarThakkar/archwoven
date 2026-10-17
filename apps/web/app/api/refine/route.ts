@@ -2,7 +2,7 @@ import { reserve, refundCredits, recordUsage } from '@archwoven/jobs';
 import { applyEditOps, sameModelContent, type ViewType } from '@archwoven/model';
 import {
   serverDeps, readOrCreateSession, sessionCookie, tierOf,
-  creditsExhaustedCopy, STOP_LOSS_COPY, BURST_COPY,
+  quotaMessage, clientIp,
   llmNotConfigured, LLM_NOT_CONFIGURED_COPY,
 } from '../../lib/server';
 import { withSlot } from '../../lib/llm-limiter';
@@ -47,9 +47,9 @@ export async function POST(req: Request) {
   const tier = tierOf(sessionId);
   const day = new Date().toISOString().slice(0, 10);
   const burstWindowSec = Number(process.env.ARCHWOVEN_BURST_WINDOW_SEC ?? 60);
-  const quota = reserve(serverDeps.store, { sessionId, tier, action: 'refine', ip: req.headers.get('x-forwarded-for') ?? 'unknown', burstWindowSec });
+  const quota = reserve(serverDeps.store, { sessionId, tier, action: 'refine', ip: clientIp(req.headers), burstWindowSec });
   if (!quota.ok) {
-    const message = quota.reason === 'credits-exhausted' ? creditsExhaustedCopy(quota.resetAt ?? 0) : quota.reason === 'stop-loss' ? STOP_LOSS_COPY : BURST_COPY;
+    const message = quotaMessage(quota);
     return Response.json({ reason: quota.reason, message, resetAt: quota.resetAt }, { status: 429, headers });
   }
 

@@ -37,12 +37,12 @@ describe('workspace state machine', () => {
 
   it('quota-blocked carries the reset countdown and the honest server copy', () => {
     const resetAt = Date.now() + 3_600_000;
-    const s = run([{ type: 'QUOTA_BLOCKED', reason: 'credits-exhausted', resetAt, message: "You've used today's free generations — resets in 1h 0m. Sign in with GitHub for 30/day." }]);
+    const s = run([{ type: 'QUOTA_BLOCKED', reason: 'credits-exhausted', resetAt, message: "You've used today's free credits. They reset in 1h 0m. You can still view, rearrange, rename and export your diagrams." }]);
     expect(s.kind).toBe('quota-blocked');
     if (s.kind === 'quota-blocked') {
       expect(s.reason).toBe('credits-exhausted');
       expect(s.resetAt).toBe(resetAt);
-      expect(s.message).toMatch(/resets in/);
+      expect(s.message).toMatch(/reset in \d+h \d+m/);
     }
   });
 

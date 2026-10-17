@@ -112,6 +112,8 @@ export function openStore(path = 'data/archwoven.db', opts: { now?: () => Date }
   // dev-scratch DBs created before the gaps column: add it in place
   try { db.exec('ALTER TABLE jobs ADD COLUMN gaps TEXT'); } catch { /* column exists */ }
   try { db.exec('ALTER TABLE jobs ADD COLUMN clarification TEXT'); } catch { /* column exists */ }
+  // Additive: the network a session's daily credits were last reserved from (§15 secondary bucket).
+  try { db.exec('ALTER TABLE credits ADD COLUMN ip TEXT'); } catch { /* column exists */ }
 
   // Additive migration: keep historical costs and saved diagrams untouched.
   const hasTask = () => (db.prepare('PRAGMA table_info(call_log)').all() as { name: string }[]).some(column => column.name === 'task_json');
@@ -240,11 +242,28 @@ export function openStore(path = 'data/archwoven.db', opts: { now?: () => Date }
      * Returns the new used total, or null if the pool would be crossed. The check
      * and the spend are one statement — no read-then-write window to race through.
      */
-    reserveCredits(sessionId: string, day: string, weight: number, pool: number): number | null {
-      const r = db.prepare(
+    reserveCredits(sessionId: string, day: string, weight: number, pool: number, network?: { ip: string; pool: number }): number | null | 'network' {
+      const reserveSession = () => (db.prepare(
         'INSERT INTO credits (session_id, day, used) VALUES (?, ?, ?) ON CONFLICT(session_id, day) DO UPDATE SET used = used + excluded.used WHERE used + excluded.used <= ? RETURNING used',
-      ).get(sessionId, day, weight, pool) as { used: number } | undefined;
-      return r?.used ?? null;
+      ).get(sessionId, day, weight, pool) as { used: number } | undefined)?.used ?? null;
+      if (!network) return reserveSession();
+      // One transaction: fresh sessions from the same network cannot race past its pool.
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        const used = reserveSession();
+        if (used === null) { db.exec('ROLLBACK'); return null; }
+        db.prepare('UPDATE credits SET ip = ? WHERE session_id = ? AND day = ?').run(network.ip, sessionId, day);
+        const total = (db.prepare('SELECT COALESCE(SUM(used), 0) AS total FROM credits WHERE ip = ? AND day = ?').get(network.ip, day) as { total: number }).total;
+        if (total > network.pool) { db.exec('ROLLBACK'); return 'network'; }
+        db.exec('COMMIT');
+        return used;
+      } catch (error) {
+        db.exec('ROLLBACK');
+        throw error;
+      }
+    },
+    networkCreditsUsed(ip: string, day: string): number {
+      return (db.prepare('SELECT COALESCE(SUM(used), 0) AS total FROM credits WHERE ip = ? AND day = ?').get(ip, day) as { total: number }).total;
     },
     refundCredits(sessionId: string, day: string, weight: number): number {
       const r = db.prepare(

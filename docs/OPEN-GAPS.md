@@ -8,8 +8,6 @@ Last reviewed: 2026-10-17, after PR #30 (main `2fc0168`). Release tasks refer to
 
 | Gap | User impact | Found in | Planned |
 |---|---|---|---|
-| Exhausted-credit message advertises a GitHub sign-in that does not exist | Misleading copy for hosted users | Post-merge audit | Task 18 |
-| SPEC §15 still describes anomaly challenges and bans that are deliberately deferred | Spec and product disagree | Release decisions (2026-10-17) | Task 18 (narrow SPEC) |
 | Subdirectory paths with `@` segments are rejected (`packages/@scope/name`) by both `safeSubdir` and the URL parser | Scoped-package folders in JavaScript monorepos cannot be imported | Task 17 live check | Task 15 |
 | FastAPI custom router binding, `yield`-based `Depends`, Spring method-level `@RequestMapping` with multiple paths, endpoint scoring | Some framework routes and dependencies are missed | M1 ledger; post-merge audit | Task 15 |
 | No hand-checked ground truth; extraction precision/recall is unmeasured | Coverage claims cannot be quantified | Post-merge audit | Task 15 |
@@ -24,7 +22,7 @@ Last reviewed: 2026-10-17, after PR #30 (main `2fc0168`). Release tasks refer to
 | Safari/Firefox download behaviour (deferred object-URL revoke) unverified | Exports may fail on WebKit | Task 9 | Task 20 |
 | Physical touch, screen-reader and cross-browser acceptance not run | Accessibility and device support unproven | All UI tasks | Task 20 |
 | Docker Compose runtime never run (loopback port binding, git in image, repos mount) | Private-mode Docker path is unverified | Tasks 11 and 13 | Task 20 |
-| Clean-install rerun and documentation/file cleanup (historical plans, scratch references) | Repository not release-tidy | Post-merge audit | Task 20 |
+| Clean-install rerun and documentation/file cleanup (historical plans, scratch references, stale ignored `apps/web/.next-*` build folders from earlier verification runs) | Repository not release-tidy | Post-merge audit; task 18 | Task 20 |
 
 ## Not yet scheduled (needs a decision)
 
@@ -35,6 +33,8 @@ Last reviewed: 2026-10-17, after PR #30 (main `2fc0168`). Release tasks refer to
 | Schema v1 stores manual positions in one global node-id map | Dragging a node in one view moves it in other graph views | Tasks 6 and 8 | Disclosed in the orientation control; a per-view layout needs schema v2 |
 | Removing a link between two source-backed nodes reports both the edge and the path refusal | Accurate but verbose message | Task 10b | Copy refinement only |
 | Branch names containing `/` are ambiguous with subdirectories in GitHub URLs | Such branches must be given as a commit SHA | M3 | Documented in the URL parser |
+| Hosted IP-based limits depend on one proxy appending `X-Forwarded-For` | Without it, scripted cookie-less requests are bounded only by burst-per-session and the daily stop-loss | Task 18 | Deployment requirement; document with the hosted deployment guide |
+| Abuse escalation ladder (challenges, temporary and permanent blocks) | Determined abusers can still consume up to the stop-loss each day | Release decisions; SPEC §15 | Deferred until metering shows the revisit triggers in SPEC §15 |
 | Jobs are coordinated in a single process | Horizontal scaling would need a distributed registry | Cancellation follow-up | Deployment limitation |
 | The stop-loss cannot include usage a provider never reported, or usage lost when a process dies | Spend estimate can undercount | Task 14 | Provider invoice is authoritative |
 | Secret detection is best-effort; novel or split credential formats can evade it | A rare secret could reach the hosted provider | Task 17; threat model T4 | Residual risk, accepted |
