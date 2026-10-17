@@ -1,6 +1,6 @@
 # Release completion tracker
 
-Work is authorized sequentially against the approved first-release scope in SPEC.md and POST-MERGE-AUDIT.md. Each row gets a focused branch/PR, regression tests, appropriate real-provider/browser checks and a recorded result. Do not merge automatically. Do not specialize behavior for one sample repository. Preserve failures and existing saved diagrams. Cleanup follows final acceptance, not an assumption that passing unit tests means complete.
+Work is authorized against the approved first-release scope in SPEC.md and POST-MERGE-AUDIT.md. Each row gets a focused branch/PR, regression tests, appropriate real-provider/browser checks and a recorded result. The owner authorized stacked PRs on 2026-10-17 so independent fixes can proceed without waiting for merges. Do not merge automatically. Do not specialize behavior for one sample repository. Preserve failures and existing saved diagrams. Cleanup follows final acceptance, not an assumption that passing unit tests means complete.
 
 Completed foundation: PR #11 clean-download instructions; PR #12 authoritative extraction inventory and local file-read safety. Both merged.
 
@@ -31,6 +31,7 @@ Completed foundation: PR #11 clean-download instructions; PR #12 authoritative e
 | 20a | Workspace fixes: refusal text, camera on resize, 44 px controls, pasted links | Merged to main as PR #37; verified |
 | 20b | Include Suite A review images in fresh checkouts, verify their integrity and correct the review instructions | Merged to main as PR #38; named human verdicts still pending |
 | 20c | Preserve inferred internals and parent context in SVG/PNG detail exports | Export renderer fixed with SVG and raster regression checks; browser download acceptance still pending |
+| 20d | Safe Docker build context, Compose inference routing and native loopback defaults | Fixes prepared; real Compose smoke added to CI, successful model inference remains a separate gate |
 
 Known gaps not yet fixed are tracked in one place: [OPEN-GAPS.md](OPEN-GAPS.md). Update it in every PR that finds or fixes a gap.
 

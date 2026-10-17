@@ -91,8 +91,23 @@ docker compose up --build          # web on 127.0.0.1:3000 + ollama on 127.0.0.1
 docker compose exec ollama ollama pull gpt-oss:20b
 ```
 
-Or without Docker: `brew install ollama && ollama pull gpt-oss:20b`, then
-`ARCHWOVEN_MODE=local pnpm build && ARCHWOVEN_MODE=local ARCHWOVEN_DEMO_ACK=1 pnpm start:local`.
+The image build excludes environment files, host dependencies, generated builds and
+runtime databases. Dependencies and application output are built inside the image.
+CI exercises actual Compose startup, read-only clone mounting, request isolation and
+the uninstalled-model failure path; it does not download the model or establish inference quality.
+
+Or without Docker, install dependencies using the Development steps above, install
+Ollama, and start its service in a separate terminal (`ollama serve`, if not already
+running). Once `curl http://127.0.0.1:11434/api/tags` succeeds, run:
+
+```bash
+ollama pull gpt-oss:20b
+ARCHWOVEN_MODE=local pnpm build
+ARCHWOVEN_MODE=local ARCHWOVEN_DEMO_ACK=1 pnpm start:local
+```
+
+Native development and `start:local` bind to `127.0.0.1` by default. Docker listens
+inside its container and publishes only loopback ports on the host.
 `OLLAMA_MODEL` overrides the model (e.g. `gpt-oss:120b` on ≥64 GB machines).
 
 To map a private repository, choose **Import repository → Local folder** and enter the full

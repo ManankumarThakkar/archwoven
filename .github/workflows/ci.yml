@@ -35,4 +35,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       # The local-deployment image must build (§8); ollama is a separate service, not baked in.
-      - run: docker build -t archwoven-local .
+      - name: Build from a development-shaped context
+        run: |
+          mkdir -p apps/web/node_modules apps/web/.next-context-canary packages/model/dist
+          printf 'context-only\n' > apps/web/.env.docker-context-canary
+          printf 'context-only\n' > apps/web/node_modules/archwoven-context-canary
+          printf 'context-only\n' > apps/web/.next-context-canary/archwoven-context-canary
+          printf 'context-only\n' > packages/model/dist/archwoven-context-canary
+          docker build -t archwoven-local .
+      - name: Check secrets and host-generated artifacts stayed outside the image
+        run: |
+          docker run --rm archwoven-local node -e '
+            const fs = require("node:fs");
+            for (const path of ["apps/web/.env.docker-context-canary", "apps/web/node_modules/archwoven-context-canary", "apps/web/.next-context-canary/archwoven-context-canary", "packages/model/dist/archwoven-context-canary"])
+              if (fs.existsSync(path)) throw new Error("Host-only build input leaked into image: " + path);
+          '
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Exercise actual Compose startup, private boundary and local repository failure recovery
+        run: node scripts/compose-smoke.mjs
