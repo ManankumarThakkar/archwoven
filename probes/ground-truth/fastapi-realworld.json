@@ -1,0 +1,33 @@
+{
+  "repo": "nsidnev/fastapi-realworld-example-app",
+  "sha": "029eb7781c60d5f563ee8990a0cbfb79b244538c",
+  "framework": "fastapi",
+  "heldOut": true,
+  "scope": ["endpoints"],
+  "method": "Held out: written from the source at the pinned commit before the extractor was ever run on this repository. Endpoints only. The application prefix settings.api_prefix is declared as \"/api\" in app/core/settings/app.py:27 and no environment-specific settings class overrides it.",
+  "excluded": [],
+  "nodes": [],
+  "edges": [],
+  "endpoints": [
+    ["POST", "/api/users/login", "app/api/routes/authentication.py:22"],
+    ["POST", "/api/users", "app/api/routes/authentication.py:56"],
+    ["GET", "/api/user", "app/api/routes/users.py:18"],
+    ["PUT", "/api/user", "app/api/routes/users.py:38"],
+    ["GET", "/api/profiles/{username}", "app/api/routes/profiles.py:16"],
+    ["POST", "/api/profiles/{username}/follow", "app/api/routes/profiles.py:27"],
+    ["DELETE", "/api/profiles/{username}/follow", "app/api/routes/profiles.py:57"],
+    ["GET", "/api/articles/feed", "app/api/routes/articles/articles_common.py:22"],
+    ["POST", "/api/articles/{slug}/favorite", "app/api/routes/articles/articles_common.py:47"],
+    ["DELETE", "/api/articles/{slug}/favorite", "app/api/routes/articles/articles_common.py:77"],
+    ["GET", "/api/articles", "app/api/routes/articles/articles_resource.py:30"],
+    ["POST", "/api/articles", "app/api/routes/articles/articles_resource.py:53"],
+    ["GET", "/api/articles/{slug}", "app/api/routes/articles/articles_resource.py:82"],
+    ["PUT", "/api/articles/{slug}", "app/api/routes/articles/articles_resource.py:89"],
+    ["DELETE", "/api/articles/{slug}", "app/api/routes/articles/articles_resource.py:109"],
+    ["GET", "/api/articles/{slug}/comments", "app/api/routes/comments.py:26"],
+    ["POST", "/api/articles/{slug}/comments", "app/api/routes/comments.py:40"],
+    ["DELETE", "/api/articles/{slug}/comments/{comment_id}", "app/api/routes/comments.py:60"],
+    ["GET", "/api/tags", "app/api/routes/tags.py:10"]
+  ],
+  "gaps": []
+}
