@@ -1,0 +1,373 @@
+{
+  "schemaVersion": "1",
+  "revision": 1,
+  "title": "Authentication Service Component Detail",
+  "requirements": [
+    {
+      "id": "req.endpoints",
+      "text": "Expose login and token endpoints",
+      "status": "stated"
+    },
+    {
+      "id": "req.bcrypt",
+      "text": "Verify passwords using bcrypt",
+      "status": "stated"
+    },
+    {
+      "id": "req.jwt-kms",
+      "text": "Sign JWTs with keys held in a KMS",
+      "status": "stated"
+    },
+    {
+      "id": "req.refresh-redis",
+      "text": "Store refresh tokens in Redis",
+      "status": "stated"
+    },
+    {
+      "id": "req.audit-kafka",
+      "text": "Audit logger writes events to Kafka",
+      "status": "stated"
+    }
+  ],
+  "openQuestions": [
+    {
+      "id": "q.credential-store",
+      "text": "Where are bcrypt password hashes stored, and is it owned by this service?",
+      "blockedBy": "e.verifier-creds"
+    },
+    {
+      "id": "q.token-grants",
+      "text": "Which grant types does the token endpoint support beyond refresh_token?",
+      "blockedBy": "e.client-token"
+    },
+    {
+      "id": "q.kms-usage",
+      "text": "Does the issuer sign via KMS API calls, or fetch and cache key material?",
+      "blockedBy": "e.issuer-kms"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "actor.client",
+      "kind": "actor",
+      "label": "Client",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "comp.login-endpoint",
+      "kind": "component",
+      "label": "Login Endpoint",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "comp.token-endpoint",
+      "kind": "component",
+      "label": "Token Endpoint",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "comp.password-verifier",
+      "kind": "component",
+      "label": "Password Verifier (bcrypt)",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "comp.token-issuer",
+      "kind": "component",
+      "label": "Token Issuer (JWT)",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "comp.audit-logger",
+      "kind": "component",
+      "label": "Audit Logger",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "ext.kms",
+      "kind": "external",
+      "label": "KMS (Signing Keys)",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "ds.refresh-store",
+      "kind": "datastore",
+      "label": "Refresh Token Store (Redis)",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "queue.audit-kafka",
+      "kind": "queue",
+      "label": "Kafka Audit Topic",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "ds.credentials",
+      "kind": "datastore",
+      "label": "Credential Store",
+      "provenance": "inferred",
+      "evidence": []
+    }
+  ],
+  "edges": [
+    {
+      "id": "e.client-login",
+      "from": "actor.client",
+      "to": "comp.login-endpoint",
+      "type": "sync",
+      "label": "POST credentials",
+      "role": "main",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "e.client-token",
+      "from": "actor.client",
+      "to": "comp.token-endpoint",
+      "type": "sync",
+      "label": "refresh token request",
+      "role": "branch",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "e.login-verifier",
+      "from": "comp.login-endpoint",
+      "to": "comp.password-verifier",
+      "type": "sync",
+      "label": "verify password",
+      "role": "branch",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "e.verifier-creds",
+      "from": "comp.password-verifier",
+      "to": "ds.credentials",
+      "type": "data",
+      "label": "read bcrypt hash",
+      "role": "branch",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "e.login-issuer",
+      "from": "comp.login-endpoint",
+      "to": "comp.token-issuer",
+      "type": "sync",
+      "label": "issue tokens",
+      "role": "main",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "e.token-store",
+      "from": "comp.token-endpoint",
+      "to": "ds.refresh-store",
+      "type": "data",
+      "label": "validate/revoke refresh",
+      "role": "branch",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "e.token-issuer",
+      "from": "comp.token-endpoint",
+      "to": "comp.token-issuer",
+      "type": "sync",
+      "label": "reissue tokens",
+      "role": "branch",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "e.issuer-kms",
+      "from": "comp.token-issuer",
+      "to": "ext.kms",
+      "type": "sync",
+      "label": "sign with KMS key",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.issuer-store",
+      "from": "comp.token-issuer",
+      "to": "ds.refresh-store",
+      "type": "data",
+      "label": "store refresh token",
+      "role": "branch",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "e.login-audit",
+      "from": "comp.login-endpoint",
+      "to": "comp.audit-logger",
+      "type": "sync",
+      "label": "login event",
+      "role": "branch",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "e.token-audit",
+      "from": "comp.token-endpoint",
+      "to": "comp.audit-logger",
+      "type": "sync",
+      "label": "token event",
+      "role": "branch",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "e.audit-kafka",
+      "from": "comp.audit-logger",
+      "to": "queue.audit-kafka",
+      "type": "async",
+      "label": "publish audit event",
+      "role": "async",
+      "provenance": "user-specified",
+      "evidence": []
+    }
+  ],
+  "views": [
+    {
+      "id": "view.auth-components",
+      "type": "component-detail",
+      "orientation": "LR",
+      "nodes": [
+        "actor.client",
+        "comp.login-endpoint",
+        "comp.token-endpoint",
+        "comp.password-verifier",
+        "comp.token-issuer",
+        "comp.audit-logger",
+        "ext.kms",
+        "ds.refresh-store",
+        "queue.audit-kafka",
+        "ds.credentials"
+      ],
+      "edges": [
+        "e.client-login",
+        "e.client-token",
+        "e.login-verifier",
+        "e.verifier-creds",
+        "e.login-issuer",
+        "e.token-store",
+        "e.token-issuer",
+        "e.issuer-kms",
+        "e.issuer-store",
+        "e.login-audit",
+        "e.token-audit",
+        "e.audit-kafka"
+      ],
+      "mainPath": [
+        "actor.client",
+        "comp.login-endpoint",
+        "comp.token-issuer",
+        "ext.kms"
+      ]
+    }
+  ],
+  "semanticChecks": {
+    "allowedRoots": [
+      "actor.client"
+    ],
+    "allowedTerminals": [
+      "ext.kms",
+      "ds.refresh-store",
+      "queue.audit-kafka",
+      "ds.credentials"
+    ],
+    "requiredEdges": [
+      {
+        "from": "comp.token-issuer",
+        "to": "ext.kms",
+        "type": "sync"
+      },
+      {
+        "from": "comp.audit-logger",
+        "to": "queue.audit-kafka",
+        "type": "async"
+      }
+    ],
+    "requiredPaths": [
+      {
+        "from": "actor.client",
+        "to": "ext.kms"
+      },
+      {
+        "from": "actor.client",
+        "to": "queue.audit-kafka"
+      }
+    ]
+  },
+  "boundaries": [
+    {
+      "id": "b.auth-service",
+      "label": "Authentication Service",
+      "wraps": [
+        "comp.login-endpoint",
+        "comp.token-endpoint",
+        "comp.password-verifier",
+        "comp.token-issuer",
+        "comp.audit-logger"
+      ]
+    }
+  ],
+  "guidedViews": [
+    {
+      "id": "g.login",
+      "label": "Login flow",
+      "focus": [
+        "comp.login-endpoint",
+        "comp.password-verifier",
+        "ds.credentials"
+      ],
+      "note": "Login checks the password with bcrypt against a stored hash."
+    },
+    {
+      "id": "g.issuance",
+      "label": "JWT issuance",
+      "focus": [
+        "comp.token-issuer",
+        "ext.kms",
+        "ds.refresh-store"
+      ],
+      "note": "Issuer signs JWTs with KMS keys and persists refresh tokens in Redis."
+    },
+    {
+      "id": "g.refresh",
+      "label": "Token refresh",
+      "focus": [
+        "comp.token-endpoint",
+        "ds.refresh-store",
+        "comp.token-issuer"
+      ],
+      "note": "Token endpoint validates the refresh token, then reissues."
+    },
+    {
+      "id": "g.audit",
+      "label": "Audit trail",
+      "focus": [
+        "comp.audit-logger",
+        "queue.audit-kafka"
+      ],
+      "note": "Auth events are published asynchronously to Kafka."
+    }
+  ],
+  "privacy": {
+    "classification": "public",
+    "boundary": "external-allowed"
+  }
+}

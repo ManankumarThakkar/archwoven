@@ -1,0 +1,166 @@
+{
+  "schemaVersion": "1",
+  "revision": 1,
+  "title": "Todo App Architecture",
+  "requirements": [
+    {
+      "id": "req.gateway",
+      "text": "Customers call an API gateway",
+      "status": "stated"
+    },
+    {
+      "id": "req.orders",
+      "text": "An orders service handles requests",
+      "status": "stated"
+    },
+    {
+      "id": "req.persist",
+      "text": "Orders service persists to PostgreSQL",
+      "status": "stated"
+    }
+  ],
+  "openQuestions": [
+    {
+      "id": "q.naming",
+      "text": "The app is a todo app but the service is named orders. Does it manage todo items, orders, or both?",
+      "blockedBy": "svc.orders"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "actor.customer",
+      "kind": "actor",
+      "label": "Customer",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "gw.api",
+      "kind": "gateway",
+      "label": "API Gateway",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "svc.orders",
+      "kind": "service",
+      "label": "Orders Service",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "db.postgres",
+      "kind": "datastore",
+      "label": "PostgreSQL",
+      "provenance": "user-specified",
+      "evidence": []
+    }
+  ],
+  "edges": [
+    {
+      "id": "e.customer-gw",
+      "from": "actor.customer",
+      "to": "gw.api",
+      "type": "sync",
+      "label": "API calls",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.gw-orders",
+      "from": "gw.api",
+      "to": "svc.orders",
+      "type": "sync",
+      "label": "Route requests",
+      "role": "main",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "e.orders-db",
+      "from": "svc.orders",
+      "to": "db.postgres",
+      "type": "data",
+      "label": "Persist data",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    }
+  ],
+  "views": [
+    {
+      "id": "view.architecture",
+      "type": "architecture",
+      "orientation": "LR",
+      "nodes": [
+        "actor.customer",
+        "gw.api",
+        "svc.orders",
+        "db.postgres"
+      ],
+      "edges": [
+        "e.customer-gw",
+        "e.gw-orders",
+        "e.orders-db"
+      ],
+      "mainPath": [
+        "actor.customer",
+        "gw.api",
+        "svc.orders",
+        "db.postgres"
+      ]
+    }
+  ],
+  "semanticChecks": {
+    "allowedRoots": [
+      "actor.customer"
+    ],
+    "allowedTerminals": [
+      "db.postgres"
+    ],
+    "requiredEdges": [
+      {
+        "from": "actor.customer",
+        "to": "gw.api",
+        "type": "sync"
+      },
+      {
+        "from": "svc.orders",
+        "to": "db.postgres",
+        "type": "data"
+      }
+    ],
+    "requiredPaths": [
+      {
+        "from": "actor.customer",
+        "to": "db.postgres"
+      }
+    ]
+  },
+  "boundaries": [],
+  "guidedViews": [
+    {
+      "id": "gv.entry",
+      "label": "Entry point",
+      "focus": [
+        "actor.customer",
+        "gw.api"
+      ],
+      "note": "Customers reach the system through the API gateway."
+    },
+    {
+      "id": "gv.backend",
+      "label": "Request handling and storage",
+      "focus": [
+        "svc.orders",
+        "db.postgres"
+      ],
+      "note": "The orders service handles requests and persists data to PostgreSQL."
+    }
+  ],
+  "privacy": {
+    "classification": "public",
+    "boundary": "external-allowed"
+  }
+}

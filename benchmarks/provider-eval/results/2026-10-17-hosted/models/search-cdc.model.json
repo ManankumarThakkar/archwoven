@@ -1,0 +1,267 @@
+{
+  "schemaVersion": "1",
+  "revision": 1,
+  "title": "Product Search with CDC Sync",
+  "requirements": [
+    {
+      "id": "req.search",
+      "text": "Shoppers search products in a Next.js storefront",
+      "status": "stated"
+    },
+    {
+      "id": "req.es-query",
+      "text": "A search service queries Elasticsearch",
+      "status": "stated"
+    },
+    {
+      "id": "req.cdc",
+      "text": "Elasticsearch is kept in sync with PostgreSQL via Debezium and Kafka CDC",
+      "status": "stated"
+    }
+  ],
+  "openQuestions": [
+    {
+      "id": "q.sink",
+      "text": "What consumes Kafka change events and writes to Elasticsearch (Kafka Connect sink or custom indexer)?",
+      "blockedBy": "e.kafka-sink"
+    },
+    {
+      "id": "q.writer",
+      "text": "Which service writes product data into PostgreSQL?",
+      "blockedBy": null
+    }
+  ],
+  "nodes": [
+    {
+      "id": "actor.shopper",
+      "kind": "actor",
+      "label": "Shopper",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "svc.storefront",
+      "kind": "service",
+      "label": "Storefront (Next.js)",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "svc.search",
+      "kind": "service",
+      "label": "Search Service",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "ds.elasticsearch",
+      "kind": "datastore",
+      "label": "Elasticsearch",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "ds.products-db",
+      "kind": "datastore",
+      "label": "Product DB (PostgreSQL)",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "svc.debezium",
+      "kind": "service",
+      "label": "Debezium CDC",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "queue.kafka",
+      "kind": "queue",
+      "label": "Kafka",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "svc.es-sink",
+      "kind": "service",
+      "label": "ES Sink Connector",
+      "provenance": "proposed",
+      "evidence": []
+    }
+  ],
+  "edges": [
+    {
+      "id": "e.shopper-storefront",
+      "from": "actor.shopper",
+      "to": "svc.storefront",
+      "type": "sync",
+      "label": "Search products",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.storefront-search",
+      "from": "svc.storefront",
+      "to": "svc.search",
+      "type": "sync",
+      "label": "Search request",
+      "role": "main",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "e.search-es",
+      "from": "svc.search",
+      "to": "ds.elasticsearch",
+      "type": "sync",
+      "label": "Query index",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.db-debezium",
+      "from": "ds.products-db",
+      "to": "svc.debezium",
+      "type": "data",
+      "label": "Change log (WAL)",
+      "role": "async",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.debezium-kafka",
+      "from": "svc.debezium",
+      "to": "queue.kafka",
+      "type": "async",
+      "label": "Publish change events",
+      "role": "async",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.kafka-sink",
+      "from": "queue.kafka",
+      "to": "svc.es-sink",
+      "type": "async",
+      "label": "Consume change events",
+      "role": "async",
+      "provenance": "proposed",
+      "evidence": []
+    },
+    {
+      "id": "e.sink-es",
+      "from": "svc.es-sink",
+      "to": "ds.elasticsearch",
+      "type": "data",
+      "label": "Upsert documents",
+      "role": "async",
+      "provenance": "proposed",
+      "evidence": []
+    }
+  ],
+  "views": [
+    {
+      "id": "view.architecture",
+      "type": "architecture",
+      "orientation": "LR",
+      "nodes": [
+        "actor.shopper",
+        "svc.storefront",
+        "svc.search",
+        "ds.elasticsearch",
+        "ds.products-db",
+        "svc.debezium",
+        "queue.kafka",
+        "svc.es-sink"
+      ],
+      "edges": [
+        "e.shopper-storefront",
+        "e.storefront-search",
+        "e.search-es",
+        "e.db-debezium",
+        "e.debezium-kafka",
+        "e.kafka-sink",
+        "e.sink-es"
+      ],
+      "mainPath": [
+        "actor.shopper",
+        "svc.storefront",
+        "svc.search",
+        "ds.elasticsearch"
+      ]
+    }
+  ],
+  "semanticChecks": {
+    "allowedRoots": [
+      "actor.shopper",
+      "ds.products-db"
+    ],
+    "allowedTerminals": [
+      "ds.elasticsearch"
+    ],
+    "requiredEdges": [
+      {
+        "from": "svc.search",
+        "to": "ds.elasticsearch",
+        "type": "sync"
+      },
+      {
+        "from": "svc.debezium",
+        "to": "queue.kafka",
+        "type": "async"
+      }
+    ],
+    "requiredPaths": [
+      {
+        "from": "actor.shopper",
+        "to": "ds.elasticsearch"
+      },
+      {
+        "from": "ds.products-db",
+        "to": "ds.elasticsearch"
+      }
+    ]
+  },
+  "boundaries": [
+    {
+      "id": "b.cdc",
+      "label": "CDC Pipeline",
+      "wraps": [
+        "svc.debezium",
+        "queue.kafka",
+        "svc.es-sink"
+      ]
+    }
+  ],
+  "guidedViews": [
+    {
+      "id": "g.query",
+      "label": "Search query path",
+      "focus": [
+        "actor.shopper",
+        "svc.storefront",
+        "svc.search",
+        "ds.elasticsearch"
+      ],
+      "note": "Shopper searches in the storefront; the search service queries Elasticsearch."
+    },
+    {
+      "id": "g.sync",
+      "label": "CDC sync path",
+      "focus": [
+        "ds.products-db",
+        "svc.debezium",
+        "queue.kafka",
+        "svc.es-sink",
+        "ds.elasticsearch"
+      ],
+      "note": "Debezium captures PostgreSQL changes into Kafka; a proposed sink updates Elasticsearch."
+    }
+  ],
+  "privacy": {
+    "classification": "public",
+    "boundary": "external-allowed"
+  }
+}

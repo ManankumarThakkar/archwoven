@@ -1,0 +1,765 @@
+{
+  "schemaVersion": "1",
+  "revision": 1,
+  "title": "Spring PetClinic",
+  "requirements": [],
+  "openQuestions": [
+    {
+      "id": "q.datasource.mapping",
+      "text": "multiple datasources (MySQL, PostgreSQL, H2) — repo→datastore mapping not statically provable"
+    },
+    {
+      "id": "q.datasource.active",
+      "text": "Which datastore profile (MySQL, PostgreSQL or H2) is active in a given deployment?"
+    },
+    {
+      "id": "gap.ingest.1",
+      "text": "Skipped 7 vendored, generated or lock files and folders: gradle/wrapper/gradle-wrapper.jar, src/main/resources/static/resources/fonts/montserrat-webfont.eot, src/main/resources/static/resources/fonts/montserrat-webfont.ttf and 4 more."
+    },
+    {
+      "id": "gap.ingest.2",
+      "text": "Skipped 4 binary files: src/main/resources/static/resources/images/favicon.png, src/main/resources/static/resources/images/pets.png, src/main/resources/static/resources/images/spring-logo-dataflow-mobile.png and 1 more."
+    }
+  ],
+  "nodes": [
+    {
+      "id": "java.owner",
+      "kind": "entity",
+      "label": "Owner",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "spring-projects/spring-petclinic",
+          "commit": "500158f732419217507c7656904b8e6aa1bcc0d6",
+          "path": "src/main/java/org/springframework/samples/petclinic/owner/Owner.java",
+          "lines": [
+            48,
+            188
+          ]
+        }
+      ],
+      "group": "owner"
+    },
+    {
+      "id": "java.ownercontroller",
+      "kind": "service",
+      "label": "OwnerController",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "spring-projects/spring-petclinic",
+          "commit": "500158f732419217507c7656904b8e6aa1bcc0d6",
+          "path": "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java",
+          "lines": [
+            48,
+            188
+          ]
+        }
+      ],
+      "group": "owner"
+    },
+    {
+      "id": "java.ownerrepository",
+      "kind": "service",
+      "label": "OwnerRepository",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "spring-projects/spring-petclinic",
+          "commit": "500158f732419217507c7656904b8e6aa1bcc0d6",
+          "path": "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java",
+          "lines": [
+            48,
+            188
+          ]
+        }
+      ],
+      "group": "owner"
+    },
+    {
+      "id": "java.pet",
+      "kind": "entity",
+      "label": "Pet",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "spring-projects/spring-petclinic",
+          "commit": "500158f732419217507c7656904b8e6aa1bcc0d6",
+          "path": "src/main/java/org/springframework/samples/petclinic/owner/Pet.java",
+          "lines": [
+            44,
+            85
+          ]
+        }
+      ],
+      "group": "owner"
+    },
+    {
+      "id": "java.petcontroller",
+      "kind": "service",
+      "label": "PetController",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "spring-projects/spring-petclinic",
+          "commit": "500158f732419217507c7656904b8e6aa1bcc0d6",
+          "path": "src/main/java/org/springframework/samples/petclinic/owner/PetController.java",
+          "lines": [
+            47,
+            207
+          ]
+        }
+      ],
+      "group": "owner"
+    },
+    {
+      "id": "java.pettyperepository",
+      "kind": "service",
+      "label": "PetTypeRepository",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "spring-projects/spring-petclinic",
+          "commit": "500158f732419217507c7656904b8e6aa1bcc0d6",
+          "path": "src/main/java/org/springframework/samples/petclinic/owner/PetController.java",
+          "lines": [
+            47,
+            207
+          ]
+        }
+      ],
+      "group": "owner"
+    },
+    {
+      "id": "java.pettype",
+      "kind": "entity",
+      "label": "PetType",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "spring-projects/spring-petclinic",
+          "commit": "500158f732419217507c7656904b8e6aa1bcc0d6",
+          "path": "src/main/java/org/springframework/samples/petclinic/owner/PetType.java",
+          "lines": [
+            26,
+            30
+          ]
+        }
+      ],
+      "group": "owner"
+    },
+    {
+      "id": "java.pettypeformatter",
+      "kind": "component",
+      "label": "PetTypeFormatter",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "spring-projects/spring-petclinic",
+          "commit": "500158f732419217507c7656904b8e6aa1bcc0d6",
+          "path": "src/main/java/org/springframework/samples/petclinic/owner/PetTypeFormatter.java",
+          "lines": [
+            36,
+            62
+          ]
+        }
+      ],
+      "group": "owner"
+    },
+    {
+      "id": "java.visit",
+      "kind": "entity",
+      "label": "Visit",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "spring-projects/spring-petclinic",
+          "commit": "500158f732419217507c7656904b8e6aa1bcc0d6",
+          "path": "src/main/java/org/springframework/samples/petclinic/owner/Visit.java",
+          "lines": [
+            35,
+            70
+          ]
+        }
+      ],
+      "group": "owner"
+    },
+    {
+      "id": "java.visitcontroller",
+      "kind": "service",
+      "label": "VisitController",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "spring-projects/spring-petclinic",
+          "commit": "500158f732419217507c7656904b8e6aa1bcc0d6",
+          "path": "src/main/java/org/springframework/samples/petclinic/owner/VisitController.java",
+          "lines": [
+            42,
+            114
+          ]
+        }
+      ],
+      "group": "owner"
+    },
+    {
+      "id": "java.crashcontroller",
+      "kind": "service",
+      "label": "CrashController",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "spring-projects/spring-petclinic",
+          "commit": "500158f732419217507c7656904b8e6aa1bcc0d6",
+          "path": "src/main/java/org/springframework/samples/petclinic/system/CrashController.java",
+          "lines": [
+            28,
+            37
+          ]
+        }
+      ],
+      "group": "system"
+    },
+    {
+      "id": "java.welcomecontroller",
+      "kind": "service",
+      "label": "WelcomeController",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "spring-projects/spring-petclinic",
+          "commit": "500158f732419217507c7656904b8e6aa1bcc0d6",
+          "path": "src/main/java/org/springframework/samples/petclinic/system/WelcomeController.java",
+          "lines": [
+            22,
+            30
+          ]
+        }
+      ],
+      "group": "system"
+    },
+    {
+      "id": "java.specialty",
+      "kind": "entity",
+      "label": "Specialty",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "spring-projects/spring-petclinic",
+          "commit": "500158f732419217507c7656904b8e6aa1bcc0d6",
+          "path": "src/main/java/org/springframework/samples/petclinic/vet/Specialty.java",
+          "lines": [
+            28,
+            32
+          ]
+        }
+      ],
+      "group": "vet"
+    },
+    {
+      "id": "java.vet",
+      "kind": "entity",
+      "label": "Vet",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "spring-projects/spring-petclinic",
+          "commit": "500158f732419217507c7656904b8e6aa1bcc0d6",
+          "path": "src/main/java/org/springframework/samples/petclinic/vet/Vet.java",
+          "lines": [
+            43,
+            74
+          ]
+        }
+      ],
+      "group": "vet"
+    },
+    {
+      "id": "java.vetcontroller",
+      "kind": "service",
+      "label": "VetController",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "spring-projects/spring-petclinic",
+          "commit": "500158f732419217507c7656904b8e6aa1bcc0d6",
+          "path": "src/main/java/org/springframework/samples/petclinic/vet/VetController.java",
+          "lines": [
+            36,
+            81
+          ]
+        }
+      ],
+      "group": "vet"
+    },
+    {
+      "id": "java.vetrepository",
+      "kind": "service",
+      "label": "VetRepository",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "spring-projects/spring-petclinic",
+          "commit": "500158f732419217507c7656904b8e6aa1bcc0d6",
+          "path": "src/main/java/org/springframework/samples/petclinic/vet/VetController.java",
+          "lines": [
+            36,
+            81
+          ]
+        }
+      ],
+      "group": "vet"
+    },
+    {
+      "id": "java.datastore.mysql",
+      "kind": "datastore",
+      "label": "MySQL",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "spring-projects/spring-petclinic",
+          "commit": "500158f732419217507c7656904b8e6aa1bcc0d6",
+          "path": "src/main/resources/application-mysql.properties",
+          "lines": [
+            3,
+            3
+          ]
+        }
+      ],
+      "group": "data"
+    },
+    {
+      "id": "java.datastore.postgresql",
+      "kind": "datastore",
+      "label": "PostgreSQL",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "spring-projects/spring-petclinic",
+          "commit": "500158f732419217507c7656904b8e6aa1bcc0d6",
+          "path": "src/main/resources/application-postgres.properties",
+          "lines": [
+            3,
+            3
+          ]
+        }
+      ],
+      "group": "data"
+    },
+    {
+      "id": "java.datastore.h2",
+      "kind": "datastore",
+      "label": "H2",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "spring-projects/spring-petclinic",
+          "commit": "500158f732419217507c7656904b8e6aa1bcc0d6",
+          "path": "build.gradle",
+          "lines": [
+            46,
+            46
+          ]
+        }
+      ],
+      "group": "data"
+    }
+  ],
+  "edges": [
+    {
+      "id": "java.e1",
+      "from": "java.owner",
+      "to": "java.pet",
+      "type": "relation",
+      "label": "owns",
+      "cardinality": "1:N",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "spring-projects/spring-petclinic",
+          "commit": "500158f732419217507c7656904b8e6aa1bcc0d6",
+          "path": "src/main/java/org/springframework/samples/petclinic/owner/Owner.java",
+          "lines": [
+            67,
+            70
+          ]
+        }
+      ]
+    },
+    {
+      "id": "java.e2",
+      "from": "java.ownercontroller",
+      "to": "java.ownerrepository",
+      "type": "sync",
+      "label": "uses",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "spring-projects/spring-petclinic",
+          "commit": "500158f732419217507c7656904b8e6aa1bcc0d6",
+          "path": "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java",
+          "lines": [
+            48,
+            188
+          ]
+        }
+      ]
+    },
+    {
+      "id": "java.e3",
+      "from": "java.pet",
+      "to": "java.pettype",
+      "type": "relation",
+      "label": "has type",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "spring-projects/spring-petclinic",
+          "commit": "500158f732419217507c7656904b8e6aa1bcc0d6",
+          "path": "src/main/java/org/springframework/samples/petclinic/owner/Pet.java",
+          "lines": [
+            52,
+            54
+          ]
+        }
+      ]
+    },
+    {
+      "id": "java.e4",
+      "from": "java.pet",
+      "to": "java.visit",
+      "type": "relation",
+      "label": "has visits",
+      "cardinality": "1:N",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "spring-projects/spring-petclinic",
+          "commit": "500158f732419217507c7656904b8e6aa1bcc0d6",
+          "path": "src/main/java/org/springframework/samples/petclinic/owner/Pet.java",
+          "lines": [
+            56,
+            59
+          ]
+        }
+      ]
+    },
+    {
+      "id": "java.e5",
+      "from": "java.petcontroller",
+      "to": "java.ownerrepository",
+      "type": "sync",
+      "label": "uses",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "spring-projects/spring-petclinic",
+          "commit": "500158f732419217507c7656904b8e6aa1bcc0d6",
+          "path": "src/main/java/org/springframework/samples/petclinic/owner/PetController.java",
+          "lines": [
+            47,
+            207
+          ]
+        }
+      ]
+    },
+    {
+      "id": "java.e6",
+      "from": "java.petcontroller",
+      "to": "java.pettyperepository",
+      "type": "sync",
+      "label": "uses",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "spring-projects/spring-petclinic",
+          "commit": "500158f732419217507c7656904b8e6aa1bcc0d6",
+          "path": "src/main/java/org/springframework/samples/petclinic/owner/PetController.java",
+          "lines": [
+            47,
+            207
+          ]
+        }
+      ]
+    },
+    {
+      "id": "java.e7",
+      "from": "java.pettypeformatter",
+      "to": "java.pettyperepository",
+      "type": "sync",
+      "label": "uses",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "spring-projects/spring-petclinic",
+          "commit": "500158f732419217507c7656904b8e6aa1bcc0d6",
+          "path": "src/main/java/org/springframework/samples/petclinic/owner/PetTypeFormatter.java",
+          "lines": [
+            36,
+            62
+          ]
+        }
+      ]
+    },
+    {
+      "id": "java.e8",
+      "from": "java.visitcontroller",
+      "to": "java.ownerrepository",
+      "type": "sync",
+      "label": "uses",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "spring-projects/spring-petclinic",
+          "commit": "500158f732419217507c7656904b8e6aa1bcc0d6",
+          "path": "src/main/java/org/springframework/samples/petclinic/owner/VisitController.java",
+          "lines": [
+            42,
+            114
+          ]
+        }
+      ]
+    },
+    {
+      "id": "java.e9",
+      "from": "java.vet",
+      "to": "java.specialty",
+      "type": "relation",
+      "label": "specialties",
+      "cardinality": "N:M",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "spring-projects/spring-petclinic",
+          "commit": "500158f732419217507c7656904b8e6aa1bcc0d6",
+          "path": "src/main/java/org/springframework/samples/petclinic/vet/Vet.java",
+          "lines": [
+            47,
+            50
+          ]
+        }
+      ]
+    },
+    {
+      "id": "java.e10",
+      "from": "java.vetcontroller",
+      "to": "java.vetrepository",
+      "type": "sync",
+      "label": "uses",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "spring-projects/spring-petclinic",
+          "commit": "500158f732419217507c7656904b8e6aa1bcc0d6",
+          "path": "src/main/java/org/springframework/samples/petclinic/vet/VetController.java",
+          "lines": [
+            36,
+            81
+          ]
+        }
+      ]
+    }
+  ],
+  "views": [
+    {
+      "id": "view.architecture",
+      "type": "architecture",
+      "orientation": "LR",
+      "nodes": [
+        "java.ownercontroller",
+        "java.petcontroller",
+        "java.visitcontroller",
+        "java.pettypeformatter",
+        "java.ownerrepository",
+        "java.pettyperepository",
+        "java.vetcontroller",
+        "java.vetrepository",
+        "java.crashcontroller",
+        "java.welcomecontroller",
+        "java.datastore.mysql",
+        "java.datastore.postgresql",
+        "java.datastore.h2"
+      ],
+      "edges": [
+        "java.e2",
+        "java.e5",
+        "java.e6",
+        "java.e7",
+        "java.e8",
+        "java.e10"
+      ],
+      "mainPath": [
+        "java.ownercontroller",
+        "java.ownerrepository"
+      ]
+    },
+    {
+      "id": "view.er",
+      "type": "er",
+      "orientation": "LR",
+      "nodes": [
+        "java.owner",
+        "java.pet",
+        "java.pettype",
+        "java.visit",
+        "java.vet",
+        "java.specialty"
+      ],
+      "edges": [
+        "java.e1",
+        "java.e3",
+        "java.e4",
+        "java.e9"
+      ]
+    }
+  ],
+  "semanticChecks": {
+    "allowedRoots": [
+      "java.owner",
+      "java.ownercontroller",
+      "java.petcontroller",
+      "java.pettypeformatter",
+      "java.visitcontroller",
+      "java.crashcontroller",
+      "java.welcomecontroller",
+      "java.vet",
+      "java.vetcontroller",
+      "java.datastore.mysql",
+      "java.datastore.postgresql",
+      "java.datastore.h2"
+    ],
+    "allowedTerminals": [
+      "java.ownerrepository",
+      "java.pettyperepository",
+      "java.pettype",
+      "java.visit",
+      "java.crashcontroller",
+      "java.welcomecontroller",
+      "java.specialty",
+      "java.vetrepository",
+      "java.datastore.mysql",
+      "java.datastore.postgresql",
+      "java.datastore.h2"
+    ],
+    "requiredEdges": [
+      {
+        "from": "java.ownercontroller",
+        "to": "java.ownerrepository",
+        "type": "sync"
+      },
+      {
+        "from": "java.petcontroller",
+        "to": "java.ownerrepository",
+        "type": "sync"
+      },
+      {
+        "from": "java.petcontroller",
+        "to": "java.pettyperepository",
+        "type": "sync"
+      },
+      {
+        "from": "java.visitcontroller",
+        "to": "java.ownerrepository",
+        "type": "sync"
+      },
+      {
+        "from": "java.vetcontroller",
+        "to": "java.vetrepository",
+        "type": "sync"
+      }
+    ],
+    "requiredPaths": []
+  },
+  "boundaries": [
+    {
+      "id": "boundary.owner",
+      "label": "owner package",
+      "wraps": [
+        "java.owner",
+        "java.ownercontroller",
+        "java.ownerrepository",
+        "java.pet",
+        "java.petcontroller",
+        "java.pettyperepository",
+        "java.pettype",
+        "java.pettypeformatter",
+        "java.visit",
+        "java.visitcontroller"
+      ]
+    },
+    {
+      "id": "boundary.vet",
+      "label": "vet package",
+      "wraps": [
+        "java.vet",
+        "java.specialty",
+        "java.vetcontroller",
+        "java.vetrepository"
+      ]
+    },
+    {
+      "id": "boundary.system",
+      "label": "system package",
+      "wraps": [
+        "java.crashcontroller",
+        "java.welcomecontroller"
+      ]
+    },
+    {
+      "id": "boundary.data",
+      "label": "Datastore options",
+      "wraps": [
+        "java.datastore.mysql",
+        "java.datastore.postgresql",
+        "java.datastore.h2"
+      ]
+    }
+  ],
+  "guidedViews": [
+    {
+      "id": "guide.owners",
+      "label": "Owners, pets and visits",
+      "focus": [
+        "java.ownercontroller",
+        "java.petcontroller",
+        "java.visitcontroller",
+        "java.ownerrepository"
+      ],
+      "note": "Controllers share OwnerRepository."
+    },
+    {
+      "id": "guide.vets",
+      "label": "Vets",
+      "focus": [
+        "java.vetcontroller",
+        "java.vetrepository"
+      ],
+      "note": null
+    },
+    {
+      "id": "guide.domain",
+      "label": "Domain model",
+      "focus": [
+        "java.owner",
+        "java.pet",
+        "java.visit",
+        "java.vet"
+      ],
+      "note": null
+    },
+    {
+      "id": "guide.data",
+      "label": "Datastores",
+      "focus": [
+        "java.datastore.mysql",
+        "java.datastore.postgresql",
+        "java.datastore.h2"
+      ],
+      "note": "Repository to datastore mapping is open."
+    }
+  ],
+  "privacy": {
+    "classification": "public",
+    "boundary": "external-allowed"
+  }
+}

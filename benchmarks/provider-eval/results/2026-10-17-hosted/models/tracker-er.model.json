@@ -1,0 +1,393 @@
+{
+  "schemaVersion": "1",
+  "revision": 1,
+  "title": "Multi-tenant Project Tracker Data Model",
+  "requirements": [
+    {
+      "id": "req.tenancy",
+      "text": "Organizations are the tenant root and own users and projects",
+      "status": "stated"
+    },
+    {
+      "id": "req.tasks",
+      "text": "Projects have tasks",
+      "status": "stated"
+    },
+    {
+      "id": "req.assignee",
+      "text": "Each task has an assignee, which is a user",
+      "status": "stated"
+    },
+    {
+      "id": "req.comments",
+      "text": "Tasks have comments",
+      "status": "stated"
+    },
+    {
+      "id": "req.labels",
+      "text": "Tasks and labels are many-to-many",
+      "status": "stated"
+    }
+  ],
+  "openQuestions": [
+    {
+      "id": "q.assignee-optional",
+      "text": "Can a task be unassigned (nullable assignee_id)?",
+      "blockedBy": null
+    },
+    {
+      "id": "q.label-scope",
+      "text": "Are labels scoped per organization or per project?",
+      "blockedBy": "e.org-labels"
+    },
+    {
+      "id": "q.comment-author",
+      "text": "Should comments record the authoring user?",
+      "blockedBy": "e.user-comments"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "entity.organization",
+      "kind": "entity",
+      "label": "Organization",
+      "provenance": "user-specified",
+      "evidence": [],
+      "fields": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "key": "pk"
+        },
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "slug",
+          "type": "string",
+          "key": "uk"
+        }
+      ]
+    },
+    {
+      "id": "entity.user",
+      "kind": "entity",
+      "label": "User",
+      "provenance": "user-specified",
+      "evidence": [],
+      "fields": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "key": "pk"
+        },
+        {
+          "name": "organization_id",
+          "type": "uuid",
+          "key": "fk"
+        },
+        {
+          "name": "email",
+          "type": "string",
+          "key": "uk"
+        },
+        {
+          "name": "name",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "id": "entity.project",
+      "kind": "entity",
+      "label": "Project",
+      "provenance": "user-specified",
+      "evidence": [],
+      "fields": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "key": "pk"
+        },
+        {
+          "name": "organization_id",
+          "type": "uuid",
+          "key": "fk"
+        },
+        {
+          "name": "name",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "id": "entity.task",
+      "kind": "entity",
+      "label": "Task",
+      "provenance": "user-specified",
+      "evidence": [],
+      "fields": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "key": "pk"
+        },
+        {
+          "name": "project_id",
+          "type": "uuid",
+          "key": "fk"
+        },
+        {
+          "name": "assignee_id",
+          "type": "uuid",
+          "key": "fk"
+        },
+        {
+          "name": "title",
+          "type": "string"
+        },
+        {
+          "name": "status",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "id": "entity.comment",
+      "kind": "entity",
+      "label": "Comment",
+      "provenance": "user-specified",
+      "evidence": [],
+      "fields": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "key": "pk"
+        },
+        {
+          "name": "task_id",
+          "type": "uuid",
+          "key": "fk"
+        },
+        {
+          "name": "author_id",
+          "type": "uuid",
+          "key": "fk"
+        },
+        {
+          "name": "body",
+          "type": "text"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp"
+        }
+      ]
+    },
+    {
+      "id": "entity.label",
+      "kind": "entity",
+      "label": "Label",
+      "provenance": "user-specified",
+      "evidence": [],
+      "fields": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "key": "pk"
+        },
+        {
+          "name": "organization_id",
+          "type": "uuid",
+          "key": "fk"
+        },
+        {
+          "name": "name",
+          "type": "string"
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "e.org-users",
+      "from": "entity.organization",
+      "to": "entity.user",
+      "type": "relation",
+      "label": "has users",
+      "cardinality": "1:N",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.org-projects",
+      "from": "entity.organization",
+      "to": "entity.project",
+      "type": "relation",
+      "label": "has projects",
+      "cardinality": "1:N",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.project-tasks",
+      "from": "entity.project",
+      "to": "entity.task",
+      "type": "relation",
+      "label": "has tasks",
+      "cardinality": "1:N",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.user-tasks",
+      "from": "entity.user",
+      "to": "entity.task",
+      "type": "relation",
+      "label": "assignee of",
+      "cardinality": "1:N",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.task-comments",
+      "from": "entity.task",
+      "to": "entity.comment",
+      "type": "relation",
+      "label": "has comments",
+      "cardinality": "1:N",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.task-labels",
+      "from": "entity.task",
+      "to": "entity.label",
+      "type": "relation",
+      "label": "tagged with",
+      "cardinality": "N:M",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.user-comments",
+      "from": "entity.user",
+      "to": "entity.comment",
+      "type": "relation",
+      "label": "authors",
+      "cardinality": "1:N",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "e.org-labels",
+      "from": "entity.organization",
+      "to": "entity.label",
+      "type": "relation",
+      "label": "owns labels",
+      "cardinality": "1:N",
+      "provenance": "proposed",
+      "evidence": []
+    }
+  ],
+  "views": [
+    {
+      "id": "view.er",
+      "type": "er",
+      "orientation": "TB",
+      "nodes": [
+        "entity.organization",
+        "entity.user",
+        "entity.project",
+        "entity.task",
+        "entity.comment",
+        "entity.label"
+      ],
+      "edges": [
+        "e.org-users",
+        "e.org-projects",
+        "e.project-tasks",
+        "e.user-tasks",
+        "e.task-comments",
+        "e.task-labels",
+        "e.user-comments",
+        "e.org-labels"
+      ]
+    }
+  ],
+  "semanticChecks": {
+    "allowedRoots": [
+      "entity.organization"
+    ],
+    "allowedTerminals": [
+      "entity.comment",
+      "entity.label"
+    ],
+    "requiredEdges": [
+      {
+        "from": "entity.organization",
+        "to": "entity.user",
+        "type": "relation"
+      },
+      {
+        "from": "entity.organization",
+        "to": "entity.project",
+        "type": "relation"
+      },
+      {
+        "from": "entity.project",
+        "to": "entity.task",
+        "type": "relation"
+      },
+      {
+        "from": "entity.user",
+        "to": "entity.task",
+        "type": "relation"
+      },
+      {
+        "from": "entity.task",
+        "to": "entity.comment",
+        "type": "relation"
+      },
+      {
+        "from": "entity.task",
+        "to": "entity.label",
+        "type": "relation"
+      }
+    ],
+    "requiredPaths": [
+      {
+        "from": "entity.organization",
+        "to": "entity.comment"
+      }
+    ]
+  },
+  "boundaries": [],
+  "guidedViews": [
+    {
+      "id": "gv.tenancy",
+      "label": "Tenant root",
+      "focus": [
+        "entity.organization",
+        "entity.user",
+        "entity.project"
+      ],
+      "note": "Organization owns users and projects; all data is tenant-scoped."
+    },
+    {
+      "id": "gv.tasks",
+      "label": "Tasks and their details",
+      "focus": [
+        "entity.task",
+        "entity.comment",
+        "entity.label"
+      ],
+      "note": "Tasks belong to projects, have one assignee, comments, and N:M labels."
+    }
+  ],
+  "privacy": {
+    "classification": "public",
+    "boundary": "external-allowed"
+  }
+}

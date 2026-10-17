@@ -1,0 +1,269 @@
+{
+  "schemaVersion": "1",
+  "revision": 1,
+  "title": "Password Reset Flow",
+  "requirements": [
+    {
+      "id": "req.request-link",
+      "text": "User requests a password reset link",
+      "status": "stated"
+    },
+    {
+      "id": "req.token-redis",
+      "text": "Account service generates a one-time token and stores it in Redis with a 15-minute expiry",
+      "status": "stated"
+    },
+    {
+      "id": "req.email-ses",
+      "text": "Reset link is emailed through SES",
+      "status": "stated"
+    },
+    {
+      "id": "req.verify-delete",
+      "text": "When the link is opened, the token is verified and deleted",
+      "status": "stated"
+    }
+  ],
+  "openQuestions": [
+    {
+      "id": "q.invalid-token",
+      "text": "What should the user see when the token is expired or invalid?",
+      "blockedBy": null
+    },
+    {
+      "id": "q.password-update",
+      "text": "Where is the new password submitted and stored after the token is verified?",
+      "blockedBy": null
+    },
+    {
+      "id": "q.unknown-email",
+      "text": "Should the response differ when the email has no account, or always be generic?",
+      "blockedBy": null
+    }
+  ],
+  "nodes": [
+    {
+      "id": "actor.user",
+      "kind": "actor",
+      "label": "User",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "svc.account",
+      "kind": "service",
+      "label": "Account Service",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "ds.redis",
+      "kind": "datastore",
+      "label": "Redis (reset tokens)",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "ext.ses",
+      "kind": "external",
+      "label": "Amazon SES",
+      "provenance": "user-specified",
+      "evidence": []
+    }
+  ],
+  "edges": [
+    {
+      "id": "e.user-account",
+      "from": "actor.user",
+      "to": "svc.account",
+      "type": "sync",
+      "label": "reset request / open link",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.account-redis",
+      "from": "svc.account",
+      "to": "ds.redis",
+      "type": "data",
+      "label": "set / get / delete token",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.account-ses",
+      "from": "svc.account",
+      "to": "ext.ses",
+      "type": "async",
+      "label": "send reset email",
+      "role": "async",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.ses-user",
+      "from": "ext.ses",
+      "to": "actor.user",
+      "type": "async",
+      "label": "reset link email",
+      "role": "async",
+      "provenance": "inferred",
+      "evidence": []
+    }
+  ],
+  "views": [
+    {
+      "id": "view.password-reset-seq",
+      "type": "sequence",
+      "nodes": [
+        "actor.user",
+        "svc.account",
+        "ds.redis",
+        "ext.ses"
+      ],
+      "edges": [
+        "e.user-account",
+        "e.account-redis",
+        "e.account-ses",
+        "e.ses-user"
+      ],
+      "sequence": {
+        "participants": [
+          "actor.user",
+          "svc.account",
+          "ds.redis",
+          "ext.ses"
+        ],
+        "messages": [
+          {
+            "seq": 1,
+            "from": "actor.user",
+            "to": "svc.account",
+            "label": "Request reset link (email)",
+            "kind": "call"
+          },
+          {
+            "seq": 2,
+            "from": "svc.account",
+            "to": "ds.redis",
+            "label": "SET token, expiry 15 min",
+            "kind": "call"
+          },
+          {
+            "seq": 3,
+            "from": "ds.redis",
+            "to": "svc.account",
+            "label": "OK",
+            "kind": "return"
+          },
+          {
+            "seq": 4,
+            "from": "svc.account",
+            "to": "ext.ses",
+            "label": "Send reset email with link",
+            "kind": "async"
+          },
+          {
+            "seq": 5,
+            "from": "ext.ses",
+            "to": "actor.user",
+            "label": "Email with reset link",
+            "kind": "async"
+          },
+          {
+            "seq": 6,
+            "from": "svc.account",
+            "to": "actor.user",
+            "label": "Reset requested",
+            "kind": "return"
+          },
+          {
+            "seq": 7,
+            "from": "actor.user",
+            "to": "svc.account",
+            "label": "Open link with token",
+            "kind": "call"
+          },
+          {
+            "seq": 8,
+            "from": "svc.account",
+            "to": "ds.redis",
+            "label": "GET token",
+            "kind": "call"
+          },
+          {
+            "seq": 9,
+            "from": "ds.redis",
+            "to": "svc.account",
+            "label": "Token data or nil",
+            "kind": "return"
+          },
+          {
+            "seq": 10,
+            "from": "svc.account",
+            "to": "ds.redis",
+            "label": "DEL token",
+            "kind": "call",
+            "fragment": {
+              "type": "opt",
+              "covers": [
+                10,
+                11
+              ]
+            }
+          },
+          {
+            "seq": 11,
+            "from": "svc.account",
+            "to": "actor.user",
+            "label": "Token verified",
+            "kind": "return"
+          }
+        ]
+      },
+      "focus": null,
+      "mainPath": [
+        "actor.user",
+        "svc.account",
+        "ds.redis"
+      ]
+    }
+  ],
+  "semanticChecks": {
+    "allowedRoots": [],
+    "allowedTerminals": [
+      "ds.redis"
+    ],
+    "requiredEdges": [
+      {
+        "from": "actor.user",
+        "to": "svc.account",
+        "type": "sync"
+      },
+      {
+        "from": "svc.account",
+        "to": "ds.redis",
+        "type": "data"
+      },
+      {
+        "from": "svc.account",
+        "to": "ext.ses",
+        "type": "async"
+      }
+    ],
+    "requiredPaths": [
+      {
+        "from": "actor.user",
+        "to": "ds.redis"
+      }
+    ]
+  },
+  "boundaries": [],
+  "guidedViews": [],
+  "privacy": {
+    "classification": "public",
+    "boundary": "external-allowed"
+  }
+}

@@ -1,0 +1,241 @@
+{
+  "schemaVersion": "1",
+  "revision": 1,
+  "title": "Blog",
+  "requirements": [
+    {
+      "id": "req.blog",
+      "text": "Provide a blog.",
+      "status": "stated"
+    },
+    {
+      "id": "req.read",
+      "text": "Readers can browse and read posts.",
+      "status": "open"
+    },
+    {
+      "id": "req.write",
+      "text": "Authors can write and publish posts.",
+      "status": "open"
+    }
+  ],
+  "openQuestions": [
+    {
+      "id": "q.comments",
+      "text": "Should readers be able to comment on posts?",
+      "blockedBy": null
+    },
+    {
+      "id": "q.auth",
+      "text": "How do authors sign in (local accounts or SSO)?",
+      "blockedBy": "e.author-blog"
+    },
+    {
+      "id": "q.static",
+      "text": "Dynamic app or statically generated site?",
+      "blockedBy": "svc.blog"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "actor.reader",
+      "kind": "actor",
+      "label": "Reader",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "actor.author",
+      "kind": "actor",
+      "label": "Author",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "gw.cdn",
+      "kind": "gateway",
+      "label": "CDN / Edge Cache",
+      "provenance": "proposed",
+      "evidence": []
+    },
+    {
+      "id": "svc.blog",
+      "kind": "service",
+      "label": "Blog App",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "store.posts",
+      "kind": "datastore",
+      "label": "Posts Database",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "store.media",
+      "kind": "datastore",
+      "label": "Media Storage",
+      "provenance": "proposed",
+      "evidence": []
+    }
+  ],
+  "edges": [
+    {
+      "id": "e.reader-cdn",
+      "from": "actor.reader",
+      "to": "gw.cdn",
+      "type": "sync",
+      "label": "read posts",
+      "role": "main",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "e.cdn-blog",
+      "from": "gw.cdn",
+      "to": "svc.blog",
+      "type": "sync",
+      "label": "cache miss",
+      "role": "main",
+      "provenance": "proposed",
+      "evidence": []
+    },
+    {
+      "id": "e.author-blog",
+      "from": "actor.author",
+      "to": "svc.blog",
+      "type": "sync",
+      "label": "write and publish",
+      "role": "branch",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "e.blog-posts",
+      "from": "svc.blog",
+      "to": "store.posts",
+      "type": "data",
+      "label": "posts, authors",
+      "role": "main",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "e.blog-media",
+      "from": "svc.blog",
+      "to": "store.media",
+      "type": "data",
+      "label": "upload images",
+      "role": "branch",
+      "provenance": "proposed",
+      "evidence": []
+    },
+    {
+      "id": "e.cdn-media",
+      "from": "gw.cdn",
+      "to": "store.media",
+      "type": "data",
+      "label": "serve images",
+      "role": "branch",
+      "provenance": "proposed",
+      "evidence": []
+    }
+  ],
+  "views": [
+    {
+      "id": "view.architecture",
+      "type": "architecture",
+      "orientation": "LR",
+      "nodes": [
+        "actor.reader",
+        "actor.author",
+        "gw.cdn",
+        "svc.blog",
+        "store.posts",
+        "store.media"
+      ],
+      "edges": [
+        "e.reader-cdn",
+        "e.cdn-blog",
+        "e.author-blog",
+        "e.blog-posts",
+        "e.blog-media",
+        "e.cdn-media"
+      ],
+      "mainPath": [
+        "actor.reader",
+        "gw.cdn",
+        "svc.blog",
+        "store.posts"
+      ]
+    }
+  ],
+  "semanticChecks": {
+    "allowedRoots": [
+      "actor.reader",
+      "actor.author"
+    ],
+    "allowedTerminals": [
+      "store.posts",
+      "store.media"
+    ],
+    "requiredEdges": [
+      {
+        "from": "svc.blog",
+        "to": "store.posts",
+        "type": "data"
+      }
+    ],
+    "requiredPaths": [
+      {
+        "from": "actor.reader",
+        "to": "store.posts"
+      },
+      {
+        "from": "actor.author",
+        "to": "store.posts"
+      }
+    ]
+  },
+  "boundaries": [
+    {
+      "id": "b.platform",
+      "label": "Blog Platform",
+      "wraps": [
+        "gw.cdn",
+        "svc.blog",
+        "store.posts",
+        "store.media"
+      ]
+    }
+  ],
+  "guidedViews": [
+    {
+      "id": "g.read",
+      "label": "Reading posts",
+      "focus": [
+        "actor.reader",
+        "gw.cdn",
+        "svc.blog",
+        "store.posts"
+      ],
+      "note": "Readers hit the edge cache; misses go to the blog app, which loads posts."
+    },
+    {
+      "id": "g.write",
+      "label": "Authoring",
+      "focus": [
+        "actor.author",
+        "svc.blog",
+        "store.posts",
+        "store.media"
+      ],
+      "note": "Authors publish posts and upload images through the blog app."
+    }
+  ],
+  "privacy": {
+    "classification": "public",
+    "boundary": "external-allowed"
+  }
+}

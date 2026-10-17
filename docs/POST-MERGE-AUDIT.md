@@ -716,3 +716,64 @@ Final checks:
 - **Withdrawn check:** an evidence-path check first passed vacuously, because fake mode's canned diagram has no evidence. It was removed rather than counted. Path scoping is covered by the ingest test.
 
 Artifacts are in the session scratchpad (`gt`). Cloned repositories were read as data and never executed; no databases, credentials or cookies are published.
+
+## Task 19 — evaluation oracle, provider results and review handoff
+
+2026-10-17, America/Chicago. Branch `feat/evaluation`, based on merged PR #34 at `7c45d39`. Real-provider spend was approved up to $8. Results and method: [benchmarks/provider-eval/README.md](../benchmarks/provider-eval/README.md).
+
+**Suite A oracle.**
+- **Before:** the strict matcher compared lowercase labels. It rejected `Orders Service` (aliases `Order Service`, `Orders`) and `Catalog DB (PostgreSQL)` (alias `PostgreSQL`), so the report exited 1.
+- **Matching:** whole names only, after normalising case, punctuation and a plural `s` per word, with parentheticals as alternative names. One node may now satisfy only one requirement, which is stricter than before.
+- **Self-tests:**
+  - the three real post-merge models now pass
+  - `PostgreSQL Replica` is still rejected
+  - `User Service` does not satisfy `User`
+  - one node cannot satisfy two requirements; removing that rule fails the test
+- **Receipts:** the original failing receipt is committed unchanged, together with a re-check of the same models. The report now exits 2: incomplete, with only the named visual reviews missing.
+
+**Flaky tests, reproduced and removed.**
+- **Gzip bomb test:** it compared wall-clock times, so CPU load could flip it. It now counts the bytes the inflater actually emits: more than the 32 MB cap, but within 4 MB of it. Removing the abort fails it with "inflated 1073741824 bytes for a 33554432-byte cap".
+- **Repair self-test:** a loop that truncates and rewrites `packages/model/dist/index.js`, as a concurrent build does, reproduced the retained failure: 2 of 3 runs failed with the same signature. Suite A's self-test had the same latent race: 3 of 3 failed. Both self-tests now:
+  - snapshot the validator once, after two identical reads and a clean import
+  - pass that snapshot to every child run with `--validator`
+  - print a child's stderr on failure
+
+  Pinned repair receipts refuse `--validator` and still rebuild from source. Under the rewrite loop, both self-tests passed 4 of 4 runs (the repair self-test 5 of 5 in an earlier run).
+
+**Provider evaluation.**
+- **Harness:** `benchmarks/provider-eval/` drives a running server through the public API. Each case gets its own session and simulated network address. Per-call outcomes, repairs, tokens and cost come from the server's `call_log`, and latency is measured end to end.
+- **Diagram scoring:** `score.mjs` scores imports with ground truth at diagram level, by evidence line or whole name, counting only source-supported claims toward precision. Its self-test is part of `pnpm bench:selftest`.
+- **Dry run:** a fake-model run exercised every path first. Its fake Suite A receipt was deleted, not kept as evidence.
+- **Port collision:** the first real launch collided with an unrelated server already on port 3034. The readiness check was answered by that server, and the driver stopped at opening the database before sending any request. The relaunch used a port confirmed free, and checked that the server held its own database.
+
+**Results** (isolated production build, hosted `claude-opus-5-5`, cases run sequentially, $4.37 metered):
+- **Descriptions:** 20/20 succeeded and 30/30 saved diagrams validate, but **0 of 20 descriptions and 0 of 4 imports were valid on the first attempt**. Refinements were 5 of 6.
+- **Latency (p50 / p90):** descriptions 52.3 / 71.3 s, imports 74.6 / 98.6 s, refinements 4.3 / 9.2 s.
+- **Cost:** $0.16 per description.
+- **Cache:** estimated savings of $0.67, 21 % of description spend.
+- **Suite A:** the semantic and validation gates passed 3/3.
+- **Clarification:** none was asked. The vague "A blog." produced honestly labelled inferred and proposed parts, plus three open questions.
+- **Diagram-level accuracy:**
+  - FastAPI template: 10/12 nodes and 12/16 edges found (SMTP and Sentry, as in task 15); source-supported precision 10/10 nodes and 12/12 edges
+  - petclinic: 19/19 nodes and 10/10 edges at 100 % precision
+  - nothing extra was claimed as source-supported
+
+**Root cause of first-attempt failures.** A diagnostic replayed four descriptions, one per diagram type (about $0.7 estimated, outside the metered run), and recorded each repair's validator feedback. The first schema-valid attempt always failed the same way: every `evidence` entry was free text, such as `["User: an HTTP controller"]`.
+
+The hosted prompt still sends evidence as an opaque JSON-encoded string. That is a workaround for the API's structured-output grammar, which hosted generation does not use, so the model never sees the evidence shape. One diagnostic attempt also returned output that was not valid JSON. The fix is deliberately left to task 19b, so it can be measured against this unchanged baseline.
+
+**Review handoff.** `benchmarks/ordinary-model-floor/review/` holds:
+- the three Suite A diagrams at revision 1, before the run's refinements, captured in the hosted workspace as their owning session
+- their models
+- the defect checklist and the exact commands to record verdicts
+
+Because the workspace opens a diagram's latest revision, the first capture showed the refined checkout diagram. The capture was redone from copies of revision 1 in the isolated evaluation database. That refined checkout diagram laid out right to left with a wrapping connection; it is listed in `OPEN-GAPS.md` for a reviewer to confirm. No visual verdict was recorded on anyone's behalf.
+
+**Final checks:**
+- 1,076 hosted tests passed; local 1,052 passed with 24 expected skips
+- all typechecks passed
+- Suite A self-test 25/25, scoring self-test, and repair self-test 37/37
+
+App source is unchanged.
+
+Artifacts outside version control are in the session scratchpad (`eval`). No database, key or session cookie is committed: the committed results contain prompts, model shapes, usage and diagrams only.

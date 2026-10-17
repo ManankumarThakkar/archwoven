@@ -1,0 +1,215 @@
+{
+  "schemaVersion": "1",
+  "revision": 2,
+  "parentId": 1,
+  "title": "Checkout Flow",
+  "requirements": [
+    {
+      "id": "req.checkout-gateway",
+      "text": "Customers access checkout through an API gateway.",
+      "status": "stated"
+    },
+    {
+      "id": "req.gateway-routing",
+      "text": "The API gateway routes checkout requests to the order service.",
+      "status": "stated"
+    },
+    {
+      "id": "req.stripe-charge",
+      "text": "The order service charges the customer via Stripe.",
+      "status": "stated"
+    }
+  ],
+  "openQuestions": [
+    {
+      "id": "q.order-persistence",
+      "text": "Where does the order service persist orders and payment status?",
+      "blockedBy": null
+    },
+    {
+      "id": "q.stripe-webhooks",
+      "text": "Are Stripe webhooks used to confirm payment asynchronously?",
+      "blockedBy": null
+    }
+  ],
+  "nodes": [
+    {
+      "id": "actor.customer",
+      "kind": "actor",
+      "label": "Customer",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "gw.api",
+      "kind": "gateway",
+      "label": "API Gateway",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "svc.orders",
+      "kind": "service",
+      "label": "Order Service",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "ext.stripe",
+      "kind": "external",
+      "label": "Stripe",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "svc.notifications",
+      "kind": "service",
+      "label": "Notification Service",
+      "provenance": "user-specified",
+      "evidence": []
+    }
+  ],
+  "edges": [
+    {
+      "id": "e.customer-gateway",
+      "from": "actor.customer",
+      "to": "gw.api",
+      "type": "sync",
+      "label": "Checkout request",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.gateway-orders",
+      "from": "gw.api",
+      "to": "svc.orders",
+      "type": "sync",
+      "label": "Route checkout",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.orders-stripe",
+      "from": "svc.orders",
+      "to": "ext.stripe",
+      "type": "sync",
+      "label": "Create charge",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.orders-notifications",
+      "from": "svc.orders",
+      "to": "svc.notifications",
+      "type": "async",
+      "label": "Payment succeeded",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.notifications-customer",
+      "from": "svc.notifications",
+      "to": "actor.customer",
+      "type": "async",
+      "label": "Email receipt",
+      "provenance": "user-specified",
+      "evidence": []
+    }
+  ],
+  "views": [
+    {
+      "id": "view.architecture",
+      "type": "architecture",
+      "orientation": "LR",
+      "nodes": [
+        "actor.customer",
+        "gw.api",
+        "svc.orders",
+        "ext.stripe",
+        "svc.notifications"
+      ],
+      "edges": [
+        "e.customer-gateway",
+        "e.gateway-orders",
+        "e.orders-stripe",
+        "e.orders-notifications",
+        "e.notifications-customer"
+      ],
+      "mainPath": [
+        "actor.customer",
+        "gw.api",
+        "svc.orders",
+        "ext.stripe"
+      ]
+    }
+  ],
+  "semanticChecks": {
+    "allowedRoots": [
+      "actor.customer"
+    ],
+    "allowedTerminals": [
+      "ext.stripe"
+    ],
+    "requiredEdges": [
+      {
+        "from": "actor.customer",
+        "to": "gw.api",
+        "type": "sync"
+      },
+      {
+        "from": "gw.api",
+        "to": "svc.orders",
+        "type": "sync"
+      },
+      {
+        "from": "svc.orders",
+        "to": "ext.stripe",
+        "type": "sync"
+      }
+    ],
+    "requiredPaths": [
+      {
+        "from": "actor.customer",
+        "to": "ext.stripe"
+      }
+    ]
+  },
+  "boundaries": [
+    {
+      "id": "b.checkout-platform",
+      "label": "Checkout Platform",
+      "wraps": [
+        "gw.api",
+        "svc.orders"
+      ]
+    }
+  ],
+  "guidedViews": [
+    {
+      "id": "g.entry",
+      "label": "Entry and routing",
+      "focus": [
+        "actor.customer",
+        "gw.api",
+        "svc.orders"
+      ],
+      "note": "Customer checkout requests enter via the API gateway and are routed to the order service."
+    },
+    {
+      "id": "g.payment",
+      "label": "Payment",
+      "focus": [
+        "svc.orders",
+        "ext.stripe"
+      ],
+      "note": "The order service charges the customer through Stripe."
+    }
+  ],
+  "privacy": {
+    "classification": "public",
+    "boundary": "external-allowed"
+  }
+}

@@ -1,0 +1,277 @@
+{
+  "schemaVersion": "1",
+  "revision": 1,
+  "title": "Checkout Sequence",
+  "requirements": [
+    {
+      "id": "req.submit-order",
+      "text": "Customer submits an order to the order service",
+      "status": "stated"
+    },
+    {
+      "id": "req.reserve-stock",
+      "text": "Order service reserves stock with the inventory service",
+      "status": "stated"
+    },
+    {
+      "id": "req.charge-card",
+      "text": "Order service charges the card through Stripe",
+      "status": "stated"
+    },
+    {
+      "id": "req.payment-failure",
+      "text": "On payment failure, release reserved stock and return an error",
+      "status": "stated"
+    },
+    {
+      "id": "req.order-placed",
+      "text": "On payment success, publish an OrderPlaced event",
+      "status": "stated"
+    }
+  ],
+  "openQuestions": [
+    {
+      "id": "q.event-broker",
+      "text": "Which broker or bus carries the OrderPlaced event?",
+      "blockedBy": "queue.order-events"
+    },
+    {
+      "id": "q.stock-unavailable",
+      "text": "What happens if stock cannot be reserved?",
+      "blockedBy": null
+    }
+  ],
+  "nodes": [
+    {
+      "id": "actor.customer",
+      "kind": "actor",
+      "label": "Customer",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "svc.orders",
+      "kind": "service",
+      "label": "Order Service",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "svc.inventory",
+      "kind": "service",
+      "label": "Inventory Service",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "ext.stripe",
+      "kind": "external",
+      "label": "Stripe",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "queue.order-events",
+      "kind": "queue",
+      "label": "Order Events",
+      "provenance": "inferred",
+      "evidence": []
+    }
+  ],
+  "edges": [
+    {
+      "id": "e.customer-orders",
+      "from": "actor.customer",
+      "to": "svc.orders",
+      "type": "sync",
+      "label": "Submit order",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.orders-inventory",
+      "from": "svc.orders",
+      "to": "svc.inventory",
+      "type": "sync",
+      "label": "Reserve / release stock",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.orders-stripe",
+      "from": "svc.orders",
+      "to": "ext.stripe",
+      "type": "sync",
+      "label": "Charge card",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.orders-events",
+      "from": "svc.orders",
+      "to": "queue.order-events",
+      "type": "async",
+      "label": "OrderPlaced",
+      "role": "async",
+      "provenance": "user-specified",
+      "evidence": []
+    }
+  ],
+  "views": [
+    {
+      "id": "view.checkout-sequence",
+      "type": "sequence",
+      "nodes": [
+        "actor.customer",
+        "svc.orders",
+        "svc.inventory",
+        "ext.stripe",
+        "queue.order-events"
+      ],
+      "edges": [
+        "e.customer-orders",
+        "e.orders-inventory",
+        "e.orders-stripe",
+        "e.orders-events"
+      ],
+      "sequence": {
+        "participants": [
+          "actor.customer",
+          "svc.orders",
+          "svc.inventory",
+          "ext.stripe",
+          "queue.order-events"
+        ],
+        "messages": [
+          {
+            "seq": 1,
+            "from": "actor.customer",
+            "to": "svc.orders",
+            "label": "Submit order",
+            "kind": "call"
+          },
+          {
+            "seq": 2,
+            "from": "svc.orders",
+            "to": "svc.inventory",
+            "label": "Reserve stock",
+            "kind": "call"
+          },
+          {
+            "seq": 3,
+            "from": "svc.inventory",
+            "to": "svc.orders",
+            "label": "Stock reserved",
+            "kind": "return"
+          },
+          {
+            "seq": 4,
+            "from": "svc.orders",
+            "to": "ext.stripe",
+            "label": "Charge card",
+            "kind": "call"
+          },
+          {
+            "seq": 5,
+            "from": "ext.stripe",
+            "to": "svc.orders",
+            "label": "Charge result",
+            "kind": "return"
+          },
+          {
+            "seq": 6,
+            "from": "svc.orders",
+            "to": "svc.inventory",
+            "label": "Release stock (payment failed)",
+            "kind": "call",
+            "fragment": {
+              "type": "alt",
+              "covers": [
+                6,
+                7,
+                8,
+                9,
+                10
+              ]
+            }
+          },
+          {
+            "seq": 7,
+            "from": "svc.inventory",
+            "to": "svc.orders",
+            "label": "Stock released",
+            "kind": "return"
+          },
+          {
+            "seq": 8,
+            "from": "svc.orders",
+            "to": "actor.customer",
+            "label": "Payment error",
+            "kind": "return"
+          },
+          {
+            "seq": 9,
+            "from": "svc.orders",
+            "to": "queue.order-events",
+            "label": "Publish OrderPlaced (success)",
+            "kind": "async"
+          },
+          {
+            "seq": 10,
+            "from": "svc.orders",
+            "to": "actor.customer",
+            "label": "Order confirmed",
+            "kind": "return"
+          }
+        ]
+      }
+    }
+  ],
+  "semanticChecks": {
+    "allowedRoots": [
+      "actor.customer"
+    ],
+    "allowedTerminals": [
+      "svc.inventory",
+      "ext.stripe",
+      "queue.order-events"
+    ],
+    "requiredEdges": [
+      {
+        "from": "actor.customer",
+        "to": "svc.orders",
+        "type": "sync"
+      },
+      {
+        "from": "svc.orders",
+        "to": "svc.inventory",
+        "type": "sync"
+      },
+      {
+        "from": "svc.orders",
+        "to": "ext.stripe",
+        "type": "sync"
+      },
+      {
+        "from": "svc.orders",
+        "to": "queue.order-events",
+        "type": "async"
+      }
+    ],
+    "requiredPaths": [
+      {
+        "from": "actor.customer",
+        "to": "queue.order-events"
+      }
+    ]
+  },
+  "boundaries": [],
+  "guidedViews": [],
+  "privacy": {
+    "classification": "public",
+    "boundary": "external-allowed"
+  }
+}
