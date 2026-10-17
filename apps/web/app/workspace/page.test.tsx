@@ -958,6 +958,7 @@ describe('import source and credit wording by deployment', () => {
     expect(pressed('Local folder')).toBe('true');
     expect(container.querySelector('[aria-label="Repository branch or commit"]')).toBeNull();
     expect(container.textContent).toContain('a git clone on the machine running Archwoven (in Docker, a folder mounted into the container)');
+    expect(container.textContent).toContain('Uncommitted and untracked changes are excluded.');
     await fill('#repository-path', '~/code/shop');
     await fill('[aria-label="Repository subdirectory"]', 'services/api');
     await act(async () => analyze()!.click());

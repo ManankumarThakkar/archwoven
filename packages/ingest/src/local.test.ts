@@ -4,13 +4,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Fragment } from '@archwoven/extract';
 import { ingestLocal, walkLocal } from './local';
+import { commitFixture } from './git-fixtures';
 
 const dirs: string[] = [];
 const tmp = () => { const d = mkdtempSync(join(tmpdir(), 'aw-local-')); dirs.push(d); return d; };
 afterAll(() => { for (const d of dirs) rmSync(d, { recursive: true, force: true }); });
 
 const emptyFragment = (): Fragment => ({ nodes: [], edges: [], endpoints: [], gaps: [] });
-const cannedRev = async () => 'deadbeefcafe';
+const cannedRev = async (dir: string) => commitFixture(dir);
 
 const springTree = (): string => {
   const d = tmp();
@@ -30,12 +31,12 @@ describe('ingestLocal (private clone import, §8)', () => {
     expect(r.framework).toBe('generic');
     expect(r.fragment.nodes[0]).toMatchObject({ label: 'main.go', kind: 'component' });
   });
-  it('spring tree → fragment + injected sha + framework', async () => {
+  it('committed spring tree → fragment + pinned sha + framework', async () => {
     const d = springTree();
     const r = await ingestLocal(d, { revParse: cannedRev, extractSpringBoot: async () => ({ ...emptyFragment(), nodes: [{ id: 'svc.app', kind: 'service', label: 'App', provenance: 'source-supported', evidence: [] }], endpoints: [{ method: 'GET', path: '/api/x', controller: 'ApiController' }] }), extractFastApi: async () => emptyFragment() });
     expect(r.ok, JSON.stringify(r.ok ? '' : r)).toBe(true);
     if (!r.ok) return;
-    expect(r.sha).toBe('deadbeefcafe');
+    expect(r.sha).toMatch(/^[a-f0-9]{40}$/);
     expect(r.framework).toBe('spring-boot');
     expect(r.fragment.nodes.map((n) => n.id)).toEqual(['svc.app']);
   });

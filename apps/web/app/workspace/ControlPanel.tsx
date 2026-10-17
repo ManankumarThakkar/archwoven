@@ -159,7 +159,7 @@ export function ControlPanel({ running, locked=false, remaining, deploy, mode, p
               <label className="aw-repo-option">Subdirectory
               <input aria-label="Repository subdirectory" value={subdir} onChange={(e) => setSubdir(e.target.value)} disabled={running} placeholder="Optional" style={input} /></label>
             </div>
-            <div id="repository-path-help" style={{ fontSize: 12, color: '#8b98b8', lineHeight: 1.6 }}>Reads the checked-out commit of a git clone on the machine running Archwoven (in Docker, a folder mounted into the container). Nothing leaves this machine. Runs locally; no credits.</div>
+            <div id="repository-path-help" style={{ fontSize: 12, color: '#8b98b8', lineHeight: 1.6 }}>Reads the checked-out commit of a git clone on the machine running Archwoven (in Docker, a folder mounted into the container). Uncommitted and untracked changes are excluded. Nothing leaves this machine. Runs locally; no credits.</div>
           </> : <>
             <label className="aw-field-label" htmlFor="repository-url">Public GitHub repository</label>
             <input id="repository-url" type="url" aria-describedby={url && urlError ? "repository-help repository-error" : "repository-help"} aria-invalid={!!url && !!urlError} value={url} onChange={(e) => setUrl(e.target.value)} disabled={running} placeholder="https://github.com/owner/repo" style={input} />
