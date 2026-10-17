@@ -1,3 +1,6 @@
+import { newUsageLedger, startAttempt, captureUsage, type UsageLedger } from './usage';
+import type { TaskUsage } from '@archwoven/model';
+export type { TaskUsage } from '@archwoven/model';
 import { ClarificationSchema, CLARIFICATION_SYSTEM, type DescriptionOutcome } from './clarification';
 import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
@@ -27,11 +30,11 @@ export const CONTEXT_TOKEN_LIMIT = 25_000;
  * and would forward the API key to whatever proxy is configured.
  */
 export const makeAnthropic = (apiKey: string): Anthropic =>
-  new Anthropic({ apiKey, baseURL: 'https://api.anthropic.com' });
+  new Anthropic({ apiKey, baseURL: 'https://api.anthropic.com', maxRetries: 0 });
 
 /** Zero-spend mode for quota/e2e smoke: return a canned valid model, never call the API. */
 export const fakeMode = () => process.env.ARCHWOVEN_FAKE === '1';
-const fakeUsage = (effort: Effort): TaskUsage => ({ model: MODEL, effort, inputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 0, latencyMs: 0, repairs: 0 });
+const fakeUsage = (effort: Effort): TaskUsage => ({ ...usageFrom({}, effort, 0, 0), provider: 'demo' });
 
 /** tsx/node --env-file does not strip surrounding quotes; a key written as
  *  KEY="sk-ant-…" arrives with literal quotes and 401s. Sanitize defensively. */
@@ -41,17 +44,6 @@ export const resolveApiKey = (raw = process.env.ANTHROPIC_API_KEY): string =>
  *  ignores output_config.format and free-generates markdown. The SDK's beta namespace
  *  does NOT add it for us on .create(); we must pass it explicitly. */
 export const STRUCTURED_OUTPUTS_BETA = 'structured-outputs-2025-12-15';
-
-export interface TaskUsage {
-  model: string;
-  effort: Effort;
-  inputTokens: number;
-  cacheWriteTokens: number;
-  cacheReadTokens: number;
-  outputTokens: number;
-  latencyMs: number;
-  repairs: number;
-}
 
 export type Effort = 'low' | 'medium' | 'high';
 
@@ -270,16 +262,20 @@ ${contract}`;
 export const STABLE_SYSTEM = modelSystem(MODEL_JSON_CONTRACT, 'public');
 export const LOCAL_MODEL_SYSTEM = modelSystem(NATIVE_MODEL_JSON_CONTRACT, 'private');
 
-export function usageFrom(usage: RawUsage, effort: Effort, latencyMs: number, repairs: number): TaskUsage {
+export function usageFrom(usage: RawUsage | UsageLedger, effort: Effort, latencyMs: number, repairs: number): TaskUsage {
   return {
     model: MODEL,
+    provider: 'anthropic',
     effort,
+    attempts: 'attempts' in usage ? usage.attempts : [],
+    transportRetries: 'attempts' in usage ? usage.attempts.filter(part => part.kind === 'retry').length : 0,
+    usageComplete: 'attempts' in usage ? usage.attempts.every(part => part.usageComplete) : true,
     inputTokens: usage.input_tokens ?? 0,
     cacheWriteTokens: usage.cache_creation_input_tokens ?? 0,
     cacheReadTokens: usage.cache_read_input_tokens ?? 0,
     outputTokens: usage.output_tokens ?? 0,
     latencyMs,
-    repairs,
+    repairs: 'attempts' in usage ? usage.attempts.filter(part => part.kind === 'repair').length : repairs,
   };
 }
 
@@ -327,16 +323,11 @@ export async function generateModel(
   let repairs = 0;
   // Billed usage accumulates across every attempt — repairs cost real money and
   // the stop-loss/§11 meter must see it, not just the last attempt.
-  const billed: Required<RawUsage> = { input_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, output_tokens: 0 };
-  const addUsage = (u: RawUsage) => {
-    billed.input_tokens += u.input_tokens ?? 0;
-    billed.cache_creation_input_tokens += u.cache_creation_input_tokens ?? 0;
-    billed.cache_read_input_tokens += u.cache_read_input_tokens ?? 0;
-    billed.output_tokens += u.output_tokens ?? 0;
-  };
+  const billed = newUsageLedger();
 
   for (let attempt = 0; attempt <= MAX_REPAIRS; attempt++) {
     if (opts.signal?.aborted) { lastErrors = ['Generation cancelled.']; break; }
+    startAttempt(billed, repairs);
     let response: Awaited<ReturnType<StructuredClient['beta']['messages']['create']>>;
     try {
       // No structured-output grammar on hosted generate: the full
@@ -355,7 +346,7 @@ export async function generateModel(
       if (opts.signal?.aborted) break;
       continue; // transient/transport failure — retry within budget
     }
-    addUsage(response.usage);
+    captureUsage(billed, response.usage);
 
     const text = textOf(response.content);
     let parsed: unknown;

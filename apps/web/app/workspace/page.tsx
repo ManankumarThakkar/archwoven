@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useReducer, useRef, useState } from 'react';
-import type { EditOp, SystemModel, ViewType } from '@archwoven/model';
+import type { EditOp, SystemModel, TaskReport, ViewType } from '@archwoven/model';
 import { SystemModelSchema, MAX_DETAIL_VIEWS, detailDrift, detailViewId, expandBlocker, internalsOf, isDetailView, type Edge, type View } from '@archwoven/model';
 import { initial, next } from './states';
 import type { Mode, Stage } from './states';
 import { ControlPanel, type RepoForm } from './ControlPanel';
 import { Canvas } from './Canvas';
+import { TaskUsageSummary } from './TaskUsageSummary';
 import { ArchitectureOrientation } from './ArchitectureOrientation';
 import { ClarificationPanel } from './ClarificationPanel';
 import { Inspector } from './InspectorPanel';
@@ -64,6 +65,10 @@ export default function WorkspacePage() {
   const [refining, setRefining] = useState(false);
   const [activeView, setActiveView] = useState<string>('');
   const [remaining, setRemaining] = useState<number | null>(null);
+  const [lastTask, setLastTask] = useState<TaskReport | null>(null);
+  const usageSequence = useRef(0);
+  const usageWatch = useRef(0);
+  const [usagePending, setUsagePending] = useState(false);
   const [pool, setPool] = useState(6);
   const [fake, setFake] = useState(false);
   const [deploy, setDeploy] = useState<'hosted' | 'local'>('hosted');
@@ -77,6 +82,37 @@ export default function WorkspacePage() {
   const mutationRef = useRef(false);
   const generationRef = useRef(false);
   const [clarification, setClarification] = useState<{ jobId: string; questions: string[]; preferredView?: ViewType } | null>(null);
+
+  const refreshUsage = async () => {
+    const sequence = ++usageSequence.current;
+    try {
+      const response = await fetch('/api/quota');
+      if (!response.ok) return;
+      const q = await response.json();
+      if (sequence !== usageSequence.current) return;
+      setLastTask(q.lastTask ?? null);
+      setRemaining(q.remaining); setPool(q.pool); setFake(q.fake);
+    } catch { /* A usage refresh must not replace the task result or its error. */ }
+  };
+
+  // Cancellation releases the form before a provider necessarily reports usage.
+  // Observe settlement separately, bounded by the longest supported job deadline.
+  const watchUsage = async (jobId: string) => {
+    const watch = ++usageWatch.current;
+    setUsagePending(true);
+    for (let attempt = 0; attempt < 300; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      if (watch !== usageWatch.current) return;
+      try {
+        const response = await fetch(`/api/jobs/${encodeURIComponent(jobId)}`);
+        if (!response.ok) break;
+        const job = await response.json();
+        if (watch !== usageWatch.current) return;
+        if (!job.usagePending) { setUsagePending(false); void refreshUsage(); return; }
+      } catch { /* Retry transient failures without hiding the task result. */ }
+    }
+    // Leave the pending disclosure visible if accounting could not be confirmed.
+  };
 
   const rememberModel = (id: string) => {
     try { sessionStorage.setItem('aw_modelId', id); } catch { /* storage can be disabled */ }
@@ -121,8 +157,7 @@ export default function WorkspacePage() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const q = await fetch('/api/quota').then((r) => r.json()).catch(() => null);
-      if (q) { setRemaining(q.remaining); setPool(q.pool); setFake(q.fake); }
+      await refreshUsage();
       const cfg = await fetch('/api/config').then((r) => r.json()).catch(() => null);
       if (cfg?.mode === 'local' || cfg?.mode === 'hosted') setDeploy(cfg.mode);
       if (typeof cfg?.fake === 'boolean') setFake(cfg.fake);
@@ -138,7 +173,7 @@ export default function WorkspacePage() {
       }
       setRestoring(false);
     })();
-    return () => { cancelled = true; ++loadSequence.current; };
+    return () => { cancelled = true; ++loadSequence.current; ++usageSequence.current; ++usageWatch.current; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -146,7 +181,7 @@ export default function WorkspacePage() {
     let runningSince: number | null = null;
     let misses = 0;
     for (;;) {
-      let job: { status: string; stage?: Stage | null; modelId: string; revision: number; queuePosition?: number | null; deadlineAt?: number | null; questions?: string[]; remaining?: number | null; error?: string | null } | null = null;
+      let job: { status: string; stage?: Stage | null; modelId: string; revision: number; queuePosition?: number | null; deadlineAt?: number | null; questions?: string[]; usagePending?: boolean; remaining?: number | null; error?: string | null } | null = null;
       try {
         const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}`);
         if (res.status === 404) { dispatch({ type: 'ERROR', message: 'This generation no longer exists — please try again.' }); return; }
@@ -187,6 +222,7 @@ export default function WorkspacePage() {
         dispatch({ type: 'CLARIFY', questions: job.questions });
         return;
       }
+      if (job.usagePending && (job.status === 'cancelled' || job.status === 'failed')) void watchUsage(jobId);
       if (job.status === 'cancelled') { setQueuedPos(null); dispatch({ type: 'CANCEL' }); return; }
       if (job.status === 'succeeded') {
         setQueuedPos(null);
@@ -199,6 +235,7 @@ export default function WorkspacePage() {
   };
 
   const submitGeneration = async (url: string, body: object, preferredView?: ViewType) => {
+    ++usageWatch.current; setUsagePending(false);
     generationRef.current = true;
     jobIdRef.current = null;
     setCancelError(null);
@@ -219,7 +256,7 @@ export default function WorkspacePage() {
       await poll(jobId, preferredView);
     } catch {
       dispatch({ type: 'ERROR', message: 'Could not start generation. Check your connection and try again; retrying the same input will reconnect to any job already started.' });
-    } finally { generationRef.current = false; jobIdRef.current = null; }
+    } finally { generationRef.current = false; jobIdRef.current = null; void refreshUsage(); }
   };
 
   const generate = async (prompt: string, view: ViewType) => {
@@ -291,6 +328,7 @@ export default function WorkspacePage() {
     } finally {
       mutationRef.current=false;
       setRefining(false);
+      void refreshUsage();
     }
   };
 
@@ -361,6 +399,7 @@ export default function WorkspacePage() {
       return false;
     } finally {
       mutationRef.current = false; setRefining(false);
+      void refreshUsage();
     }
   };
 
@@ -461,6 +500,7 @@ export default function WorkspacePage() {
         {deploy === 'local'
           ? <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 6, background: '#111a2e', color: '#93c5fd' }}>Local · no credit limits</span>
           : <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 6, background: '#111a2e', color: '#fbbf24' }}>◐ {remaining ?? pool}/{pool} credits today</span>}
+        {usagePending ? <span role="status">Usage pending · provider is settling</span> : lastTask && <TaskUsageSummary task={lastTask} />}
         {!llmReady && (
           <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 6, background: '#3b2f0d', color: '#fbbf24' }}>
             ⚠ No API key — set ANTHROPIC_API_KEY in apps/web/.env.local, or run locally: ARCHWOVEN_MODE=local pnpm dev

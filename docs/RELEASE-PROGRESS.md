@@ -19,8 +19,8 @@ Completed foundation: PR #11 clean-download instructions; PR #12 authoritative e
 | 10b | Refinement keeps semantic checks consistent when adding or removing sources and sinks | Merged to main as PR #25; verified |
 | 11 | Local-clone UI, accurate credits copy and stable warnings | Merged to main as PR #26; verified |
 | 12 | Subdirectory-first scanning and generated-file exclusions | Merged to main as PR #27; verified |
-| 13 | Truthful working-tree/commit evidence | PR #28 open against main; verified |
-| 14 | Accurate task/repair usage and provider-aware costs | Pending |
+| 13 | Truthful working-tree/commit evidence | Merged to main as PR #28; verified |
+| 14 | Accurate task/repair usage and provider-aware costs | Verified on `fix/provider-aware-task-usage`; PR preparation |
 | 15 | Supported framework extraction gaps and coverage measurements | Pending |
 | 16 | Retention, expiration and user deletion | Pending |
 | 17 | Threat model and before-egress content secret scanning | Pending |

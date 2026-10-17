@@ -1,3 +1,4 @@
+import { newUsageLedger, startAttempt, captureUsage } from './usage';
 import { z } from 'zod';
 import { EditOpSchema, applyEditOps, isSourceEvidenceRefusal, sameModelContent, type EditOp, type SystemModel, type ViewType } from '@archwoven/model';
 import {
@@ -53,7 +54,7 @@ export async function generateRefinement(
   if (opts.signal?.aborted) return { ok: false, errors: ['Refinement cancelled.'], usage: usageFrom({}, effort, 0, 0) };
   if (!opts.client && fakeMode()) {
     const ops: EditOp[] = [{ op: 'add', target: 'svc.cache', patch: { id: 'svc.cache', kind: 'service', label: 'Cache', provenance: 'proposed' }, baseRevision: model.revision, summary: '+Cache service' }];
-    return { ok: true, ops, usage: { model: MODEL, effort, inputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 0, latencyMs: 0, repairs: 0 } };
+    return { ok: true, ops, usage: { ...usageFrom({}, effort, 0, 0), provider: 'demo' } };
   }
   const client: StructuredClient =
     opts.client ?? (makeAnthropic(resolveApiKey()) as unknown as StructuredClient);
@@ -77,16 +78,11 @@ export async function generateRefinement(
   let lastErrors: string[] = [];
   const refusals: string[] = [];
   let repairs = 0;
-  const billed: Required<RawUsage> = { input_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, output_tokens: 0 };
-  const addUsage = (u: RawUsage) => {
-    billed.input_tokens += u.input_tokens ?? 0;
-    billed.cache_creation_input_tokens += u.cache_creation_input_tokens ?? 0;
-    billed.cache_read_input_tokens += u.cache_read_input_tokens ?? 0;
-    billed.output_tokens += u.output_tokens ?? 0;
-  };
+  const billed = newUsageLedger();
 
   for (let attempt = 0; attempt <= MAX_REPAIRS; attempt++) {
     if (opts.signal?.aborted) { lastErrors = ['Refinement cancelled.']; break; }
+    startAttempt(billed, repairs);
     let response: Awaited<ReturnType<StructuredClient['beta']['messages']['create']>>;
     try {
       response = await client.beta.messages.create({
@@ -102,7 +98,7 @@ export async function generateRefinement(
       if (opts.signal?.aborted) break;
       continue;
     }
-    addUsage(response.usage);
+    captureUsage(billed, response.usage);
 
     const text = textOf(response.content);
     let ops: unknown;

@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+import type { TaskReport, TaskUsage, TokenUsage, ViewType } from '@archwoven/model';
 import type { Store, Tier } from './store';
 
 /** §15 LOCKED numbers — tunable via config review post-launch, not per-call. */
@@ -12,16 +14,26 @@ export const STOP_LOSS_USD = 15;
 export const BURST = { session: 5, ip: 20 };
 
 export type Action = keyof typeof WEIGHTS;
-export interface Usage {
-  inputTokens: number;
-  cacheWriteTokens: number;
-  cacheReadTokens: number;
-  outputTokens: number;
+/** Legacy injected adapters may omit identity; that is unpriced, never guessed. */
+export interface Usage extends TokenUsage {
+  provider?: string;
+  model?: string;
+  effort?: TaskUsage['effort'];
+  latencyMs?: number;
+  repairs?: number;
+  transportRetries?: number;
+  usageComplete?: boolean;
+  attempts?: TaskUsage['attempts'];
 }
 
 export const localMode = () => process.env.ARCHWOVEN_MODE === 'local';
 
-export function costOf(u: Usage): number {
+/** Standard direct-API Opus 5.5 rates verified 2026-10-17. No batch, fast
+ * mode, geographic premium or local-compute cost is inferred from token counts. */
+export function costOf(u: Usage): number | null {
+  if (u.provider === 'ollama' || u.provider === 'demo') return 0;
+  if (u.provider !== 'anthropic' || !/^claude-opus-5-5(?:-[0-9]{8})?$/.test(u.model ?? '')) return null;
+  if (![u.inputTokens, u.outputTokens, u.cacheWriteTokens, u.cacheReadTokens].every(value => Number.isSafeInteger(value) && value >= 0)) return null;
   return (u.inputTokens * PRICES.input + u.cacheWriteTokens * PRICES.cacheWrite + u.cacheReadTokens * PRICES.cacheRead + u.outputTokens * PRICES.output) / 1e6;
 }
 
@@ -85,8 +97,19 @@ export function refundCredits(store: Store, sessionId: string, day: string, weig
  */
 export function recordUsage(
   store: Store,
-  req: { sessionId: string; tier: Tier; action: Action; usage: Usage; retries?: number; outcome?: 'ok' | 'repaired' | 'failed' },
-): void {
+  req: { sessionId: string; tier: Tier; action: Action | 'expand'; view?: ViewType; taskId?: string; modelId?: string; usage: Usage; retries?: number; outcome?: 'ok' | 'repaired' | 'failed' },
+): TaskReport {
   const cost = costOf(req.usage);
-  store.logCall({ sessionId: req.sessionId, tier: req.tier, view: req.action, ...req.usage, costUsd: cost, retries: req.retries ?? 0, outcome: req.outcome ?? 'ok' });
+  const provider = ['anthropic', 'ollama', 'demo'].includes(req.usage.provider ?? '') ? req.usage.provider as TaskUsage['provider'] : 'unknown';
+  const task: TaskReport = {
+    id: req.taskId ?? randomUUID(), action: req.action, view: req.view ?? null, modelId: req.modelId ?? null,
+    provider, model: req.usage.model ?? 'unknown', effort: req.usage.effort ?? 'medium',
+    inputTokens: req.usage.inputTokens, outputTokens: req.usage.outputTokens, cacheWriteTokens: req.usage.cacheWriteTokens, cacheReadTokens: req.usage.cacheReadTokens,
+    latencyMs: req.usage.latencyMs ?? 0, repairs: req.usage.repairs ?? req.retries ?? 0, transportRetries: req.usage.transportRetries ?? 0,
+    usageComplete: req.usage.usageComplete ?? false, attempts: req.usage.attempts ?? [],
+    estimatedCostUsd: cost, costBasis: provider === 'ollama' ? 'local-inference' : provider === 'demo' ? 'demo' : cost === null ? 'unavailable' : 'anthropic-opus-5-5-2026-10-17',
+    outcome: req.outcome ?? 'ok',
+  };
+  store.logCall({ sessionId: req.sessionId, tier: req.tier, view: req.view ?? req.action, inputTokens: task.inputTokens, outputTokens: task.outputTokens, cacheWriteTokens: task.cacheWriteTokens, cacheReadTokens: task.cacheReadTokens, costUsd: cost, retries: task.repairs, outcome: task.outcome, task });
+  return task;
 }

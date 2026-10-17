@@ -408,3 +408,10 @@ describe('generateRefinementLocal source refusals', () => {
     if (!out.ok) expect(out.errors.join(' ')).toMatch(/is backed by source evidence and can't be removed by refinement/);
   });
 });
+
+it('marks a valid answer without final usage as incomplete instead of claiming zero measured tokens', async () => {
+  const out = await generateModelLocal('shop', 'architecture', { fetchImpl: (async () => rawResponse([JSON.stringify({ message: { content: JSON.stringify(validFullModel) }, done: false })])) as typeof fetch });
+  expect(out.ok).toBe(true);
+  expect(out.usage).toMatchObject({ provider: 'ollama', usageComplete: false, repairs: 0, transportRetries: 0 });
+  expect(out.usage.attempts).toHaveLength(1);
+});

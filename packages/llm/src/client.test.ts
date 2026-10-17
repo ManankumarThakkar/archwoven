@@ -241,3 +241,38 @@ it('clear descriptions still produce a model in one decision call',async()=>{
   const out=await generateModel('A client sends orders to an API which writes them to PostgreSQL.', 'architecture',{client,allowClarification:true});
   expect(out).toMatchObject({ok:true,model:{title:validFull.title},usage:{repairs:0}});expect(calls).toHaveLength(1);
 });
+
+describe('reported task usage', () => {
+  it('keeps transport retries separate from actual repair submissions', async () => {
+    let attempt = 0;
+    const client: StructuredClient = {
+      messages: { countTokens: async () => ({ input_tokens: 10 }) },
+      beta: { messages: { create: async () => {
+        if (attempt++ === 0) throw new Error('transport unavailable');
+        return { content: [{ type: 'text', text: JSON.stringify(attempt === 2 ? dangling : validFull) }], stop_reason: 'end_turn', usage: USAGE };
+      } } },
+    };
+    const out = await generateModel('shop', 'architecture', { client });
+    expect(out.ok).toBe(true);
+    expect(out.usage).toMatchObject({ provider: 'anthropic', repairs: 1, transportRetries: 1, usageComplete: false, inputTokens: 2400 });
+    expect(out.usage.attempts.map(part => part.kind)).toEqual(['initial', 'retry', 'repair']);
+  });
+  it('does not count a prepared repair that cancellation prevents from being sent', async () => {
+    const controller = new AbortController();
+    const client: StructuredClient = {
+      messages: { countTokens: async () => ({ input_tokens: 10 }) },
+      beta: { messages: { create: async () => {
+        controller.abort();
+        return { content: [{ type: 'text', text: JSON.stringify(dangling) }], stop_reason: 'end_turn', usage: USAGE };
+      } } },
+    };
+    const out = await generateModel('shop', 'architecture', { client, signal: controller.signal });
+    expect(out.ok).toBe(false);
+    expect(out.usage.repairs).toBe(0);
+    expect(out.usage.attempts).toHaveLength(1);
+    expect(out.usage.usageComplete).toBe(true);
+  });
+  it('disables SDK retries so one adapter attempt cannot hide additional calls', () => {
+    expect(makeAnthropic('sk-test').maxRetries).toBe(0);
+  });
+});

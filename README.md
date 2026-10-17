@@ -58,7 +58,7 @@ ARCHWOVEN_MODE=hosted ARCHWOVEN_FAKE=0 pnpm dev
 curl -s http://localhost:3000/api/config
 ```
 
-The config response must contain `"mode":"hosted"`, `"fake":false`, and `"llmReady":true`. A demo warning means fixed sample data is enabled; that mode deliberately repeats the same sample. Real generation consumes provider tokens and application credits. Restart an already running server after changing environment variables.
+The config response must contain `"mode":"hosted"`, `"fake":false`, and `"llmReady":true`. A demo warning means fixed sample data is enabled; that mode deliberately repeats the same sample. Real generation consumes provider tokens and application credits. The workspace’s **Last task** summary shows reported token usage, repairs/retries and an estimated hosted API cost; open it for the breakdown. Ollama has no external API charge (hardware/electricity are not measured). Interrupted or missing usage is marked incomplete, and reports survive reload separately from diagram JSON. Restart an already running server after changing environment variables.
 
 Compare two unrelated descriptions (for example a library and a greenhouse), then import your public repository. Inspect labels and connection evidence; refinement should modify only the requested parts, and undo should restore them. [Live verification](docs/LIVE-CHECKS.md) records the exercised cases and limitations.
 

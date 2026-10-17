@@ -6,7 +6,7 @@ import { resetSlots } from '../../../../lib/llm-limiter';
 import { repoJobRegistry } from '../../../../lib/repo-registry';
 import { POST } from './route';
 
-const usage = { model: 'claude-opus-5-5', effort: 'medium' as const, inputTokens: 10, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 5, latencyMs: 10, repairs: 0 };
+const usage = { provider: 'anthropic' as const, transportRetries: 0, usageComplete: true, attempts: [], model: 'claude-opus-5-5', effort: 'medium' as const, inputTokens: 10, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 5, latencyMs: 10, repairs: 0 };
 const day = () => new Date().toISOString().slice(0, 10);
 
 const cancelReq = (id: string, cookie = 'aw_sid=test-sess') =>

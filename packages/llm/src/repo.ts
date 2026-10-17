@@ -1,3 +1,4 @@
+import { newUsageLedger, startAttempt, captureUsage } from './usage';
 import type { Fragment } from '@archwoven/extract';
 import { buildSourceModel, SOURCE_PRESENTATION_SYSTEM } from './source-presentation';
 import { validateModel, validFullModelExtended, type Evidence } from '@archwoven/model';
@@ -99,7 +100,7 @@ export async function assembleRepoModel(
   if (!opts.client && fakeMode()) {
     const model = structuredClone(validFullModelExtended);
     pinEvidence(model, repoFull, meta.sha);
-    return { ok: true, model, usage: { model: MODEL, effort, inputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 0, latencyMs: 0, repairs: 0 } };
+    return { ok: true, model, usage: { ...usageFrom({}, effort, 0, 0), provider: 'demo' } };
   }
   const client: StructuredClient = opts.client ?? (makeAnthropic(resolveApiKey()) as unknown as StructuredClient);
 
@@ -121,16 +122,11 @@ export async function assembleRepoModel(
 
   let lastErrors: string[] = [];
   let repairs = 0;
-  const billed = { input_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, output_tokens: 0 };
-  const addUsage = (u: { input_tokens?: number; cache_creation_input_tokens?: number; cache_read_input_tokens?: number; output_tokens?: number }) => {
-    billed.input_tokens += u.input_tokens ?? 0;
-    billed.cache_creation_input_tokens += u.cache_creation_input_tokens ?? 0;
-    billed.cache_read_input_tokens += u.cache_read_input_tokens ?? 0;
-    billed.output_tokens += u.output_tokens ?? 0;
-  };
+  const billed = newUsageLedger();
 
   for (let attempt = 0; attempt <= MAX_REPAIRS; attempt++) {
     if (opts.signal?.aborted) return { ok: false, errors: ['cancelled'], usage: usageFrom(billed, effort, Date.now() - t0, repairs) };
+    startAttempt(billed, repairs);
     let response: Awaited<ReturnType<StructuredClient['beta']['messages']['create']>>;
     try {
       // structured outputs dropped on hosted generate too — same grammar-size
@@ -146,7 +142,7 @@ export async function assembleRepoModel(
       if (opts.signal?.aborted) break;
       continue;
     }
-    addUsage(response.usage);
+    captureUsage(billed, response.usage);
 
     const text = response.content.filter((b) => b.type === 'text').map((b) => b.text ?? '').join('');
     let parsed: unknown;

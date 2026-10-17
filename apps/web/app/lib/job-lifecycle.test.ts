@@ -9,7 +9,7 @@ import { POST as REPO } from '../api/repo/route';
 import { POST as CANCEL } from '../api/jobs/[id]/cancel/route';
 import { GET } from '../api/jobs/[id]/route';
 
-const usage = { model: 'claude-opus-5-5', effort: 'medium' as const, inputTokens: 10, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0, latencyMs: 1, repairs: 0 };
+const usage = { provider: 'anthropic' as const, transportRetries: 0, usageComplete: true, attempts: [], model: 'claude-opus-5-5', effort: 'medium' as const, inputTokens: 10, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0, latencyMs: 1, repairs: 0 };
 const success = () => ({ ok: true as const, model: structuredClone(validFullModel), usage });
 const day = () => new Date().toISOString().slice(0, 10);
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -38,6 +38,8 @@ describe('bounded cancellable generation jobs', () => {
       expect(serverDeps.store.getJob(id)?.error).toContain(`${method} unavailable`);
       expect(serverDeps.store.creditsUsed('lifecycle', day())).toBe(0);
       expect(repoJobRegistry.has(id)).toBe(false);
+      expect(serverDeps.store.listCalls('lifecycle')).toHaveLength(method === 'saveRevision' ? 1 : 2);
+      expect(serverDeps.store.lastTask('lifecycle')).toMatchObject({ id, outcome: 'failed', inputTokens: 10 });
       vi.restoreAllMocks();
     }
   });
@@ -49,6 +51,7 @@ describe('bounded cancellable generation jobs', () => {
     try {
       expect((await CANCEL(req(`jobs/${id}/cancel`, {}), ctx(id))).status).toBe(200);
       expect(signal?.aborted).toBe(true);
+      expect((await (await GET(req(`jobs/${id}`), ctx(id))).json()).usagePending).toBe(true);
       expect(serverDeps.store.getJob(id)?.status).toBe('cancelled');
       expect(serverDeps.store.creditsUsed('lifecycle', day())).toBe(0);
     } finally { release(); await delay(5); }
@@ -57,6 +60,7 @@ describe('bounded cancellable generation jobs', () => {
     await CANCEL(req(`jobs/${id}/cancel`, {}), ctx(id));
     expect(serverDeps.store.creditsUsed('lifecycle', day())).toBe(0);
     expect(serverDeps.store.listCalls('lifecycle')).toHaveLength(1);
+    expect((await (await GET(req(`jobs/${id}`), ctx(id))).json()).usagePending).toBe(false);
   });
 
   it.each(['generate', 'repo'] as const)('%s timeout fails/refunds once and a noncooperative late result cannot save a model', async (kind) => {

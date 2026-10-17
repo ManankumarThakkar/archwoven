@@ -1,7 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { SystemModelSchema, type SystemModel, type ViewType } from '@archwoven/model';
+import { SystemModelSchema, type SystemModel, type ViewType, type TaskReport } from '@archwoven/model';
 
 export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'clarifying';
 export type Tier = 'anonymous' | 'github';
@@ -34,7 +34,8 @@ export interface CallRec {
   cacheWriteTokens: number;
   cacheReadTokens: number;
   outputTokens: number;
-  costUsd: number;
+  costUsd: number | null;
+  task?: TaskReport;
   retries: number;
   outcome: 'ok' | 'repaired' | 'failed';
 }
@@ -103,6 +104,13 @@ export function openStore(path = 'data/archwoven.db') {
   // dev-scratch DBs created before the gaps column: add it in place
   try { db.exec('ALTER TABLE jobs ADD COLUMN gaps TEXT'); } catch { /* column exists */ }
   try { db.exec('ALTER TABLE jobs ADD COLUMN clarification TEXT'); } catch { /* column exists */ }
+
+  // Additive migration: keep historical costs and saved diagrams untouched.
+  const hasTask = () => (db.prepare('PRAGMA table_info(call_log)').all() as { name: string }[]).some(column => column.name === 'task_json');
+  if (!hasTask()) {
+    try { db.exec('ALTER TABLE call_log ADD COLUMN task_json TEXT'); }
+    catch (error) { if (!hasTask()) throw error; }
+  }
 
   // NOTE: the orphan sweep does NOT live here. openStore is re-evaluated per
   // route bundle in dev (Next compiles each route separately, separate realms —
@@ -186,8 +194,8 @@ export function openStore(path = 'data/archwoven.db') {
 
     logCall(rec: CallRec): void {
       db.prepare(
-        'INSERT INTO call_log (session_id, tier, view, input_tokens, cache_write_tokens, cache_read_tokens, output_tokens, cost_usd, retries, outcome) VALUES (?,?,?,?,?,?,?,?,?,?)',
-      ).run(rec.sessionId, rec.tier, rec.view, rec.inputTokens, rec.cacheWriteTokens, rec.cacheReadTokens, rec.outputTokens, rec.costUsd, rec.retries, rec.outcome);
+        'INSERT INTO call_log (session_id, tier, view, input_tokens, cache_write_tokens, cache_read_tokens, output_tokens, cost_usd, retries, outcome, task_json) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+      ).run(rec.sessionId, rec.tier, rec.view, rec.inputTokens, rec.cacheWriteTokens, rec.cacheReadTokens, rec.outputTokens, rec.costUsd ?? 0, rec.retries, rec.outcome, rec.task ? JSON.stringify(rec.task) : null);
     },
     listCalls(sessionId: string): CallRec[] {
       const rows = db.prepare('SELECT * FROM call_log WHERE session_id = ? ORDER BY id').all(sessionId) as Record<string, unknown>[];
@@ -195,9 +203,15 @@ export function openStore(path = 'data/archwoven.db') {
         sessionId: String(r.session_id), tier: r.tier as Tier, view: String(r.view),
         inputTokens: Number(r.input_tokens), cacheWriteTokens: Number(r.cache_write_tokens),
         cacheReadTokens: Number(r.cache_read_tokens), outputTokens: Number(r.output_tokens),
-        costUsd: Number(r.cost_usd), retries: Number(r.retries), outcome: r.outcome as CallRec['outcome'],
+        costUsd: r.task_json ? (JSON.parse(String(r.task_json)) as TaskReport).estimatedCostUsd : Number(r.cost_usd), ...(r.task_json ? { task: JSON.parse(String(r.task_json)) as TaskReport } : {}), retries: Number(r.retries), outcome: r.outcome as CallRec['outcome'],
       }));
     },
+    lastTask(sessionId: string): TaskReport | null {
+      const row = db.prepare('SELECT task_json FROM call_log WHERE session_id = ? AND task_json IS NOT NULL ORDER BY id DESC LIMIT 1').get(sessionId) as { task_json: string } | undefined;
+      return row ? JSON.parse(row.task_json) as TaskReport : null;
+    },
+    /** Known reported estimates plus retained legacy estimates; missing provider
+     * usage cannot be reconstructed here and is disclosed as incomplete. */
     todayCost(): number {
       const r = db.prepare("SELECT COALESCE(SUM(cost_usd), 0) AS c FROM call_log WHERE date(created_at) = date('now')").get() as { c: number };
       return r.c;

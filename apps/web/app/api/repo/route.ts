@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { reserve, refundCredits, recordUsage, TIERS, WEIGHTS } from '@archwoven/jobs';
 import { validateModel, appendDisclosures } from '@archwoven/model';
+import type { TaskUsage } from '@archwoven/model';
 import { parseRepoUrl, type ParsedRepoUrl } from '@archwoven/ingest';
 import {
   serverDeps, readOrCreateSession, sessionCookie, tierOf,
@@ -99,10 +100,12 @@ export async function POST(req: Request) {
       e.settled = true;
       return true;
     };
-    const fail = (error: string, usage?: { inputTokens: number; cacheWriteTokens: number; cacheReadTokens: number; outputTokens: number }, retries = 0) => {
+    let pendingUsage: TaskUsage | undefined;
+    let metered = false;
+    const fail = (error: string, usage = pendingUsage, retries = usage?.repairs ?? 0) => {
       // metering is unconditional — every spent token must reach call_log (stop-loss),
       // even when cancel owns the settle and the credit refund
-      if (usage) recordUsage(serverDeps.store, { sessionId, tier, action: 'repo', usage, retries, outcome: 'failed' });
+      if (usage && !metered) { recordUsage(serverDeps.store, { sessionId, tier, action: 'repo', view: 'architecture', taskId: jobId, modelId: jobId, usage, retries, outcome: 'failed' }); metered = true; }
       if (!claim()) return; // cancel already settled + refunded this job
       serverDeps.store.updateJob(jobId, { status: 'failed', error });
       refundCredits(serverDeps.store, sessionId, day, WEIGHTS.repo);
@@ -128,6 +131,7 @@ export async function POST(req: Request) {
       stage('designing');
       const evidenceRepo = cloneDir !== null ? { owner: 'local', repo: basename(cloneDir) } : { owner: parsed!.owner, repo: parsed!.repo };
       const out = await serverDeps.assembleRepoModel(ingest.fragment, { ...evidenceRepo, sha: ingest.sha, framework: ingest.framework }, { signal: controller.signal });
+      pendingUsage = out.usage;
       stage('validating-output');
       if (!out.ok) return fail(out.errors.join('; '), out.usage, out.usage.repairs);
       const checked = validateModel(out.model);
@@ -135,7 +139,8 @@ export async function POST(req: Request) {
       if (entry.settled) {
         // A provider can finish successfully despite cancellation. Cancel owns
         // settlement/refund, but spent tokens still belong in the stop-loss meter.
-        recordUsage(serverDeps.store, { sessionId, tier, action: 'repo', usage: out.usage, retries: out.usage.repairs, outcome: 'failed' });
+        recordUsage(serverDeps.store, { sessionId, tier, action: 'repo', view: 'architecture', taskId: jobId, modelId: jobId, usage: out.usage, retries: out.usage.repairs, outcome: 'failed' });
+        metered = true;
         return;
       }
       // §9: privacy is server-stamped from deploy mode — model self-report never wins.
@@ -143,7 +148,8 @@ export async function POST(req: Request) {
       const stamped = { ...appendDisclosures(checked.model, ingest.gaps), privacy: privacyForMode(deployMode()) };
       serverDeps.store.saveRevision(jobId, stamped, sessionId);
       serverDeps.store.updateJob(jobId, { stage: 'laying-out' });
-      recordUsage(serverDeps.store, { sessionId, tier, action: 'repo', usage: out.usage, retries: out.usage.repairs, outcome: out.usage.repairs > 0 ? 'repaired' : 'ok' });
+      recordUsage(serverDeps.store, { sessionId, tier, action: 'repo', view: 'architecture', taskId: jobId, modelId: jobId, usage: out.usage, retries: out.usage.repairs, outcome: out.usage.repairs > 0 ? 'repaired' : 'ok' });
+      metered = true;
       serverDeps.store.updateJob(jobId, { status: 'succeeded', gaps: ingest.gaps });
       // These persistence operations are synchronous: no cancel/deadline can interleave.
       // Claim only after they finish so a thrown write still follows failure/refund.

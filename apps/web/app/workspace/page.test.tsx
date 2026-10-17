@@ -758,6 +758,7 @@ describe('expanding internals', () => {
     let stored = initial;
     const bodies: Record<string, unknown>[] = [];
     transport = (input, init) => {
+      if (input === '/api/quota') return Response.json({ remaining: bodies.length ? 5.75 : 6, pool: 6, fake: true, lastTask: null });
       if (input === '/api/config') return Response.json({ mode: deploy, llmReady: true });
       if (input === '/api/models/m1' && !init) return Response.json({ model: stored });
       if (input === '/api/models/m1/expand') {
@@ -989,4 +990,62 @@ describe('import source and credit wording by deployment', () => {
     await click('Local folder');
     expect(container.querySelector<HTMLInputElement>('#repository-path')!.value).toBe('/srv/code/shop');
   });
+});
+
+const reportedTask = { id: 'task1', action: 'generate', view: 'architecture', modelId: 'm1', provider: 'anthropic', model: 'claude-opus-5-5', effort: 'medium', inputTokens: 1000, outputTokens: 500, cacheWriteTokens: 2000, cacheReadTokens: 3000, latencyMs: 1200, repairs: 1, transportRetries: 2, usageComplete: true, attempts: [], outcome: 'repaired', estimatedCostUsd: 0.0246, costBasis: 'anthropic-opus-5-5-2026-10-17' };
+
+describe('last task usage', () => {
+  it('restores a compact hosted estimate with reported categories and actual attempts', async () => {
+    transport = input => input === '/api/quota' ? Response.json({ remaining: 5, pool: 6, fake: false, lastTask: reportedTask }) : undefined;
+    await mount();
+    const details = container.querySelector('details.aw-task-usage')!;
+    expect(details).not.toBeNull();
+    expect(details.hasAttribute('open')).toBe(false);
+    expect(details.querySelector('summary')!.textContent).toContain('6,500 tokens');
+    expect(details.querySelector('summary')!.textContent).toContain('$0.0246');
+    expect(details.textContent).toContain('1 repair');
+    expect(details.textContent).toContain('2 retries');
+    expect(details.textContent).toContain('3,000');
+    expect(details.textContent).toContain('claude-opus-5-5');
+    expect(requests.filter(r => r === '/api/generate')).toHaveLength(0);
+  });
+  it('discloses incomplete local usage and excludes hardware from API cost', async () => {
+    transport = input => input === '/api/quota' ? Response.json({ remaining: null, pool: 6, lastTask: { ...reportedTask, provider: 'ollama', model: 'gpt-oss:20b', estimatedCostUsd: 0, costBasis: 'local-inference', usageComplete: false } }) : undefined;
+    await mount();
+    const details = container.querySelector('details.aw-task-usage')!;
+    expect(details.querySelector('summary')!.textContent).toContain('Usage incomplete');
+    expect(details.textContent).toContain('No external API charge');
+    expect(details.textContent).toContain('Hardware and electricity');
+    expect(details.textContent).not.toContain('$0.0246');
+  });
+  it('refreshes the report after a failed refinement while preserving the diagram', async () => {
+    window.history.replaceState(null, '', '/workspace#model=m1');
+    let failed = false;
+    transport = input => {
+      if (input === '/api/quota') return Response.json({ remaining: 5, pool: 6, lastTask: failed ? { ...reportedTask, action: 'refine', outcome: 'failed', usageComplete: false, estimatedCostUsd: null, costBasis: 'unavailable' } : null });
+      if (input === '/api/refine') { failed = true; return Response.json({ errors: ['Provider interrupted'] }, { status: 502 }); }
+      return undefined;
+    };
+    await mount(); await fill('input[placeholder^="Refine:"]', 'Add worker'); await click('Refine');
+    expect(container.textContent).toContain('Provider interrupted');
+    expect(container.querySelector('details.aw-task-usage')!.textContent).toContain('Cost unavailable');
+    expect(container.querySelector('[aria-label="Rendered view"]')).not.toBeNull();
+  });
+});
+
+it('waits for late provider accounting after cancellation without blocking a new task', async () => {
+  vi.useFakeTimers(); let settled = false;
+  transport = input => {
+    if (input === '/api/generate') return Response.json({ jobId: 'late-usage', remaining: 5 }, { status: 202 });
+    if (input === '/api/jobs/late-usage') return Response.json({ status: 'cancelled', modelId: 'late-usage', usagePending: !settled });
+    if (input === '/api/quota') return Response.json({ remaining: 6, pool: 6, lastTask: settled ? { ...reportedTask, outcome: 'failed', usageComplete: false } : null });
+    return undefined;
+  };
+  await mount(); await fill('#system-description', 'A bookstore'); await click('Generate diagram');
+  expect(container.textContent).toContain('Usage pending');
+  expect(container.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).not.toBe(true);
+  settled = true;
+  await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+  expect(container.textContent).not.toContain('Usage pending');
+  expect(container.querySelector('.aw-task-usage')!.textContent).toContain('Usage incomplete');
 });

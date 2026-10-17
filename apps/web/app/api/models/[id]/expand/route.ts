@@ -50,7 +50,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const out = await withSlot(`expand:${id}:${baseRevision}`, () => serverDeps.expandComponent(latest, target, hint, { signal: req.signal }));
   const fail = (status: number, payload: Record<string, unknown>) => {
     refundCredits(serverDeps.store, sessionId, day, 0.25);
-    recordUsage(serverDeps.store, { sessionId, tier, action: 'refine', usage: out.usage, retries: out.usage.repairs, outcome: 'failed' });
+    recordUsage(serverDeps.store, { sessionId, tier, action: 'expand', view: 'component-detail', modelId: id, usage: out.usage, retries: out.usage.repairs, outcome: 'failed' });
     return Response.json(payload, { status, headers });
   };
   if (!out.ok || req.signal.aborted)
@@ -60,7 +60,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   if (!current || current.revision !== baseRevision)
     return fail(current ? 409 : 404, current ? { reason: 'stale-revision', message: 'The diagram changed while expanding. Review the latest version and try again.', model: current, revision: current.revision } : { error: 'model not found' });
 
-  serverDeps.store.saveRevision(id, out.model, sessionId);
-  recordUsage(serverDeps.store, { sessionId, tier, action: 'refine', usage: out.usage, retries: out.usage.repairs, outcome: out.usage.repairs > 0 ? 'repaired' : 'ok' });
+  try { serverDeps.store.saveRevision(id, out.model, sessionId); }
+  catch { return fail(500, { message: 'Could not save the expansion. No credit was used. Reload before trying again.' }); }
+  recordUsage(serverDeps.store, { sessionId, tier, action: 'expand', view: 'component-detail', modelId: id, usage: out.usage, retries: out.usage.repairs, outcome: out.usage.repairs > 0 ? 'repaired' : 'ok' });
   return Response.json({ model: out.model, revision: out.model.revision, remaining: quota.remaining }, { status: 200, headers });
 }

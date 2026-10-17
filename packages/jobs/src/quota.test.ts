@@ -4,7 +4,7 @@ import { reserve, refundCredits, recordUsage, costOf, STOP_LOSS_USD } from './qu
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const day = () => new Date().toISOString().slice(0, 10);
-const usage = { inputTokens: 1000, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 500 };
+const usage = { provider: 'anthropic', model: 'claude-opus-5-5', inputTokens: 1000, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 500 };
 
 // Hosted gates only — in local mode quotas compile out entirely (own test below),
 // so the parity CI run (ARCHWOVEN_MODE=local) skips these by design (§15).
@@ -80,8 +80,8 @@ hostedOnly('quota (§15 weighted credits, reserve-then-refund)', () => {
 
   it('global stop-loss trips at $15/day across all sessions', () => {
     const s = openStore(':memory:');
-    const big = { inputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 0 };
-    const n = Math.ceil(STOP_LOSS_USD / costOf({ ...big, outputTokens: 1000 })) + 1;
+    const big = { provider: 'anthropic', model: 'claude-opus-5-5', inputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 0 };
+    const n = Math.ceil(STOP_LOSS_USD / costOf({ ...big, outputTokens: 1000 })!) + 1;
     for (let i = 0; i < n; i++) {
       s.logCall({ sessionId: `x${i}`, tier: 'github', view: 'architecture', ...big, outputTokens: 1000, costUsd: costOf({ ...big, outputTokens: 1000 }), retries: 0, outcome: 'ok' });
     }
@@ -109,7 +109,7 @@ hostedOnly('quota (§15 weighted credits, reserve-then-refund)', () => {
   it('recordUsage logs the call for metering without spending credits', () => {
     const s = openStore(':memory:');
     recordUsage(s, { sessionId: 'm1', tier: 'anonymous', action: 'generate', usage, retries: 1, outcome: 'repaired' });
-    expect(s.todayCost()).toBeCloseTo(costOf(usage), 9);
+    expect(s.todayCost()).toBeCloseTo(costOf(usage)!, 9);
     expect(s.creditsUsed('m1', day())).toBe(0);
   });
 

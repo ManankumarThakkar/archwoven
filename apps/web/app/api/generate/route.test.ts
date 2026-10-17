@@ -12,7 +12,7 @@ const deferred = () => {
   return { promise, resolve };
 };
 
-const usage = { model: 'claude-opus-5-5', effort: 'medium' as const, inputTokens: 1000, cacheWriteTokens: 5000, cacheReadTokens: 10000, outputTokens: 1500, latencyMs: 500, repairs: 0 };
+const usage = { provider: 'anthropic' as const, transportRetries: 0, usageComplete: true, attempts: [], model: 'claude-opus-5-5', effort: 'medium' as const, inputTokens: 1000, cacheWriteTokens: 5000, cacheReadTokens: 10000, outputTokens: 1500, latencyMs: 500, repairs: 0 };
 
 // §15: quotas compile out in local mode (reserve → Infinity → JSON null); credit gates are hosted-only.
 const QUOTA = process.env.ARCHWOVEN_MODE !== 'local';
@@ -47,6 +47,7 @@ describe('POST /api/generate', () => {
     const { jobId } = (await res.json()) as { jobId: string };
     const job = await waitJob(jobId);
     expect(job.status).toBe('succeeded');
+    expect(serverDeps.store.lastTask('test-sess')).toMatchObject({ id: jobId, modelId: jobId, action: 'generate', view: 'architecture', provider: 'anthropic', usageComplete: true });
     expect(serverDeps.store.getRevision(jobId)).not.toBeNull();
     expect(serverDeps.store.creditsUsed('test-sess', new Date().toISOString().slice(0, 10))).toBe(QUOTA ? 1 : 0);
   });
