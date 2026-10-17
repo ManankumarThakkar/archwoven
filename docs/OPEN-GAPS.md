@@ -2,13 +2,13 @@
 
 A single, living list of known gaps that are not yet fixed, so none is lost between tasks. Each entry links to where it was found. When a gap is fixed, delete its row in the same PR; when one is found, add it here in the PR that found it.
 
-Last reviewed: 2026-10-17, after PR #36 (main `5ca77c8`). Release tasks refer to `RELEASE-PROGRESS.md`.
+Last reviewed: 2026-10-17, after PR #37 (main `90c6905`) and the task 20b review-handoff fix. PR #37's merged-main build, typechecks, hosted/local tests and benchmark selftests passed; Docker Compose, cross-browser and human acceptance remain outstanding. Release tasks refer to `RELEASE-PROGRESS.md`.
 
 ## Scheduled into a release task
 
 | Gap | User impact | Found in | Planned |
 |---|---|---|---|
-| Named-person visual reviews of the Suite A diagrams are missing | Evaluation not eligible for publication | Post-merge audit | Owner review: screenshots, models and commands are ready in `benchmarks/ordinary-model-floor/review/` |
+| Named-person visual reviews of the Suite A diagrams are missing | Evaluation not eligible for publication | Post-merge audit | Owner review: three historical screenshots and matching models are now tracked, checksum-checked in CI and linked from `benchmarks/ordinary-model-floor/review/README.md`; verdicts still pending |
 | After the run's refinement added a notification service, the checkout diagram laid out right to left with a connection wrapping around the group (observed in a screenshot, not yet confirmed by a reviewer) | Refined diagrams may read backwards | Task 19 review capture | Confirm during visual review; then Task 20 |
 | Safari/Firefox download behaviour (deferred object-URL revoke) unverified | Exports may fail on WebKit | Task 9 | Task 20 |
 | Physical touch, screen-reader and cross-browser acceptance not run | Accessibility and device support unproven | All UI tasks | Task 20 |
