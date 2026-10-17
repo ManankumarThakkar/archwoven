@@ -2,7 +2,7 @@
 
 A single, living list of known gaps that are not yet fixed, so none is lost between tasks. Each entry links to where it was found. When a gap is fixed, delete its row in the same PR; when one is found, add it here in the PR that found it.
 
-Last reviewed: 2026-10-17, after PR #37 (main `90c6905`) and the task 20b review-handoff fix. PR #37's merged-main build, typechecks, hosted/local tests and benchmark selftests passed; Docker Compose, cross-browser and human acceptance remain outstanding. Release tasks refer to `RELEASE-PROGRESS.md`.
+Last reviewed: 2026-10-17, after PR #38 (main `68df6cc`) and the task 20c export-context fix. PR #38's CI passed; detail exports now retain inferred-node borders, parent context and the repository inference disclaimer. Docker Compose, cross-browser and human acceptance remain outstanding. Release tasks refer to `RELEASE-PROGRESS.md`.
 
 ## Scheduled into a release task
 
@@ -24,7 +24,6 @@ Last reviewed: 2026-10-17, after PR #37 (main `90c6905`) and the task 20b review
 | Node and edge ground truth exists only for the two repositories used while fixing the extractors; held-out truth covers endpoints only | Diagram and extraction accuracy on unseen repositories is unmeasured beyond endpoints | Tasks 15 and 19 | Needs hand-authored truth for new held-out repositories |
 | Third-party SDK clients reached through helper functions (SMTP via `emails`/`smtplib`, Sentry) are not extracted | External services such as email delivery are missing from FastAPI diagrams | Task 15 ground truth (full-stack template) | Needs call-graph inference; candidate for a later extractor pass |
 | FastAPI dependencies built by factory calls (`Depends(get_repository(UsersRepository))`) are not resolved | Repository/service links behind parameterised dependency factories are missing | Task 15 held-out reading (fastapi-realworld) | Same call-graph limitation; disclosed only implicitly by the missing edges |
-| SVG/PNG exports omit the dashed marker for inferred internals and the "Inside …" caption | Exported detail views lose context | Task 10 step 2 | Could be added to the existing export renderer |
 | Boundaries are drawn after layout, so a boundary box can visually enclose non-members (all views) | Diagrams can imply wrong grouping | Task 10 step 2 | A grouped (compound) layout would fix this and enable real containers for internals; touches shared layout and routing |
 | Schema v1 stores manual positions in one global node-id map | Dragging a node in one view moves it in other graph views | Tasks 6 and 8 | Disclosed in the orientation control; a per-view layout needs schema v2 |
 | Removing a link between two source-backed nodes reports both the edge and the path refusal | Accurate but verbose message | Task 10b | Copy refinement only |

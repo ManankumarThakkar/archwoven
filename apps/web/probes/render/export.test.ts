@@ -8,12 +8,47 @@ import { Resvg } from '@resvg/resvg-wasm';
 import { entityLayout } from '../../lib/entity';
 import { buildSvg } from '../../lib/export-svg';
 import { layoutModel } from './layout';
+import { expandedDetailModel } from './detail-fixture';
 
 const require = createRequire(import.meta.url);
 
 const here = new URL('.', import.meta.url).pathname;
 
 describe('renderPng (resvg-wasm)', () => {
+  it('paints the detail caption and dashed internal borders into the actual PNG', async () => {
+    await ensureResvg(readFileSync(require.resolve('@resvg/resvg-wasm/index_bg.wasm')));
+    const svg = await buildSvg(expandedDetailModel(), 'detail:svc.orders');
+    const caption = svg.match(/<g data-detail-caption="true">[\s\S]*?<\/g>/)?.[0];
+    expect(caption).toBeTruthy();
+    const internal = svg.match(/<g data-node="svc.orders\/intake">[\s\S]*?<\/g>/)![0];
+    expect(internal).toContain('stroke-dasharray="6 4"');
+    const fonts = [readFileSync(`${here}../../public/fonts/inter-400.woff2`)];
+    const png = await renderPng(svg, fonts);
+    expect(png).not.toEqual(await renderPng(svg.replace(caption!, ''), fonts));
+    expect(png).not.toEqual(await renderPng(svg.replace(internal, internal.replace(' stroke-dasharray="6 4"', '')), fonts));
+  });
+
+  it('fits wrapped detail context above the graph with narrow bounds and negative manual positions', async () => {
+    await ensureResvg(readFileSync(require.resolve('@resvg/resvg-wasm/index_bg.wasm')));
+    const model = expandedDetailModel(), view = model.views.find(v => v.id === 'detail:svc.orders')!;
+    model.nodes.find(n => n.id === 'svc.orders')!.label = 'W'.repeat(100);
+    model.nodes.find(n => n.id === 'gateway.api')!.provenance = 'source-supported';
+    view.nodes = ['svc.orders/intake']; view.edges = [];
+    model.layout = { 'svc.orders/intake': { x: -500, y: -300 } };
+    const svg = await buildSvg(model, view.id), placed = await layoutModel(model, view.id);
+    const caption = svg.match(/<g data-detail-caption="true">[\s\S]*?<\/g>/)?.[0];
+    expect(caption).toBeTruthy();
+    const [x, y, width, height] = svg.match(/viewBox="([^"]+)"/)![1]!.split(' ').map(Number) as [number, number, number, number];
+    const renderer = new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" width="2000" height="2000" font-family="Inter">${caption}</svg>`, { font: { fontBuffers: [readFileSync(`${here}../../public/fonts/inter-400.woff2`)], defaultFontFamily: 'Inter' } });
+    try {
+      const box = renderer.getBBox()!;
+      expect(box.x).toBeGreaterThanOrEqual(x); expect(box.y).toBeGreaterThanOrEqual(y);
+      expect(box.x + box.width).toBeLessThanOrEqual(x + width);
+      expect(box.y + box.height).toBeLessThanOrEqual(y + height);
+      expect(box.y + box.height).toBeLessThan(placed.nodes[0]!.y);
+    } finally { renderer.free(); }
+  });
+
   it('contains a long boundary title inside the actual exported scene', async () => {
     await ensureResvg(readFileSync(require.resolve('@resvg/resvg-wasm/index_bg.wasm')));
     const model = structuredClone(validFullModel), view = model.views.find(view => view.type === 'architecture')!;
