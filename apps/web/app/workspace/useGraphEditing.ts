@@ -34,13 +34,15 @@ export function useGraphEditing({ model, viewId, placed, setPlaced, layout, busy
         if (!layout.current || !view)
             return;
         const draft = { ...model, layout: { ...model.layout, ...next } }, routed = (lightweight ? dragLayout : manualLayout)(draft, view, layout.current), scene = graphScene(draft, routed), routesById = new Map(routed.edges.map(route => [route.id, route]));
-        setPlaced(current => ({ ...current, bounds: scene.bounds, warnings: routed.warnings, nodes: current.nodes.map(node => {
-                if (node.type === 'boundary') {
-                    const box = scene.boundaries.find(b => `bnd:${b.id}` === node.id);
-                    return box ? { ...node, position: { x: box.x, y: box.y }, style: { ...node.style, width: box.width, height: box.height }, data: { ...node.data, lines: box.lines } } : node;
-                }
-                return Object.hasOwn(next, node.id) ? { ...node, position: next[node.id]! } : node;
-            }), edges: current.edges.map(edge => ({ ...edge, data: { ...edge.data, route: routesById.get(edge.id) } })) }));
+        setPlaced(current => ({ ...current, bounds: scene.bounds, warnings: scene.warnings, nodes: [
+                ...scene.boundaries.map(box => ({
+                    id: `bnd:${box.id}`, type: 'boundary', position: { x: box.x, y: box.y },
+                    data: { label: box.label, lines: box.lines }, style: { width: box.width, height: box.height },
+                    draggable: false, selectable: false, zIndex: -1,
+                })),
+                ...current.nodes.filter(node => node.type !== 'boundary').map(node =>
+                    Object.hasOwn(next, node.id) ? { ...node, position: next[node.id]! } : node),
+            ], edges: current.edges.map(edge => ({ ...edge, data: { ...edge.data, route: routesById.get(edge.id) } })) }));
     };
     const save = async (next: Record<string, Point>) => {
         if (!onMove || busy || pending.current)

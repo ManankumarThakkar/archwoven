@@ -185,6 +185,77 @@ describe('persisted graph dragging',()=>{
     expect((save.mock.calls[0]![0] as Record<string,unknown>)['constructor']).toEqual({x:600,y:0});
   });
 });
+describe('truthful boundary canvas placement', () => {
+  const grouped = (truthful = true): SystemModel => ({ ...model,
+    views: [{ ...model.views[0]!, edges: [] }],
+    boundaries: [{ id: 'core', label: 'Core services', wraps: truthful ? ['a', 'b'] : ['a', 'c'] }],
+  });
+  const hull = () => host.querySelector('[data-node="bnd:core"]');
+  const warning = () => [...host.querySelectorAll('[role="status"]')].map(el => el.textContent).join(' ');
+  const show = async (current: SystemModel, onMove?: (positions: Record<string, { x: number; y: number }>) => Promise<boolean>) => {
+    await act(async () => root.render(<Canvas model={current} modelId="m" viewId="v" onSelect={() => {}} onDeselect={() => {}} onMove={onMove} />));
+  };
+
+  it('discloses an initially omitted enclosure with its members and nonmember while keeping every node', async () => {
+    await show(grouped(false));
+    expect(hull()).toBeNull();
+    expect(warning()).toContain('Core services');
+    expect(warning()).toContain('enclosure omitted');
+    expect(warning()).toContain('Queue (b)');
+    expect(warning()).toMatch(/Members in this view:.*API \(a\).*Storage \(c\)/);
+    for (const id of ['a', 'b', 'c']) expect(host.querySelector(`[data-node="${id}"]`)).toBeTruthy();
+  });
+
+  it('removes and restores enclosures during lightweight dragging before saving', async () => {
+    const save = vi.fn(async () => true);
+    await show(grouped(), save);
+    expect(hull()).toBeTruthy();
+    await act(async () => {
+      flow.events.onNodeDragStart(null, { id: 'c', position: { x: 400, y: 0 } } as Node);
+      flow.events.onNodesChange([{ type: 'position', id: 'c', position: { x: 360, y: 0 }, dragging: true }]);
+    });
+    expect(hull()).toBeNull(); expect(warning()).toContain('enclosure omitted');
+    await act(async () => flow.events.onNodesChange([{ type: 'position', id: 'c', position: { x: 400, y: 0 }, dragging: true }]));
+    expect(hull()).toBeTruthy(); expect(warning()).not.toContain('enclosure omitted');
+    expect(save).not.toHaveBeenCalled();
+    await act(async () => { await flow.events.onNodeDragStop(null, { id: 'c', position: { x: 400, y: 0 } } as Node); });
+    expect(hull()).toBeTruthy(); expect(save).toHaveBeenCalledOnce();
+  });
+
+  it('removes and restores enclosures for accepted keyboard nudges', async () => {
+    const save = vi.fn(async () => true);
+    await show(grouped(), save);
+    await act(async () => flow.events.onNodesChange([{ type: 'position', id: 'c', position: { x: 360, y: 0 }, dragging: false }]));
+    expect(hull()).toBeNull(); expect(warning()).toContain('enclosure omitted');
+    await act(async () => flow.events.onNodesChange([{ type: 'position', id: 'c', position: { x: 400, y: 0 }, dragging: false }]));
+    expect(hull()).toBeTruthy(); expect(warning()).not.toContain('enclosure omitted');
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(host.querySelector('[data-node="c"]')!.getAttribute('data-position')).toBe('{"x":400,"y":0}');
+  });
+
+  it.each([
+    ['drag', true], ['drag', false], ['keyboard', true], ['keyboard', false],
+  ] as const)('restores prior warnings and hulls after a refused %s save (initially truthful=%s)', async (input, truthful) => {
+    let finish!: (accepted: boolean) => void;
+    await show(grouped(truthful), () => new Promise(resolve => { finish = resolve; }));
+    const beforeWarning = warning(), id = truthful ? 'c' : 'b', position = { x: truthful ? 360 : 700, y: 0 }, moved = { id, position } as Node;
+    await act(async () => {
+      if (input === 'drag') {
+        flow.events.onNodeDragStart(null, moved);
+        flow.events.onNodesChange([{ type: 'position', id, position, dragging: true }]);
+      } else flow.events.onNodesChange([{ type: 'position', id, position, dragging: false }]);
+    });
+    expect(!!hull()).toBe(!truthful);
+    expect(warning().includes('enclosure omitted')).toBe(truthful);
+    if (input === 'drag') await act(async () => { void flow.events.onNodeDragStop(null, moved); });
+    expect(flow.events.nodesDraggable).toBe(false);
+    await act(async () => finish(false));
+    expect(!!hull()).toBe(truthful); expect(warning()).toBe(beforeWarning);
+    expect(host.querySelector(`[data-node="${id}"]`)!.getAttribute('data-position')).toBe(JSON.stringify({ x: truthful ? 400 : 200, y: 0 }));
+    expect(flow.events.nodesDraggable).toBe(true);
+  });
+});
+
 async function click(el: Element | null) {
   expect(el).toBeTruthy();
   await act(async () => (el as HTMLElement).click());

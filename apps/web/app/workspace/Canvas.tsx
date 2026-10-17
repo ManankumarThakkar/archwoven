@@ -135,9 +135,9 @@ function GraphCanvas({ model, modelId, viewId, permalinkVersion = 0, onSelect, o
         const route = r.edges.find(route => route.id === id);
         return [{ id, source: e.from, target: e.to, type: route ? 'routed' : undefined, data: route ? { route } : undefined, label: view?.type === 'er' ? erLabel(e) : e.label ?? '', markerStart: markers.start, markerEnd: markers.end, ariaLabel: view?.type === 'er' ? `${e.from} to ${e.to}: ${erLabel(e)}` : undefined, animated: e.type === 'async' && motion === 'motion', style: { stroke: PROVENANCE_STYLE[e.provenance].border, strokeDasharray: e.type === 'async' ? '6 4' : undefined } }];
       });
-      const { boundaries, bounds } = graphScene(model, r);
+      const { boundaries, bounds, warnings } = graphScene(model, r);
       const hulls: Node[] = boundaries.map(b => ({ id: `bnd:${b.id}`, type: 'boundary', position: { x: b.x, y: b.y }, data: { label: b.label, lines: b.lines }, style: { width: b.width, height: b.height }, draggable: false, selectable: false, zIndex: -1 }));
-      setPlaced({ key: layoutKey, nodes: [...hulls, ...nodes], edges, bounds, warnings:r.warnings });
+      setPlaced({ key: layoutKey, nodes: [...hulls, ...nodes], edges, bounds, warnings });
     }).catch(() => { if (alive) setLayoutError('This view could not be laid out. Try another view or refine the diagram.'); });
     return () => { alive = false; };
   }, [model, viewId, motion, layoutKey]);
@@ -371,7 +371,7 @@ function GraphCanvas({ model, modelId, viewId, permalinkVersion = 0, onSelect, o
   return (
     <div className="aw-canvas" style={{ width: '100%', height: '100%', position: 'relative' }}>
       <svg aria-hidden="true" width="0" height="0" style={{ position: 'absolute' }}><defs dangerouslySetInnerHTML={{ __html: GRAPH_MARKER_DEFS + ER_MARKER_DEFS }} /></svg>
-      {!!placed.warnings?.length&&<div role="status" style={{position:'absolute',bottom:8,left:64,right:8,zIndex:6,fontSize:12,color:'#fbbf24',background:'#111a2eee',padding:6,borderRadius:6}}>{placed.warnings.join(' ')}</div>}
+      {!!placed.warnings?.length&&<div role="status" aria-label="Layout warnings" tabIndex={0} style={{position:'absolute',bottom:8,left:64,right:12,maxWidth:'calc(100% - 76px)',maxHeight:'35%',overflow:'auto',overflowWrap:'anywhere',boxSizing:'border-box',zIndex:6,fontSize:12,color:'#fbbf24',background:'#111a2eee',padding:6,borderRadius:6}}>{placed.warnings.join(' ')}</div>}
       <div className="aw-canvas-toolbar" style={{ position: 'absolute', top: 36, left: 8, zIndex: 5, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
         <select aria-label="route from" value={probeFrom} onChange={(e) => setProbeFrom(e.target.value)} style={selectCls} disabled={!!probe}>
           <option value="">from…</option>{viewNodes.map((id) => <option key={id} value={id}>{model.nodes.find((n) => n.id === id)?.label ?? id}</option>)}

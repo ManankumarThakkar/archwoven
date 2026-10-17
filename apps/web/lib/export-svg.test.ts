@@ -117,3 +117,39 @@ describe('component detail export context', () => {
     expect(svg).not.toContain('Inside Order Service');
   });
 });
+
+
+describe('truthful boundary exports', () => {
+  it('omits a misleading enclosure and visibly discloses membership below a negative-position graph', async () => {
+    const model = structuredClone(validFullModel), view = model.views.find(v => v.type === 'architecture')!;
+    view.nodes = ['actor.user', 'gateway.api', 'svc.orders']; view.edges = [];
+    model.layout = { 'actor.user': { x: -800, y: -500 }, 'gateway.api': { x: -200, y: -500 }, 'svc.orders': { x: -500, y: -500 } };
+    model.boundaries = [{ id: 'b.core', label: 'Core <platform> & services', wraps: ['actor.user', 'gateway.api'] }];
+    const before = structuredClone(model), svg = await buildSvg(model, view.id);
+    expect(svg).not.toContain('stroke="#64748b" stroke-dasharray="6 4"');
+    const description = svg.match(/<desc>([\s\S]*?)<\/desc>/)?.[1] ?? '';
+    expect(description).toMatch(/Core &lt;platform&gt; &amp; services.*b\.core.*enclosure omitted/);
+    expect(description).toContain('Members in this view:');
+    const footer = svg.match(/<g data-layout-warnings="true">[\s\S]*?<\/g>/)?.[0] ?? '';
+    expect(footer).toContain('enclosure omitted');
+    expect(footer).toContain('Members in this view:');
+    expect(svg).not.toContain('<platform>');
+    const ys = [...footer.matchAll(/<text[^>]* y="([^"]+)"/g)].map(m => Number(m[1]));
+    expect(Math.min(...ys)).toBeGreaterThan(-400);
+    const [x, y, width, height] = svg.match(/viewBox="([^"]+)"/)![1]!.split(' ').map(Number) as [number, number, number, number];
+    expect(x).toBeLessThan(-800); expect(y).toBeLessThan(-500);
+    expect(Math.max(...ys)).toBeLessThan(y + height);
+    expect(width).toBeGreaterThan(0);
+    expect(model).toEqual(before);
+  });
+
+  it('retains truthful boundary enclosures without adding a warning footer', async () => {
+    const model = structuredClone(validFullModel), view = model.views.find(v => v.type === 'architecture')!;
+    view.nodes = ['actor.user', 'gateway.api']; view.edges = [];
+    model.layout = { 'actor.user': { x: 0, y: 0 }, 'gateway.api': { x: 400, y: 0 } };
+    model.boundaries = [{ id: 'b.core', label: 'Core services', wraps: view.nodes }];
+    const svg = await buildSvg(model, view.id);
+    expect(svg).toContain('stroke="#64748b" stroke-dasharray="6 4"');
+    expect(svg).not.toContain('data-layout-warnings');
+  });
+});
