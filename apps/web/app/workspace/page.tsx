@@ -88,7 +88,8 @@ export default function WorkspacePage() {
     window.history.replaceState(null, '', `#${hash}`);
   };
 
-  const loadModel = async (id: string, gaps?: string[], preferredView?: ViewType) => {
+  /** Gaps come only from the saved model, so a first load and every reload show the same list. */
+  const loadModel = async (id: string, preferredView?: ViewType) => {
     const sequence = ++loadSequence.current;
     try {
       const res = await fetch(`/api/models/${encodeURIComponent(id)}`);
@@ -108,7 +109,7 @@ export default function WorkspacePage() {
       const hash = new URLSearchParams(window.location.hash.slice(1));
       if (chosen) hash.set('view', chosen);
       window.history.replaceState(null, '', `#${hash}`);
-      dispatch({ type: 'RESTORED', modelId: id, revision: m.revision, gaps: [...new Set([...(gaps ?? []), ...m.openQuestions.map((q) => q.text)])] });
+      dispatch({ type: 'RESTORED', modelId: id, revision: m.revision, gaps: [...new Set(m.openQuestions.map((q) => q.text))] });
       return true;
     } catch (err) {
       if (sequence !== loadSequence.current) return;
@@ -145,7 +146,7 @@ export default function WorkspacePage() {
     let runningSince: number | null = null;
     let misses = 0;
     for (;;) {
-      let job: { status: string; stage?: Stage | null; modelId: string; revision: number; queuePosition?: number | null; deadlineAt?: number | null; gaps?: string[]; questions?: string[]; remaining?: number | null; error?: string | null } | null = null;
+      let job: { status: string; stage?: Stage | null; modelId: string; revision: number; queuePosition?: number | null; deadlineAt?: number | null; questions?: string[]; remaining?: number | null; error?: string | null } | null = null;
       try {
         const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}`);
         if (res.status === 404) { dispatch({ type: 'ERROR', message: 'This generation no longer exists — please try again.' }); return; }
@@ -189,7 +190,7 @@ export default function WorkspacePage() {
       if (job.status === 'cancelled') { setQueuedPos(null); dispatch({ type: 'CANCEL' }); return; }
       if (job.status === 'succeeded') {
         setQueuedPos(null);
-        if (await loadModel(job.modelId, job.gaps, preferredView)) setClarification(null);
+        if (await loadModel(job.modelId, preferredView)) setClarification(null);
         return;
       }
       dispatch({ type: 'ERROR', message: job.error ?? 'generation failed' });
@@ -230,7 +231,7 @@ export default function WorkspacePage() {
   const generateRepo = async (form: RepoForm) => {
     if(mutationRef.current || generationRef.current)return;
     dispatch({ type: 'GENERATE_REPO' });
-    await submitGeneration('/api/repo', { ...form, view: 'architecture', idempotencyKey: idempotencyKeyFor(`${form.url}|${form.subdir ?? ''}|${form.ref ?? ''}`, 'architecture') }, 'architecture');
+    await submitGeneration('/api/repo', { ...form, view: 'architecture', idempotencyKey: idempotencyKeyFor(`${form.localPath ? `local:${form.localPath}` : form.url}|${form.subdir ?? ''}|${form.ref ?? ''}`, 'architecture') }, 'architecture');
   };
 
   const continueClarification = async (answers: string[] | null) => {
@@ -457,7 +458,9 @@ export default function WorkspacePage() {
         <span className="aw-header-caption">Architecture, connected.</span>
         <div className="aw-header-status">
         <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 6, background: '#111a2e', color: '#93c5fd' }}>{privacy}</span>
-        <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 6, background: '#111a2e', color: '#fbbf24' }}>◐ {remaining ?? pool}/{pool} credits today</span>
+        {deploy === 'local'
+          ? <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 6, background: '#111a2e', color: '#93c5fd' }}>Local · no credit limits</span>
+          : <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 6, background: '#111a2e', color: '#fbbf24' }}>◐ {remaining ?? pool}/{pool} credits today</span>}
         {!llmReady && (
           <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 6, background: '#3b2f0d', color: '#fbbf24' }}>
             ⚠ No API key — set ANTHROPIC_API_KEY in apps/web/.env.local, or run locally: ARCHWOVEN_MODE=local pnpm dev
@@ -476,7 +479,8 @@ export default function WorkspacePage() {
         <ControlPanel
           locked={refining || !!clarification}
           running={state.kind === 'running' || restoring}
-          remaining={remaining ?? pool}
+          remaining={deploy === 'local' ? null : remaining ?? pool}
+          deploy={deploy}
           mode={mode}
           prefill={state.kind === 'idle' ? state.prefill : undefined}
           onMode={(m) => { setMode(m); dispatch({ type: 'MODE', mode: m }); }}

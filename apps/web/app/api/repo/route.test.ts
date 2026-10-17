@@ -334,6 +334,17 @@ describe('POST /api/repo', () => {
     expect((await poll.json()).gaps).toEqual(['no database detected', 'submodule(s) skipped']);
   });
 
+  it('saves ingest disclosures into the model so a reload shows the same warnings', async () => {
+    serverDeps.ingestRepo = async () => ({ ...okIngest, gaps: ['Skipped 1 binary file: docs/a.png.', 'no database detected', 'Is inventory held in Postgres or a dedicated service?'] });
+    const res = await POST(req({ url: 'https://github.com/foo/bar' }));
+    const { jobId } = (await res.json()) as { jobId: string };
+    await waitJob(jobId);
+    const saved = serverDeps.store.getRevision(jobId)!;
+    const texts = saved.openQuestions.map(q => q.text);
+    for (const g of ['Skipped 1 binary file: docs/a.png.', 'no database detected', 'Is inventory held in Postgres or a dedicated service?']) expect(texts.filter(t => t === g)).toHaveLength(1);
+    expect(new Set(saved.openQuestions.map(q => q.id)).size).toBe(saved.openQuestions.length);
+  });
+
   it('ownership: another session cannot cancel or read the job', async () => {
     const gate = deferred();
     serverDeps.assembleRepoModel = (_f, _m, opts) =>
@@ -413,4 +424,40 @@ describe('POST /api/repo localPath (§8 private import)', () => {
       if (prevMode === undefined) delete process.env.ARCHWOVEN_MODE; else process.env.ARCHWOVEN_MODE = prevMode;
     }
   });
+});
+
+describe('POST /api/repo local folder paths', () => {
+  const inLocalMode = async (fn: () => Promise<void>) => {
+    const prevMode = process.env.ARCHWOVEN_MODE;
+    process.env.ARCHWOVEN_MODE = 'local';
+    try { await fn(); } finally { if (prevMode === undefined) delete process.env.ARCHWOVEN_MODE; else process.env.ARCHWOVEN_MODE = prevMode; }
+  };
+
+  it.each(['code/project', './project', '../project', '~other/project'])('refuses the relative path %j before any job or filesystem access', (path) => inLocalMode(async () => {
+    let touched = false;
+    serverDeps.ingestLocal = async () => { touched = true; return okIngest; };
+    const res = await POST(req({ localPath: path, idempotencyKey: `rel-${path}` }));
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toBe('Enter the full path to a git clone on this machine, for example /Users/you/code/project or ~/code/project.');
+    expect(touched).toBe(false);
+    expect(serverDeps.store.listCalls('test-sess')).toEqual([]);
+  }));
+
+  it('expands ~ to the home folder of the machine running Archwoven', () => inLocalMode(async () => {
+    const { homedir } = await import('node:os');
+    const { join } = await import('node:path');
+    let seenDir = '';
+    serverDeps.ingestLocal = async (dir) => { seenDir = dir; return okIngest; };
+    const res = await POST(req({ localPath: '  ~/code/private-shop  ', idempotencyKey: 'tilde' }));
+    expect(res.status).toBe(202);
+    await waitJob(((await res.json()) as { jobId: string }).jobId);
+    expect(seenDir).toBe(join(homedir(), 'code/private-shop'));
+  }));
+
+  it('reports no credit count when replaying a local job', () => inLocalMode(async () => {
+    const first = await POST(req({ localPath: '/home/user/private-shop', idempotencyKey: 'replay' }));
+    await waitJob(((await first.json()) as { jobId: string }).jobId);
+    const again = await POST(req({ localPath: '/home/user/private-shop', idempotencyKey: 'replay' }));
+    expect(((await again.json()) as { remaining: unknown }).remaining).toBeNull();
+  }));
 });

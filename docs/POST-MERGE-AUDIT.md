@@ -338,3 +338,51 @@ Known limitations:
 - Natural-language removal of a link between two source-backed nodes reports both the edge and the dependent path refusal, which is accurate but verbose.
 
 Artifacts are in the session scratchpad (`live4`); no database, credentials or cookies are published.
+
+## Local folder import, credit wording and stable warnings follow-up (task 11)
+
+2026-10-17, America/Chicago. PR #25 is confirmed merged into main at `21e6b72`.
+
+**Local folder import.** Local deployments now offer **Import repository → Local folder | GitHub**, defaulting to Local folder; hosted deployments show the GitHub form only. The form takes the path to a git clone and an optional subdirectory. Branch selection is hidden, because local import reads the checked-out commit; working-tree truthfulness is task 13. Help text explains that the path is read on the machine running Archwoven, which in Docker means a mounted folder. A shared check (`lib/local-path.ts`) gives the form and server the same rule and the same words:
+- absolute POSIX, Windows-drive or UNC paths, and `~`/`~/…` (expanded server-side) are accepted
+- relative paths are refused before any job, filesystem access or quota, because they would resolve against the server's working directory
+- typed paths survive switching sources
+
+**Credit wording.** Local mode shows "Local · no credit limits" instead of "6/6 credits today", "6 credits left" and "Costs 2 credits". The generate and repo routes no longer return a numeric credit count when replaying a local job.
+
+**Stable warnings.** Reproduced on a real native import: the first load showed 15 warnings and a reload showed 10. Ingest disclosures (skipped files, submodules, Git LFS) lived only on the job record, while reloads read only the model's open questions. `appendDisclosures` now saves them with the model (`gap.ingest.N`, de-duplicated), and the client derives warnings only from the saved model. `summarizeSkipped` groups skipped files by reason, with three examples and a remainder count. A local clone's `.git` folder is no longer reported as a "vendor directory" gap.
+
+**Local hardening.** Exposing folder paths in the UI raised the stakes of an existing exposure: the API parses JSON bodies regardless of content type, so cross-site "simple" POSTs and DNS-rebinding pages could reach a local instance. A Node-runtime middleware on `/api/*`, active only in local mode, now refuses:
+- a Host that is not `localhost`, `127.0.0.1` or `[::1]`
+- an `Origin` that differs from the Host, including `null`
+- `Sec-Fetch-Site: cross-site`
+
+`docker-compose.yml` now publishes ports 3000 and 11434 on 127.0.0.1 only, per SPEC §9; previously both were published on every interface. It also carries a commented read-only `~/code:/repos:ro` mount example, and the README documents local folder import. Docker is not installed on this machine, so the compose change was reviewed but not run.
+
+**Tests: 49 new.**
+
+| Area | Count |
+|---|---|
+| Disclosure summaries | 13 |
+| Local ingest `.git` | 1 |
+| `appendDisclosures` | 2 |
+| Repo route (persistence, relative paths, `~` expansion, local replay) | 7 |
+| Generate local replay | 1 |
+| Page (stable warnings, hosted/local wording, source switch, path rules, submit body) | 8 |
+| Request guard | 14 |
+| Middleware | 3 |
+
+Mutations disabling each of the following were all caught: the host, origin and fetch-metadata checks; server path validation; `.git` filtering; disclosure persistence; and model-only client warnings. Final checks: 880 hosted tests passed; local 864 passed / 16 expected skips; all typechecks, the isolated production build (middleware compiled as `/_middleware`, Node runtime) and the 18/36 benchmark selftests passed.
+
+**Live acceptance** on fresh servers (fake=false):
+- **Hosted, Chrome, 3/3:** credit count, GitHub-only form and cost wording unchanged.
+- **Local, Chrome through the real form, 15/15:**
+  - no credit wording anywhere; Local folder default; branch hidden
+  - inline relative-path refusal; GitHub-in-local says "Runs locally; no credits."
+  - a fresh clone at `21e6b72`, subdirectory `packages/jobs/src`, typed into the form, imported natively in 8.0 s
+  - warnings equal to the saved model's (12) and identical after reload; `.git` noise gone; skips summarized
+  - 390 px without horizontal scroll
+- **curl against the local server, 11/11:** rebinding Host, LAN Host, cross-site JSON POST, cross-site `text/plain` simple POST, null Origin and cross-site fetch metadata were all 403 and created zero jobs; same-origin and `localhost` requests were 200; a relative path was a readable 400. Hosted ignored foreign Host and Origin.
+- Live inspection found a layout regression: `.aw-repo-option`'s `flex: 1` stretched the local subdirectory field vertically, leaving a large gap. The field now uses the same row container as the GitHub form; it was rebuilt and re-verified 15/15 with a corrected screenshot.
+
+Known limitation for task 12: local disclosures still list files outside the chosen subdirectory (for example fonts and the lockfile when importing `packages/jobs/src`), because `walkLocal` scans the whole clone before applying the subdirectory. Artifacts are in the session scratchpad (`live5`); no database, credentials or cookies are published.

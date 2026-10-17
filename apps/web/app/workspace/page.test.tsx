@@ -885,3 +885,107 @@ describe('refinement refusals keep the instruction', () => {
     expect(instruction()).toBe('');
   });
 });
+
+describe('stable warnings', () => {
+  it('shows the same gaps on the first load and after a reload, from the saved model only', async () => {
+    const saved = structuredClone(validFullModelExtended);
+    saved.openQuestions = [{ id: 'gap.source.1', text: 'Imports do not prove runtime calls.' }, { id: 'gap.ingest.1', text: 'Skipped 1 binary file: docs/a.png.' }];
+    transport = (input, init) => {
+      if (input === '/api/repo') return Response.json({ jobId: 'repo-job', remaining: 4 }, { status: 202 });
+      if (input === '/api/jobs/repo-job') return Response.json({ status: 'succeeded', modelId: 'repo-model', revision: 1, gaps: ['an ephemeral job-only note', 'Skipped 1 binary file: docs/a.png.'] });
+      if (input === '/api/models/repo-model' && !init) return Response.json({ model: saved });
+      return undefined;
+    };
+    await mount();
+    await click('Import repository');
+    await fill('#repository-url', 'https://github.com/foo/bar');
+    await click('Analyze repository');
+    await act(async () => { await vi.waitFor(() => expect(container.textContent).toMatch(/⚠ \d+ gaps/)); });
+    const first = container.textContent!.match(/⚠ (\d+) gaps/)![1];
+    expect(first).toBe('2');
+    expect(container.textContent).not.toContain('ephemeral job-only note');
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    window.history.replaceState(null, '', '/workspace#model=repo-model');
+    await mount();
+    await act(async () => { await vi.waitFor(() => expect(container.textContent).toMatch(/⚠ \d+ gaps/)); });
+    expect(container.textContent!.match(/⚠ (\d+) gaps/)![1]).toBe(first);
+  });
+});
+
+describe('import source and credit wording by deployment', () => {
+  const localConfig = () => {
+    transport = (input, init) => {
+      if (input === '/api/config') return Response.json({ mode: 'local', llmReady: true, fake: false });
+      if (input === '/api/quota') return Response.json({ remaining: null, pool: 6, fake: false });
+      if (input === '/api/repo') { repoBodies.push(JSON.parse(String(init?.body))); return Response.json({ jobId: 'local-job', remaining: null }, { status: 202 }); }
+      if (input === '/api/jobs/local-job') return Response.json({ status: 'succeeded', modelId: 'local-model', revision: 1 });
+      if (input === '/api/models/local-model' && !init) return Response.json({ model: { ...validFullModelExtended, privacy: { classification: 'private', boundary: 'local-only' } } });
+      return undefined;
+    };
+  };
+  let repoBodies: Record<string, unknown>[];
+  beforeEach(() => { repoBodies = []; });
+  const pressed = (text: string) => [...container.querySelectorAll('button[aria-pressed]')].find(b => b.textContent?.trim() === text)?.getAttribute('aria-pressed');
+  const analyze = () => [...container.querySelectorAll('button')].find(b => b.textContent?.trim() === 'Analyze repository') as HTMLButtonElement | undefined;
+
+  it('keeps the GitHub form and credit wording in hosted mode', async () => {
+    await mount();
+    expect(container.textContent).toContain('6/6 credits today');
+    await click('Import repository');
+    expect(container.querySelector('#repository-url')).toBeTruthy();
+    expect(container.querySelector('#repository-path')).toBeNull();
+    expect(pressed('Local folder')).toBeUndefined();
+    expect(container.textContent).toContain('Costs 2 credits (6 left)');
+  });
+
+  it('never mentions credits in local mode', async () => {
+    localConfig();
+    await mount();
+    expect(container.textContent).toContain('Local · no credit limits');
+    expect(container.textContent).not.toMatch(/credits? (today|left)|Costs \d/);
+    await click('Import repository');
+    expect(container.textContent).not.toMatch(/credits? (today|left)|Costs \d/);
+    await click('GitHub');
+    expect(container.textContent).toContain('Runs locally; no credits.');
+    expect(container.textContent).not.toMatch(/Costs \d/);
+  });
+
+  it('imports a local folder by path, defaulting to the local source and hiding branch selection', async () => {
+    localConfig();
+    await mount();
+    await click('Import repository');
+    expect(pressed('Local folder')).toBe('true');
+    expect(container.querySelector('[aria-label="Repository branch or commit"]')).toBeNull();
+    expect(container.textContent).toContain('a git clone on the machine running Archwoven (in Docker, a folder mounted into the container)');
+    await fill('#repository-path', '~/code/shop');
+    await fill('[aria-label="Repository subdirectory"]', 'services/api');
+    await act(async () => analyze()!.click());
+    await act(async () => { await vi.waitFor(() => expect(repoBodies).toHaveLength(1)); });
+    expect(repoBodies[0]).toMatchObject({ localPath: '~/code/shop', subdir: 'services/api', view: 'architecture' });
+    expect(repoBodies[0]).not.toHaveProperty('url');
+    expect(typeof repoBodies[0]!.idempotencyKey).toBe('string');
+  });
+
+  it.each(['code/shop', './shop', '~other/shop'])('explains and blocks the relative path %j before any request', async (path) => {
+    localConfig();
+    await mount();
+    await click('Import repository');
+    await fill('#repository-path', path);
+    expect(container.querySelector('#repository-path-error')?.textContent).toBe('Enter the full path to a git clone on this machine, for example /Users/you/code/project or ~/code/project.');
+    expect(analyze()!.disabled).toBe(true);
+    expect(repoBodies).toEqual([]);
+  });
+
+  it('switches back to a GitHub URL without losing the typed path', async () => {
+    localConfig();
+    await mount();
+    await click('Import repository');
+    await fill('#repository-path', '/srv/code/shop');
+    await click('GitHub');
+    expect(container.querySelector('#repository-url')).toBeTruthy();
+    expect(container.querySelector('[aria-label="Repository branch or commit"]')).toBeTruthy();
+    await click('Local folder');
+    expect(container.querySelector<HTMLInputElement>('#repository-path')!.value).toBe('/srv/code/shop');
+  });
+});

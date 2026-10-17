@@ -82,7 +82,7 @@ local Ollama, stamps every saved model `private · local-only` server-side, and 
 every outbound fetch behind an allowlist guard — nothing leaves the machine.
 
 ```bash
-docker compose up --build          # web on :3000 + ollama on :11434
+docker compose up --build          # web on 127.0.0.1:3000 + ollama on 127.0.0.1:11434
 # one manual step, first run only (~13 GB):
 docker compose exec ollama ollama pull gpt-oss:20b
 ```
@@ -90,6 +90,13 @@ docker compose exec ollama ollama pull gpt-oss:20b
 Or without Docker: `brew install ollama && ollama pull gpt-oss:20b`, then
 `ARCHWOVEN_MODE=local pnpm build && ARCHWOVEN_MODE=local ARCHWOVEN_DEMO_ACK=1 pnpm start:local`.
 `OLLAMA_MODEL` overrides the model (e.g. `gpt-oss:120b` on ≥64 GB machines).
+
+To map a private repository, choose **Import repository → Local folder** and enter the full
+path to a git clone (`/Users/you/code/project` or `~/code/project`). The path is read on the
+machine running Archwoven; with Docker, mount your code read-only (see the commented
+`~/code:/repos:ro` volume in `docker-compose.yml`) and enter `/repos/<project>`. Local mode only
+answers requests addressed to `localhost`/`127.0.0.1` from the same origin, so other sites and
+devices on your network cannot trigger or read imports.
 
 The privacy promise is tested, not asserted: egress guard refuses hosted APIs before
 DNS (§9), local jobs route to Ollama only, privacy is server-stamped from deploy
