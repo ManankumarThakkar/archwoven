@@ -148,6 +148,12 @@ describe('assembleRepoModel (injection-hardened, mocked SDK)', () => {
     expect(REPO_SYSTEM).toContain('<repo-data>');
   });
 
+  it('accepts an assembled model wrapped in one Markdown code fence without a repair round', async () => {
+    const { client, calls } = fakeClient(['```json\n' + JSON.stringify(validFull) + '\n```']);
+    const r = await assembleRepoModel(frag(), META, { client });
+    expect(r.ok).toBe(true); expect(r.usage.repairs).toBe(0); expect(calls).toHaveLength(1);
+  });
+
   it('fragment JSON travels inside the delimiters', async () => {
     const { client, calls } = fakeClient([validFull]);
     const r = await assembleRepoModel(frag(), META, { client });
@@ -231,6 +237,13 @@ describe('assembleRepoModel (injection-hardened, mocked SDK)', () => {
 });
 
 describe('M4 semantic fields in the assembly pipeline', () => {
+  it('REPO_SYSTEM shows the evidence object shape instead of an opaque encoded string', () => {
+    const contract = JSON.parse(REPO_SYSTEM.split('<model-json-schema>\n')[1]!.split('\n</model-json-schema>')[0]!);
+    const node = contract.properties.nodes.items.properties;
+    expect(node).not.toHaveProperty('evidenceJson');
+    expect(Object.keys(node.evidence.items.properties)).toEqual(expect.arrayContaining(['path', 'lines', 'note']));
+  });
+
   it('REPO_SYSTEM documents the optional semantic fields', () => {
     expect(REPO_SYSTEM).toContain('semanticChecks');
     expect(REPO_SYSTEM).toContain('mainPath');

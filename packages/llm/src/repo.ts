@@ -3,8 +3,8 @@ import type { Fragment } from '@archwoven/extract';
 import { buildSourceModel, SOURCE_PRESENTATION_SYSTEM } from './source-presentation';
 import { validateModel, validFullModelExtended, type Evidence } from '@archwoven/model';
 import {
-  MODEL, MAX_REPAIRS, MAX_TOKENS, CONTEXT_TOKEN_LIMIT, MODEL_JSON_CONTRACT, NATIVE_MODEL_JSON_CONTRACT,
-  countFailureMessage, hostedClient, fakeMode, decodeWireModel, usageFrom,
+  MODEL, MAX_REPAIRS, MAX_TOKENS, CONTEXT_TOKEN_LIMIT, NATIVE_MODEL_JSON_CONTRACT,
+  countFailureMessage, hostedClient, fakeMode, decodeWireModel, unfenced, usageFrom,
   type StructuredClient, type Effort, type GenerateOutcome,
 } from './client';
 
@@ -33,7 +33,7 @@ Hard rules:
 
 ${contract}`;
 
-export const REPO_SYSTEM = repoSystem(MODEL_JSON_CONTRACT, 'public');
+export const REPO_SYSTEM = repoSystem(NATIVE_MODEL_JSON_CONTRACT, 'public');
 export const LOCAL_REPO_SYSTEM = repoSystem(NATIVE_MODEL_JSON_CONTRACT, 'private');
 
 /** JSON.stringify, then escape `</` so a `</repo-data>` inside a string value
@@ -147,7 +147,7 @@ export async function assembleRepoModel(
     const text = response.content.filter((b) => b.type === 'text').map((b) => b.text ?? '').join('');
     let parsed: unknown;
     try {
-      parsed = generic ? JSON.parse(text) : decodeWireModel(JSON.parse(text));
+      parsed = generic ? JSON.parse(unfenced(text)) : decodeWireModel(JSON.parse(unfenced(text)));
     } catch (e) {
       lastErrors = [`output was not valid JSON (${response.stop_reason ?? 'unknown'}): ${e instanceof Error ? e.message : String(e)}`];
       if (attempt < MAX_REPAIRS) {
