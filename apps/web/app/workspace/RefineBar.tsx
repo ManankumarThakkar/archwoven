@@ -5,7 +5,7 @@ import { useId, useState } from 'react';
 export type ExportKind = 'svg' | 'png' | 'json' | 'json-no-evidence';
 
 export function RefineBar({
-  busy, summary, canUndo, onRefine, onUndo, onExport, sources,
+  busy, summary, canUndo, onRefine, onUndo, onExport, sources, onDelete, retention,
 }: {
   busy: boolean;
   summary: string;
@@ -16,6 +16,9 @@ export function RefineBar({
   onExport: (kind: ExportKind) => void;
   /** Source references in the model's evidence; null when evidence carries none. */
   sources: { private: boolean; repos: string[] } | null;
+  onDelete: () => void;
+  /** How long this deployment keeps the diagram (SPEC §1). */
+  retention: string;
 }) {
   const [instruction, setInstruction] = useState('');
   const submit = async () => {
@@ -40,6 +43,8 @@ export function RefineBar({
       <button disabled={busy} onClick={() => onExport('png')} style={exportButton}>PNG</button>
       <button disabled={busy} onClick={() => onExport('json')} title="Download the saved model as JSON" aria-describedby={sources ? noteId : undefined} style={exportButton}>JSON</button>
       {sources && <button disabled={busy} onClick={() => onExport('json-no-evidence')} title="Download the model JSON without evidence records" aria-describedby={noteId} style={exportButton}>JSON (no evidence)</button>}
+      <button disabled={busy} onClick={onDelete} aria-describedby="retention-note" style={{ ...exportButton, border: '1px solid #7f1d1d', color: '#fca5a5' }}>Delete diagram</button>
+      <span id="retention-note" style={{ flexBasis: '100%', fontSize: 12, color: '#94a3b8' }}>{retention}</span>
       {sources && <p id={noteId} role="note" style={{ flexBasis: '100%', margin: 0, fontSize: 12, color: '#94a3b8' }}>
         {sources.private && <>Full JSON includes repository, commit and file references{sources.repos.length ? ` (${sources.repos.join(', ')})` : ''}. </>}
         No-evidence JSON removes evidence records; names and IDs may still mention files.

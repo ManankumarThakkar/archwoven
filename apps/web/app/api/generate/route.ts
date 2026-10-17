@@ -32,13 +32,26 @@ export async function POST(req: Request) {
   }
 
   if (!body || typeof body !== 'object' || Array.isArray(body)) return Response.json({ error: 'invalid request body' }, { status: 400, headers });
+  const replyKey = (r: ClarificationReply) => `clarification:${createHash('sha256').update(JSON.stringify(r)).digest('hex')}`;
+  /** An accepted request replayed with the same key returns its original job instead of starting another. */
+  const replayOf = (key: string): Response | null => {
+    const existing = serverDeps.store.findJobByIdempotencyKey(key, sessionId);
+    if (!existing) return null;
+    const used = serverDeps.store.creditsUsed(sessionId, new Date().toISOString().slice(0, 10));
+    return Response.json({ jobId: existing.id, remaining: deployMode() === 'local' ? null : Math.max(0, TIERS[tierOf(sessionId)].pool - used) }, { status: 202, headers });
+  };
   let context: Clarification | undefined, reply: ClarificationReply | null = null;
   if (body.clarification !== undefined) {
     const raw = body.clarification as { jobId?: unknown } | null;
     if (!raw || typeof raw.jobId !== 'string') return Response.json({ error: 'A clarification job is required.' }, { status: 400, headers });
     const previous = serverDeps.store.getJob(raw.jobId);
     if (!previous || previous.sessionId !== sessionId) return Response.json({ error: 'clarification not found' }, { status: 404, headers });
-    if (previous.status !== 'clarifying' || !previous.clarification) return Response.json({ error: 'This job has no pending clarification.' }, { status: 409, headers });
+    if (previous.status !== 'clarifying' || !previous.clarification) {
+      // A completed continuation scrubs the stored questions; replaying the same reply still returns its job.
+      const answers = (raw as { answers?: unknown }).answers;
+      const replay = parseReply(raw, Array.isArray(answers) ? answers.length : 0);
+      return (replay && replayOf(replyKey(replay))) || Response.json({ error: 'This job has no pending clarification.' }, { status: 409, headers });
+    }
     context = previous.clarification;
     reply = parseReply(raw, context.questions.length);
     if (!reply) return Response.json({ error: 'Answer at least one question (up to 1,000 characters each), or choose Skip for now.' }, { status: 400, headers });
@@ -52,14 +65,9 @@ export async function POST(req: Request) {
   if (llmNotConfigured()) return Response.json({ reason: 'llm-not-configured', message: LLM_NOT_CONFIGURED_COPY }, { status: 503, headers });
 
   const tier = tierOf(sessionId);
-  const key = reply ? `clarification:${createHash('sha256').update(JSON.stringify(reply)).digest('hex')}` : body.idempotencyKey ? String(body.idempotencyKey) : undefined;
-  if (key) {
-    const existing = serverDeps.store.findJobByIdempotencyKey(key, sessionId);
-    if (existing) {
-      const used = serverDeps.store.creditsUsed(sessionId, new Date().toISOString().slice(0, 10));
-      return Response.json({ jobId: existing.id, remaining: deployMode() === 'local' ? null : Math.max(0, TIERS[tier].pool - used) }, { status: 202, headers });
-    }
-  }
+  const key = reply ? replyKey(reply) : body.idempotencyKey ? String(body.idempotencyKey) : undefined;
+  const replayed = key ? replayOf(key) : null;
+  if (replayed) return replayed;
 
   const burstWindowSec = Number(process.env.ARCHWOVEN_BURST_WINDOW_SEC ?? 60);
   // Atomic reservation at the gate — parallel requests cannot race past the pool.
@@ -132,6 +140,8 @@ export async function POST(req: Request) {
       recordUsage(serverDeps.store, { sessionId, tier, action: 'generate', view, taskId: jobId, modelId: jobId, usage: out.usage, retries: out.usage.repairs, outcome: out.usage.repairs > 0 ? 'repaired' : 'ok' });
       metered = true;
       serverDeps.store.updateJob(jobId, { status: 'succeeded' });
+      // The clarified diagram now carries what matters; the stored description must not outlive it.
+      if (reply) serverDeps.store.scrubClarification(reply.jobId);
       // These persistence operations are synchronous: no cancel/deadline can interleave.
       // Claim only after they finish so a thrown write still follows failure/refund.
       claim();

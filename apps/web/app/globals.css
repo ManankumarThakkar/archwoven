@@ -119,6 +119,7 @@ textarea::placeholder, input::placeholder { color: #8290aa; opacity: 1; }
 .aw-detail-caption { margin: 0; padding: 4px 12px 8px; font-size: 12px; color: #94a3b8; }
 .aw-detail-tab { display: inline-flex; align-items: stretch; }
 .aw-detail-source { color: #fbbf24; }
+.aw-notice { padding: 10px 16px; font-size: 13px; color: #93c5fd; }
 .aw-detail-drift { padding: 0 12px 8px; font-size: 12px; color: #fbbf24; }
 .aw-detail-drift p { margin: 2px 0; }
 .aw-expand { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 12px 10px; }

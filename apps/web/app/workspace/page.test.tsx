@@ -1061,3 +1061,74 @@ describe('secret refusals', () => {
     expect(container.querySelector<HTMLTextAreaElement>('#system-description')!.value).toBe('An API gateway.\nToken: (pasted)');
   });
 });
+
+describe('deleting a diagram', () => {
+  beforeEach(() => window.history.replaceState(null, '', '/workspace#model=m1'));
+  function server(status = 200) {
+    const deletes: string[] = [];
+    transport = (input, init) => {
+      if (input === '/api/models/m1' && init?.method === 'DELETE') { deletes.push(input); return status === 200 ? Response.json({ deleted: true }) : Response.json({ error: status === 404 ? 'model not found' : 'Storage unavailable' }, { status }); }
+      if (input === '/api/models/m1' && !init) return Response.json({ model: validFullModelExtended });
+      return undefined;
+    };
+    return deletes;
+  }
+  const button = () => [...container.querySelectorAll('button')].find(b => b.textContent?.trim() === 'Delete diagram');
+
+  it('deletes after confirmation and leaves nothing to restore', async () => {
+    const deletes = server();
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    await mount();
+    sessionStorage.setItem('aw_modelId', 'm1');
+    await act(async () => button()!.click());
+    expect(confirm).toHaveBeenCalledWith('Delete this diagram and its history? This cannot be undone.');
+    expect(deletes).toEqual(['/api/models/m1']);
+    expect(container.querySelector('[aria-label="Rendered view"]')).toBeNull();
+    expect(container.querySelector('[role="status"].aw-notice')?.textContent).toBe('Diagram deleted.');
+    expect(sessionStorage.getItem('aw_modelId')).toBeNull();
+    expect(window.location.hash).toBe('');
+  });
+
+  it('keeps the diagram when the confirmation is declined', async () => {
+    const deletes = server();
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    await mount();
+    await act(async () => button()!.click());
+    expect(deletes).toEqual([]);
+    expect(container.querySelector('[aria-label="Rendered view"]')).not.toBeNull();
+  });
+
+  it('keeps the diagram and explains when deletion fails', async () => {
+    server(503);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    await mount();
+    await act(async () => button()!.click());
+    expect(container.textContent).toContain('Storage unavailable');
+    expect(container.querySelector('[aria-label="Rendered view"]')).not.toBeNull();
+  });
+
+  it('clears a diagram that had already expired', async () => {
+    server(404);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    await mount();
+    await act(async () => button()!.click());
+    expect(container.querySelector('[aria-label="Rendered view"]')).toBeNull();
+    expect(container.querySelector('[role="status"].aw-notice')?.textContent).toBe('Diagram deleted.');
+  });
+
+  it('states how long diagrams are kept in each deployment', async () => {
+    server();
+    await mount();
+    expect(container.querySelector('#retention-note')?.textContent).toBe('Kept for 30 days after the last change.');
+    expect(button()!.getAttribute('aria-describedby')).toBe('retention-note');
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    transport = (input, init) => {
+      if (input === '/api/config') return Response.json({ mode: 'local', llmReady: true });
+      if (input === '/api/models/m1' && !init) return Response.json({ model: validFullModelExtended });
+      return undefined;
+    };
+    await mount();
+    expect(container.querySelector('#retention-note')?.textContent).toBe('Stored on this machine until you delete it.');
+  });
+});

@@ -47,6 +47,10 @@ If Corepack is unavailable, install the pinned pnpm version with `npm install --
 4. Select a chapter for guided context. **Still** stops edge animation. Switch views, refine in words, undo a refinement, or export SVG/PNG.
 5. Copy the address to return to the saved model and viewer context. A link works only in an authorized browser session; it does not grant another session access. Missing or inaccessible models show recovery guidance.
 
+## Data retention and deletion
+
+Hosted diagrams are kept for 30 days after their last change, including their revision history, and are then removed by a sweep that runs at startup and every 24 hours. Finished generation jobs are removed after 30 days, and a clarification's stored description is erased as soon as its diagram is saved. Usage records contain no content and are kept for 90 days. **Delete diagram** removes a diagram and its history immediately, in any deployment. Local (private-mode) diagrams stay on your machine until you delete them.
+
 ## Run with your real API key
 
 Next loads `apps/web/.env.local`; keep your existing `ANTHROPIC_API_KEY` there. On a new checkout, create that gitignored file with `ANTHROPIC_API_KEY=your-real-key`. Do not commit it. Run from the repository root:

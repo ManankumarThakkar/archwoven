@@ -51,7 +51,7 @@ This document records what is **implemented and tested** today, what is **partia
 | T13 | XSS through labels in the canvas or exports | React escapes text. SVG export escapes markup and emits no scripts, external references or `foreignObject`. JSON export is data only. | Implemented | `export-svg.test.ts` malicious-label tests |
 | T14 | Exports or share cards leak private evidence | Share cards and images carry no evidence paths. JSON offers an evidence-free variant with a private-model notice. | Implemented | Export and share-card tests |
 | T15 | Cost or availability abuse on hosted (scripted generation) | Weighted daily credits per session and IP bucket, burst limits, concurrency slots, per-request token gate, job deadlines and cancellation, global daily stop-loss | Implemented; the escalation ladder is deferred (see below) | Quota, limiter and route tests |
-| T16 | Data retained longer than promised | 30-day anonymous expiry, sweeping and user deletion | **Not yet implemented: release task 16** | — |
+| T16 | Data retained longer than promised | Hosted diagrams expire 30 days after their last change (whole history), swept at boot and every 24 hours. Finished jobs (which can hold prompts, gaps and errors) expire after 30 days, and a clarification's stored description is scrubbed once its diagram is saved. Content-free metering is pruned after 90 days. Owners can delete a diagram at any time in either mode; local diagrams never expire automatically. | Implemented | `retention.test.ts` (store, sweeper), boot-hook test, `DELETE /api/models/:id` tests, page deletion tests |
 | T17 | Supply-chain compromise through dependencies | Exact pins for security-relevant dependencies (secretlint 13.0.7, two weeks old at adoption); frozen-lockfile installs in CI and Docker; no runtime code execution from analysed repositories | Partial | `pnpm-lock.yaml`, CI workflow |
 | T18 | Content leaks through logs or metering | No request content is logged. Usage records hold counters, identities and costs, never prompts or source. | Implemented | Task 14 accounting tests |
 
@@ -66,4 +66,4 @@ This document records what is **implemented and tested** today, what is **partia
 - Novel credential formats and secrets split across lines or strings can evade detection (T4).
 - A user with their own session can still send their own proprietary text to the hosted provider; that is the product's purpose and is disclosed by the privacy chip.
 - The local owner's machine is trusted. An attacker who already controls it is out of scope.
-- Retention is not yet enforced (T16, task 16).
+- Retention relies on the single hosted process running its sweep; a deployment that never stays up for a full day still sweeps at every boot.

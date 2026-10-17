@@ -22,7 +22,7 @@ Completed foundation: PR #11 clean-download instructions; PR #12 authoritative e
 | 13 | Truthful working-tree/commit evidence | Merged to main as PR #28; verified |
 | 14 | Accurate task/repair usage and provider-aware costs | Merged to main as PR #29; verified |
 | 15 | Supported framework extraction gaps and coverage measurements | Pending |
-| 16 | Retention, expiration and user deletion | Pending |
+| 16 | Retention, expiration and user deletion | PR open against main; verified |
 | 17 | Threat model and before-egress content secret scanning | Merged to main as PR #30; verified |
 | 18 | Public abuse controls and honest exhausted-credit copy | Pending |
 | 19 | Evaluation oracle, representative real-provider results and human-review handoff | Pending |
