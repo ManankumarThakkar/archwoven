@@ -12,9 +12,11 @@ import { ClarificationPanel } from './ClarificationPanel';
 import { Inspector } from './InspectorPanel';
 import { inspectorFor } from './inspector';
 import { passportFor } from './passport';
-import { RefineBar } from './RefineBar';
+import { RefineBar, type ExportKind } from './RefineBar';
 import { summarizeOps, pushHistory, undo, idempotencyKeyFor } from './refine-flow';
 import { buildSvg } from '../../lib/export-svg';
+import { modelJson, modelJsonFileName, sourceReferences } from '../../lib/export-json';
+import { downloadBlob } from '../../lib/download';
 import type { DirectEdit } from '../../lib/direct-edit';
 
 const STAGE_LABEL: Record<Stage, string> = {
@@ -323,8 +325,19 @@ export default function WorkspacePage() {
     finally{mutationRef.current=false;setRefining(false);}
   };
 
-  const doExport = async (kind: 'svg' | 'png') => {
-    if (!model || !activeView) return;
+  const doExport = async (kind: ExportKind) => {
+    if (!model) return;
+    if (kind === 'json' || kind === 'json-no-evidence') {
+      const variant = kind === 'json' ? 'full' : 'no-evidence';
+      try {
+        downloadBlob(new Blob([modelJson(model, variant)], { type: 'application/json' }), modelJsonFileName(model, variant));
+        setSummary(kind === 'json' ? 'JSON downloaded.' : 'JSON without evidence downloaded.');
+      } catch {
+        setSummary('Could not export the model. Please try again.');
+      }
+      return;
+    }
+    if (!activeView) return;
     setSummary('Preparing export…');
     try {
       const svg = await buildSvg(model, activeView);
@@ -348,13 +361,7 @@ export default function WorkspacePage() {
           ext = 'png';
         } catch { /* fall back to SVG, honestly named and reported below */ }
       }
-      const url = URL.createObjectURL(blob);
-      try {
-        const a = document.createElement('a');
-        a.href = url; a.download = `archwoven-${activeView}.${ext}`; a.click();
-      } finally {
-        URL.revokeObjectURL(url);
-      }
+      downloadBlob(blob, `archwoven-${activeView}.${ext}`);
       setSummary(kind === 'png' && ext === 'svg' ? 'PNG export unavailable. Downloaded SVG instead.' : `${ext.toUpperCase()} downloaded.`);
     } catch {
       setSummary('Could not export the diagram. Please try again.');
@@ -365,6 +372,8 @@ export default function WorkspacePage() {
   const viewTabs = model?.views ?? [];
   const currentView = viewTabs.find(v => v.id === activeView) ?? viewTabs[0];
   const passport = model && selected ? passportFor(model, selected) : null;
+  const references = model ? sourceReferences(model) : null;
+  const exportSources = model && references?.present ? { private: model.privacy.classification === 'private' || model.privacy.boundary === 'local-only', repos: references.repos } : null;
   // Pre-model chip states the deployment's processing location — never a hardcoded claim.
   const privacy = model ? `🔒 ${model.privacy.classification} · ${model.privacy.boundary}` : `🔒 ${deploy === 'local' ? 'private · local-only' : 'public · external-allowed'}`;
 
@@ -417,7 +426,7 @@ export default function WorkspacePage() {
               {currentView && <ArchitectureOrientation model={model} view={currentView} busy={refining} onChange={orientation=>{void directEdit({type:'orient',viewId:currentView.id,orientation});}} />}
             </div>
             <div style={{ flex: 1, minHeight: 0 }}><Canvas model={model} modelId={modelId ?? ''} viewId={activeView || viewTabs[0]?.id || ''} busy={refining} onMove={positions=>directEdit({type:'move',positions})} onSelect={setSelected} onDeselect={() => setSelected(null)} /></div>
-            <RefineBar busy={refining} summary={summary} canUndo={history.length > 1} onRefine={refine} onUndo={doUndo} onExport={doExport} />
+            <RefineBar busy={refining} summary={summary} canUndo={history.length > 1} onRefine={refine} onUndo={doUndo} onExport={doExport} sources={exportSources} />
           </main>
         ) : (
           <main className="aw-empty-main" aria-label="Diagram workspace" aria-live="polite">
