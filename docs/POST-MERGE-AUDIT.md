@@ -555,4 +555,4 @@ Artifacts, provider receipts and screenshots remain in temporary storage; no dat
   - reload restores nothing; an old link shows the existing recovery guidance
 - Two driver issues occurred and are not product defects: the old-link check first used a hash-only navigation (a known task 20 gap), then a fixed 2.5 s wait shorter than restore. The product behaviour was confirmed in a fresh browser, and the driver now waits for the message.
 
-The gap list (`OPEN-GAPS.md`, PR #31) still holds the retention row; it is removed once #31 merges and this branch is rebased. Artifacts are in the session scratchpad (`live7`); no databases, credentials or cookies are published.
+The retention row is removed from `OPEN-GAPS.md` in this PR. Artifacts are in the session scratchpad (`live7`); no databases, credentials or cookies are published.

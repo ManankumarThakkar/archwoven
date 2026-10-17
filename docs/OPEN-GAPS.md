@@ -8,7 +8,6 @@ Last reviewed: 2026-10-17, after PR #30 (main `2fc0168`). Release tasks refer to
 
 | Gap | User impact | Found in | Planned |
 |---|---|---|---|
-| Diagrams are kept forever; there is no 30-day anonymous expiry, sweep or user deletion | Privacy promise in SPEC §9 is not met | Post-merge audit; threat model T16 | Task 16 (in progress) |
 | Exhausted-credit message advertises a GitHub sign-in that does not exist | Misleading copy for hosted users | Post-merge audit | Task 18 |
 | SPEC §15 still describes anomaly challenges and bans that are deliberately deferred | Spec and product disagree | Release decisions (2026-10-17) | Task 18 (narrow SPEC) |
 | Subdirectory paths with `@` segments are rejected (`packages/@scope/name`) by both `safeSubdir` and the URL parser | Scoped-package folders in JavaScript monorepos cannot be imported | Task 17 live check | Task 15 |
