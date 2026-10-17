@@ -31,6 +31,7 @@ export interface RepoForm {
 
 export interface ControlPanelProps {
   running: boolean;
+  locked?: boolean;
   remaining: number;
   mode: Mode;
   prefill?: { prompt?: string; view?: ViewType; url?: string; subdir?: string; ref?: string };
@@ -41,7 +42,7 @@ export interface ControlPanelProps {
   onCancel: () => void;
 }
 
-export function ControlPanel({ running, remaining, mode, prefill, onMode, onGenerate, onGenerateRepo, onRepoExample, onCancel }: ControlPanelProps) {
+export function ControlPanel({ running, locked=false, remaining, mode, prefill, onMode, onGenerate, onGenerateRepo, onRepoExample, onCancel }: ControlPanelProps) {
   const [prompt, setPrompt] = useState('');
   const [view, setView] = useState<ViewType>('architecture');
   const [url, setUrl] = useState('');
@@ -80,6 +81,7 @@ export function ControlPanel({ running, remaining, mode, prefill, onMode, onGene
 
   return (
     <aside className="aw-create-panel" aria-label="Create a diagram">
+      <fieldset disabled={locked} style={{display:'contents'}}>
       <div className="aw-panel-intro">
         <span className="aw-eyebrow">YOUR NEXT SYSTEM, MAPPED</span>
         <h1>Make the complex<br /> <span>clear.</span></h1>
@@ -173,6 +175,7 @@ export function ControlPanel({ running, remaining, mode, prefill, onMode, onGene
         </>
       )}
       <div className="aw-panel-footer"><span aria-hidden="true">◇</span> Inspect connections. Refine in words. Export your map.</div>
+      </fieldset>
     </aside>
   );
 }

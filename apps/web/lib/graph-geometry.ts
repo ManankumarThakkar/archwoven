@@ -29,9 +29,10 @@ export function graphScene(model: SystemModel, placed: LayoutResult) {
   });
   const boxes = [...placed.nodes, ...placed.edges.flatMap(edge => edge.label ? [edge.label] : []), ...boundaries];
   const points = placed.edges.flatMap(edge => edge.points);
-  const x = Math.min(0, ...boxes.map(box => box.x - 8), ...points.map(point => point.x - 8));
-  const y = Math.min(0, ...boxes.map(box => box.y - 8), ...points.map(point => point.y - 8));
-  const right = Math.max(placed.width, ...boxes.map(box => box.x + box.width + 8), ...points.map(point => point.x + 8));
-  const bottom = Math.max(placed.height, ...boxes.map(box => box.y + box.height + 8), ...points.map(point => point.y + 8));
+  const base = placed.bounds ?? { x: 0, y: 0, width: placed.width, height: placed.height };
+  const x = Math.min(base.x, ...boxes.map(box => box.x - 8), ...points.map(point => point.x - 8));
+  const y = Math.min(base.y, ...boxes.map(box => box.y - 8), ...points.map(point => point.y - 8));
+  const right = Math.max(base.x + base.width, ...boxes.map(box => box.x + box.width + 8), ...points.map(point => point.x + 8));
+  const bottom = Math.max(base.y + base.height, ...boxes.map(box => box.y + box.height + 8), ...points.map(point => point.y + 8));
   return { boundaries, bounds: { x, y, width: right - x, height: bottom - y } };
 }

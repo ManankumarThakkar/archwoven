@@ -38,6 +38,15 @@ beforeEach(() => {
 });
 
 describe('POST /api/refine', () => {
+  it('rejects a late refinement when a direct edit has advanced the revision', async () => {
+    serverDeps.generateRefinement = async () => {
+      const changed = structuredClone(validFullModel); changed.revision=2; changed.parentId=1; changed.nodes[0]!.label='Directly renamed';
+      serverDeps.store.saveRevision('m1',changed,'test-sess'); return {ok:true,ops:[addCacheOp],usage};
+    };
+    const response=await POST(req({modelId:'m1',baseRevision:1,instruction:'add cache'}));
+    expect(response.status).toBe(409);expect(serverDeps.store.getRevision('m1')?.revision).toBe(2);
+    expect(serverDeps.store.getRevision('m1')?.nodes[0]!.label).toBe('Directly renamed');
+  });
   it('a cancelled request cannot persist a late successful refinement', async () => {
     const controller = new AbortController();
     serverDeps.generateRefinement = async (_instruction, _model, _view, opts) => {

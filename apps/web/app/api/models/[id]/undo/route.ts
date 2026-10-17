@@ -16,19 +16,20 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const { id } = await ctx.params;
   if (serverDeps.store.getRevisionOwner(id) !== sessionId) return Response.json({ error: 'model not found' }, { status: 404, headers });
 
-  let body: { prevRevision?: number };
+  let body: { prevRevision?: number; baseRevision?: number } | null;
   try {
     body = await req.json();
   } catch {
     return Response.json({ error: 'invalid JSON body' }, { status: 400, headers });
   }
 
-  const prevRevision = Number(body.prevRevision);
-  if (!Number.isInteger(prevRevision)) return Response.json({ error: 'prevRevision is required' }, { status: 400, headers });
+  const prevRevision = body?.prevRevision, baseRevision = body?.baseRevision;
+  if (!Number.isInteger(prevRevision) || !Number.isInteger(baseRevision)) return Response.json({ error: 'prevRevision and baseRevision are required. Reload the diagram and try again.' }, { status: 400, headers });
 
   const latest = serverDeps.store.getRevision(id);
-  const prev = serverDeps.store.getRevision(id, prevRevision);
+  const prev = serverDeps.store.getRevision(id, prevRevision!);
   if (!latest || !prev) return Response.json({ error: 'revision not found' }, { status: 400, headers });
+  if (baseRevision !== latest.revision) return Response.json({ reason: 'stale-revision', message: 'The diagram changed elsewhere. Review the latest version before undoing.', model: latest }, { status: 409, headers });
 
   const undone = undoTo(latest, prev);
   serverDeps.store.saveRevision(id, undone, sessionId);

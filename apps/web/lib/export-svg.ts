@@ -25,5 +25,5 @@ export async function buildSvg(model: SystemModel, viewId: string): Promise<stri
     const node = model.nodes.find(node => node.id === n.id)!;
     return node.kind === 'entity' ? entitySvg(node, n.x, n.y) : systemNodeSvg(node, n.x, n.y);
   }).join('');
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${bounds.width}" height="${bounds.height}" viewBox="${bounds.x} ${bounds.y} ${bounds.width} ${bounds.height}" font-family="Inter, sans-serif" role="img"><title>${escapeXml(model.title)}</title><defs>${GRAPH_MARKER_DEFS}${ER_MARKER_DEFS}</defs><rect x="${bounds.x}" y="${bounds.y}" width="${bounds.width}" height="${bounds.height}" fill="#070b14"/>${hulls}${paths.join('')}${nodes}${captions.join('')}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${bounds.width}" height="${bounds.height}" viewBox="${bounds.x} ${bounds.y} ${bounds.width} ${bounds.height}" font-family="Inter, sans-serif" role="img"><title>${escapeXml(model.title)}</title>${placed.warnings?.length ? `<desc>${escapeXml(placed.warnings.join(' '))}</desc>` : ''}<defs>${GRAPH_MARKER_DEFS}${ER_MARKER_DEFS}</defs><rect x="${bounds.x}" y="${bounds.y}" width="${bounds.width}" height="${bounds.height}" fill="#070b14"/>${hulls}${paths.join('')}${nodes}${captions.join('')}</svg>`;
 }

@@ -27,5 +27,10 @@ export async function renderPng(
     fitTo: { mode: 'zoom', value: scale },
     font: { fontBuffers, defaultFontFamily: 'Inter' },
   });
-  return resvg.render().asPng();
+  try {
+    if (!Number.isFinite(scale) || scale <= 0 || resvg.width * resvg.height * scale * scale > 64_000_000)
+      throw new Error('Diagram too large for PNG at this scale. Download SVG instead.');
+    const rendered = resvg.render();
+    try { return rendered.asPng(); } finally { rendered.free(); }
+  } finally { resvg.free(); }
 }

@@ -2,8 +2,9 @@
 
 import type { InspectorPayload } from './inspector';
 import type { Passport } from './passport';
+import { RenameForm } from './RenameForm';
 
-export function Inspector({ payload, gaps, passport }: { payload: InspectorPayload | null; gaps?: string[]; passport?: Passport | null }) {
+export function Inspector({ payload, gaps, passport, busy=false, onRename }: { payload: InspectorPayload | null; gaps?: string[]; passport?: Passport | null; busy?:boolean; onRename?:(id:string,label:string)=>void }) {
   if (!payload) {
     if (gaps && gaps.length > 0) {
       return (
@@ -36,6 +37,7 @@ export function Inspector({ payload, gaps, passport }: { payload: InspectorPaylo
         </div>
       )}
       {payload.role && <p style={{ fontSize: 13, color: '#8b98b8' }}>{payload.role}</p>}
+      {onRename && <RenameForm key={`${payload.id}:${payload.label}`} id={payload.id} label={payload.label} busy={busy} onRename={onRename}/>}
       {payload.fields && <div style={{ fontSize: 12, overflowWrap: 'anywhere' }}>
         <strong>Fields</strong>
         {payload.fields.length ? <ul style={{ paddingLeft: 16 }}>{payload.fields.map((field, i) => <li key={i}><span style={{ color: '#5eead4' }}>{field.key?.toUpperCase() ?? '—'}</span> {field.name} · <span style={{ color: '#a6b4cf' }}>{field.type ?? 'unspecified'}</span></li>)}</ul> : <p>No fields provided</p>}

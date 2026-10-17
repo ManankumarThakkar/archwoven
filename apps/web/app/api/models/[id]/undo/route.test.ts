@@ -24,8 +24,12 @@ beforeEach(() => {
 const ctx = { params: Promise.resolve({ id: 'm1' }) };
 
 describe('POST /api/models/:id/undo', () => {
+  it('rejects stale undo rather than overwriting a newer edit', async () => {
+    const response=await POST(req({prevRevision:1,baseRevision:1}),ctx);
+    expect(response.status).toBe(409);expect(serverDeps.store.getRevision('m1')?.revision).toBe(2);
+  });
   it('restores the previous content as a forward revision (rev 3, parent 2)', async () => {
-    const res = await POST(req({ prevRevision: 1 }), ctx);
+    const res = await POST(req({ prevRevision: 1, baseRevision: 2 }), ctx);
     expect(res.status).toBe(200);
     const { model } = (await res.json()) as { model: { revision: number; parentId: number | null; title: string } };
     expect(model.revision).toBe(3);
@@ -35,13 +39,13 @@ describe('POST /api/models/:id/undo', () => {
   });
 
   it('another session cannot undo your model', async () => {
-    const res = await POST(req({ prevRevision: 1 }, 'aw_sid=mallory'), ctx);
+    const res = await POST(req({ prevRevision: 1, baseRevision: 2 }, 'aw_sid=mallory'), ctx);
     expect(res.status).toBe(404);
     expect(serverDeps.store.getRevision('m1')?.revision).toBe(2);
   });
 
   it('unknown prevRevision → 400', async () => {
-    const res = await POST(req({ prevRevision: 99 }), ctx);
+    const res = await POST(req({ prevRevision: 99, baseRevision: 2 }), ctx);
     expect(res.status).toBe(400);
   });
 });

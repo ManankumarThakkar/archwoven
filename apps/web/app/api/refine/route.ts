@@ -58,7 +58,14 @@ export async function POST(req: Request) {
     return Response.json({ reason: 'refine-failed', errors: !out.ok ? out.errors : ['Refinement cancelled. Your previous diagram is unchanged.'] }, { status: 502, headers });
   }
 
-  const applied = applyEditOps(latest, out.ops);
+  // Inference yields the event loop: another tab may have saved a visual edit.
+  const current = serverDeps.store.getRevision(modelId);
+  if (!current || current.revision !== baseRevision) {
+    refundCredits(serverDeps.store, sessionId, day, 0.25);
+    recordUsage(serverDeps.store, { sessionId, tier, action: 'refine', usage: out.usage, retries: out.usage.repairs, outcome: 'failed' });
+    return Response.json(current ? { reason: 'stale-revision', message: 'The diagram changed while refining. Review the latest version and try again.', model: current, revision: current.revision } : { error: 'model not found' }, { status: current ? 409 : 404, headers });
+  }
+  const applied = applyEditOps(current, out.ops);
   if (!applied.ok) {
     refundCredits(serverDeps.store, sessionId, day, 0.25);
     recordUsage(serverDeps.store, { sessionId, tier, action: 'refine', usage: out.usage, retries: out.usage.repairs, outcome: 'failed' });

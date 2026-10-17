@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ReactFlow, Background, Controls, ControlButton, MiniMap, Position, type Node, type Edge, type ReactFlowInstance } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import type { SystemModel, NodeKind } from '@archwoven/model';
-import { layoutModel } from '../../lib/layout';
+import { layoutModel, type LayoutResult } from '../../lib/layout';
+import type { Point } from '../../lib/direct-edit';
+import { useGraphEditing, type GraphPlacement } from './useGraphEditing';
 import { journey, reachability } from './graph-inspect';
 import { motionMode } from './motion';
 import { lensKindsInView, lensPasses, parseLens, serializeLens, toggleLens } from './lens';
@@ -43,7 +45,7 @@ const writeHash = (patch: Record<string, string | null>) => {
   history.replaceState(null, '', s ? `#${s}` : window.location.pathname + window.location.search);
 };
 
-type CanvasProps = { model: SystemModel; modelId: string; viewId: string; onSelect: (id: string) => void; onDeselect: () => void };
+type CanvasProps = { model: SystemModel; modelId: string; viewId: string; onSelect: (id: string) => void; onDeselect: () => void; busy?:boolean; onMove?:(positions:Record<string,Point>)=>Promise<boolean> };
 
 export function Canvas(props: CanvasProps) {
   return props.model.views.find(v => v.id === props.viewId)?.type === 'sequence'
@@ -51,11 +53,12 @@ export function Canvas(props: CanvasProps) {
     : <GraphCanvas {...props} />;
 }
 
-function GraphCanvas({ model, modelId, viewId, onSelect, onDeselect }: CanvasProps) {
+function GraphCanvas({ model, modelId, viewId, onSelect, onDeselect, busy=false, onMove }: CanvasProps) {
   const [layoutError, setLayoutError] = useState<string | null>(null);
   const [shareBusy, setShareBusy] = useState(false);
   const [shareErr, setShareErr] = useState<string | null>(null);
-  const [placed, setPlaced] = useState<{ key: string; nodes: Node[]; edges: Edge[]; bounds: { x: number; y: number; width: number; height: number } }>({ key: '', nodes: [], edges: [], bounds: { x: 0, y: 0, width: 0, height: 0 } });
+  const [placed, setPlaced] = useState<GraphPlacement>({ key: '', nodes: [], edges: [], bounds: { x: 0, y: 0, width: 0, height: 0 } });
+  const currentLayout=useRef<LayoutResult|null>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
   const [relationId, setRelationId] = useState<string | null>(null);
   const [finderOpen, setFinderOpen] = useState(false);
@@ -70,7 +73,13 @@ function GraphCanvas({ model, modelId, viewId, onSelect, onDeselect }: CanvasPro
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const previousViewRef = useRef(viewId);
   const fittedCameraRef = useRef<string | null>(null);
+  const preserveCameraRef=useRef<string|null>(null);
   const layoutKey = JSON.stringify([modelId, model.revision, viewId]);
+  const editing=useGraphEditing({model,viewId,placed,setPlaced,layout:currentLayout,busy,onMove:onMove?async positions=>{
+    const nextKey=JSON.stringify([modelId,model.revision+1,viewId]);preserveCameraRef.current=nextKey;
+    try{const accepted=await onMove(positions);if(!accepted&&preserveCameraRef.current===nextKey)preserveCameraRef.current=null;return accepted;}
+    catch(error){if(preserveCameraRef.current===nextKey)preserveCameraRef.current=null;throw error;}
+  }:undefined});
 
   useEffect(() => {
     const stored = typeof localStorage !== 'undefined' ? localStorage.getItem(MOTION_KEY) : null;
@@ -98,6 +107,7 @@ function GraphCanvas({ model, modelId, viewId, onSelect, onDeselect }: CanvasPro
     setLayoutError(null);
     layoutModel(model, viewId).then((r) => {
       if (!alive) return;
+      currentLayout.current=r;
       const nodes: Node[] = r.nodes.map((n) => {
         const node = model.nodes.find((m) => m.id === n.id)!;
         const s = PROVENANCE_STYLE[node.provenance];
@@ -124,7 +134,7 @@ function GraphCanvas({ model, modelId, viewId, onSelect, onDeselect }: CanvasPro
       });
       const { boundaries, bounds } = graphScene(model, r);
       const hulls: Node[] = boundaries.map(b => ({ id: `bnd:${b.id}`, type: 'boundary', position: { x: b.x, y: b.y }, data: { label: b.label, lines: b.lines }, style: { width: b.width, height: b.height }, draggable: false, selectable: false, zIndex: -1 }));
-      setPlaced({ key: layoutKey, nodes: [...hulls, ...nodes], edges, bounds });
+      setPlaced({ key: layoutKey, nodes: [...hulls, ...nodes], edges, bounds, warnings:r.warnings });
     }).catch(() => { if (alive) setLayoutError('This view could not be laid out. Try another view or refine the diagram.'); });
     return () => { alive = false; };
   }, [model, viewId, motion, layoutKey]);
@@ -180,6 +190,7 @@ function GraphCanvas({ model, modelId, viewId, onSelect, onDeselect }: CanvasPro
     if (!rfRef.current || placed.key !== layoutKey || !placed.nodes.length) return;
     const cameraKey = JSON.stringify([placed.key, chapter?.id ?? null]);
     if (!wholeView && fittedCameraRef.current === cameraKey) return;
+    if(!wholeView&&preserveCameraRef.current===layoutKey){fittedCameraRef.current=cameraKey;preserveCameraRef.current=null;return;}
     const ids = wholeView ? [] : chapter?.focus.filter((id) => placed.nodes.some((node) => node.id === id)) ?? [];
     fittedCameraRef.current = cameraKey;
     const options = { duration: motion === 'still' ? 0 : 600, minZoom: 0.05, maxZoom: 2, padding: 0.15 };
@@ -309,6 +320,7 @@ function GraphCanvas({ model, modelId, viewId, onSelect, onDeselect }: CanvasPro
   return (
     <div className="aw-canvas" style={{ width: '100%', height: '100%', position: 'relative' }}>
       <svg aria-hidden="true" width="0" height="0" style={{ position: 'absolute' }}><defs dangerouslySetInnerHTML={{ __html: GRAPH_MARKER_DEFS + ER_MARKER_DEFS }} /></svg>
+      {!!placed.warnings?.length&&<div role="status" style={{position:'absolute',bottom:8,left:64,right:8,zIndex:6,fontSize:12,color:'#fbbf24',background:'#111a2eee',padding:6,borderRadius:6}}>{placed.warnings.join(' ')}</div>}
       <div className="aw-canvas-toolbar" style={{ position: 'absolute', top: 36, left: 8, zIndex: 5, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
         <select aria-label="route from" value={probeFrom} onChange={(e) => setProbeFrom(e.target.value)} style={selectCls} disabled={!!probe}>
           <option value="">from…</option>{viewNodes.map((id) => <option key={id} value={id}>{model.nodes.find((n) => n.id === id)?.label ?? id}</option>)}
@@ -373,9 +385,13 @@ function GraphCanvas({ model, modelId, viewId, onSelect, onDeselect }: CanvasPro
         </div>
       )}
       <div className="aw-flow-area"><ReactFlow
+        {...editing}
         nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
         colorMode="dark"
         minZoom={0.05}
+        deleteKeyCode={null}
+        nodesConnectable={false}
+        edgesReconnectable={false}
         onInit={(inst) => { rfRef.current = inst as ReactFlowInstance<Node, Edge>; fitCamera(); }}
         onNodeClick={(_, n) => { if (n.type === 'boundary') return; focusNode(n.id); }}
         onPaneClick={() => { setFocusId(null); setRelationId(null); writeHash({ focus: null, relation: null }); onDeselect(); }}
