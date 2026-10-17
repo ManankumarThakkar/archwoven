@@ -7,6 +7,7 @@ import { validFullModel, type SystemModel } from '@archwoven/model';
 import { Canvas } from './Canvas';
 import { NodeFinder } from './NodeFinder';
 import * as manualRouting from '../../lib/manual-layout';
+import * as graphLayout from '../../lib/layout';
 
 const camera = vi.hoisted(() => ({ requests: [] as { bounds?: { x: number; y: number; width: number; height: number }; options: { nodes?: { id: string }[]; duration?: number }; ids: string[] }[], ids: [] as string[] }));
 const flow = vi.hoisted(() => ({ events: null as unknown as {onNodesChange:(changes:NodeChange[])=>void;onNodeDragStart:(event:unknown,node:Node)=>void;onNodeDragStop:(event:unknown,node:Node)=>Promise<void>;nodesDraggable:boolean;deleteKeyCode?:string|null} }));
@@ -184,6 +185,77 @@ describe('persisted graph dragging',()=>{
     expect((save.mock.calls[0]![0] as Record<string,unknown>)['constructor']).toEqual({x:600,y:0});
   });
 });
+describe('truthful boundary canvas placement', () => {
+  const grouped = (truthful = true): SystemModel => ({ ...model,
+    views: [{ ...model.views[0]!, edges: [] }],
+    boundaries: [{ id: 'core', label: 'Core services', wraps: truthful ? ['a', 'b'] : ['a', 'c'] }],
+  });
+  const hull = () => host.querySelector('[data-node="bnd:core"]');
+  const warning = () => [...host.querySelectorAll('[role="status"]')].map(el => el.textContent).join(' ');
+  const show = async (current: SystemModel, onMove?: (positions: Record<string, { x: number; y: number }>) => Promise<boolean>) => {
+    await act(async () => root.render(<Canvas model={current} modelId="m" viewId="v" onSelect={() => {}} onDeselect={() => {}} onMove={onMove} />));
+  };
+
+  it('discloses an initially omitted enclosure with its members and nonmember while keeping every node', async () => {
+    await show(grouped(false));
+    expect(hull()).toBeNull();
+    expect(warning()).toContain('Core services');
+    expect(warning()).toContain('enclosure omitted');
+    expect(warning()).toContain('Queue (b)');
+    expect(warning()).toMatch(/Members in this view:.*API \(a\).*Storage \(c\)/);
+    for (const id of ['a', 'b', 'c']) expect(host.querySelector(`[data-node="${id}"]`)).toBeTruthy();
+  });
+
+  it('removes and restores enclosures during lightweight dragging before saving', async () => {
+    const save = vi.fn(async () => true);
+    await show(grouped(), save);
+    expect(hull()).toBeTruthy();
+    await act(async () => {
+      flow.events.onNodeDragStart(null, { id: 'c', position: { x: 400, y: 0 } } as Node);
+      flow.events.onNodesChange([{ type: 'position', id: 'c', position: { x: 360, y: 0 }, dragging: true }]);
+    });
+    expect(hull()).toBeNull(); expect(warning()).toContain('enclosure omitted');
+    await act(async () => flow.events.onNodesChange([{ type: 'position', id: 'c', position: { x: 400, y: 0 }, dragging: true }]));
+    expect(hull()).toBeTruthy(); expect(warning()).not.toContain('enclosure omitted');
+    expect(save).not.toHaveBeenCalled();
+    await act(async () => { await flow.events.onNodeDragStop(null, { id: 'c', position: { x: 400, y: 0 } } as Node); });
+    expect(hull()).toBeTruthy(); expect(save).toHaveBeenCalledOnce();
+  });
+
+  it('removes and restores enclosures for accepted keyboard nudges', async () => {
+    const save = vi.fn(async () => true);
+    await show(grouped(), save);
+    await act(async () => flow.events.onNodesChange([{ type: 'position', id: 'c', position: { x: 360, y: 0 }, dragging: false }]));
+    expect(hull()).toBeNull(); expect(warning()).toContain('enclosure omitted');
+    await act(async () => flow.events.onNodesChange([{ type: 'position', id: 'c', position: { x: 400, y: 0 }, dragging: false }]));
+    expect(hull()).toBeTruthy(); expect(warning()).not.toContain('enclosure omitted');
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(host.querySelector('[data-node="c"]')!.getAttribute('data-position')).toBe('{"x":400,"y":0}');
+  });
+
+  it.each([
+    ['drag', true], ['drag', false], ['keyboard', true], ['keyboard', false],
+  ] as const)('restores prior warnings and hulls after a refused %s save (initially truthful=%s)', async (input, truthful) => {
+    let finish!: (accepted: boolean) => void;
+    await show(grouped(truthful), () => new Promise(resolve => { finish = resolve; }));
+    const beforeWarning = warning(), id = truthful ? 'c' : 'b', position = { x: truthful ? 360 : 700, y: 0 }, moved = { id, position } as Node;
+    await act(async () => {
+      if (input === 'drag') {
+        flow.events.onNodeDragStart(null, moved);
+        flow.events.onNodesChange([{ type: 'position', id, position, dragging: true }]);
+      } else flow.events.onNodesChange([{ type: 'position', id, position, dragging: false }]);
+    });
+    expect(!!hull()).toBe(!truthful);
+    expect(warning().includes('enclosure omitted')).toBe(truthful);
+    if (input === 'drag') await act(async () => { void flow.events.onNodeDragStop(null, moved); });
+    expect(flow.events.nodesDraggable).toBe(false);
+    await act(async () => finish(false));
+    expect(!!hull()).toBe(truthful); expect(warning()).toBe(beforeWarning);
+    expect(host.querySelector(`[data-node="${id}"]`)!.getAttribute('data-position')).toBe(JSON.stringify({ x: truthful ? 400 : 200, y: 0 }));
+    expect(flow.events.nodesDraggable).toBe(true);
+  });
+});
+
 async function click(el: Element | null) {
   expect(el).toBeTruthy();
   await act(async () => (el as HTMLElement).click());
@@ -206,15 +278,111 @@ const multiviewModel: SystemModel = {
   ],
   guidedViews: [{ id: 'happy', label: 'Happy path', focus: ['a', 'b'], note: 'Follow the request' }],
 };
-function SwitchingWorkspace({ viewId }: { viewId: string }) {
+function SwitchingWorkspace({ viewId, permalinkVersion = 0 }: { viewId: string; permalinkVersion?: number }) {
   const [selected, setSelected] = useState<string | null>(null);
   return <><output aria-label="Inspector selection">{selected ?? 'none'}</output>
-    <Canvas model={multiviewModel} modelId="m" viewId={viewId} onSelect={setSelected} onDeselect={() => setSelected(null)} />
+    <Canvas model={multiviewModel} modelId="m" viewId={viewId} permalinkVersion={permalinkVersion} onSelect={setSelected} onDeselect={() => setSelected(null)} />
   </>;
 }
 async function renderView(viewId: string) {
   await act(async () => root.render(<SwitchingWorkspace viewId={viewId} />));
 }
+
+describe('live graph permalinks', () => {
+  let version = 0;
+  const navigate = async (hash: string, viewId = 'v') => {
+    history.replaceState(null, '', hash);
+    await act(async () => root.render(<SwitchingWorkspace viewId={viewId} permalinkVersion={++version} />));
+  };
+  beforeEach(() => { version = 0; });
+
+  it('replaces focus, lens, chapter, route and relationship state in an already open view', async () => {
+    localStorage.setItem('archwoven-motion', 'still');
+    await renderView('v');
+    await navigate('#model=m&view=v&focus=b&lens=queue&chapter=happy&route=a~b&relation=ab&note=keep%2Cencoded');
+    expect(host.querySelector('[data-node="b"]')?.className).toBe('aw-route-current');
+    expect(button('queue').getAttribute('aria-pressed')).toBe('true');
+    expect(host.querySelector('[aria-label="Inspector selection"]')?.textContent).toBe('ab');
+    expect((host.querySelector('[aria-label="chapter"]') as HTMLSelectElement).value).toBe('0');
+    expect((host.querySelector('[aria-label="route from"]') as HTMLSelectElement).value).toBe('a');
+    expect((host.querySelector('[aria-label="route to"]') as HTMLSelectElement).value).toBe('b');
+    expect(button('clear')).toBeDefined();
+    expect(location.hash).toContain('relation=ab');
+    expect(location.hash).toContain('note=keep%2Cencoded');
+    await navigate('#model=m&view=v&focus=c');
+    expect(host.querySelector('[data-node="c"]')?.className).toBe('aw-route-current');
+    expect(host.querySelector('[aria-label="Inspector selection"]')?.textContent).toBe('c');
+    expect(button('queue').getAttribute('aria-pressed')).toBe('false');
+    expect(button('clear')).toBeUndefined();
+    expect((host.querySelector('[aria-label="chapter"]') as HTMLSelectElement).value).toBe('-1');
+    expect((host.querySelector('[aria-label="route from"]') as HTMLSelectElement).value).toBe('');
+    expect((host.querySelector('[aria-label="route to"]') as HTMLSelectElement).value).toBe('');
+    await navigate('#model=m&view=v');
+    expect(host.querySelector('[aria-label="Inspector selection"]')?.textContent).toBe('none');
+    expect(host.querySelector('[data-node="c"]')?.className).toBe('');
+  });
+
+  it('validates every channel against the destination view and keeps unrelated hash data', async () => {
+    await renderView('v');
+    await click(host.querySelector('[data-node="a"]'));
+    await navigate('#model=m&view=er&focus=a&lens=service,bogus&chapter=happy&route=a~b&relation=ab&note=keep%2Cencoded', 'er');
+    expect(host.querySelector('[aria-label="Inspector selection"]')?.textContent).toBe('none');
+    const hash = new URLSearchParams(location.hash.slice(1));
+    for (const key of ['focus', 'lens', 'chapter', 'route', 'relation']) expect(hash.has(key)).toBe(false);
+    expect(hash.get('model')).toBe('m'); expect(hash.get('view')).toBe('er');
+    expect(hash.get('note')).toBe('keep,encoded');
+  });
+
+  it('waits for the destination layout before replaying a restored route', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const layout = await graphLayout.layoutModel(multiviewModel, 'v');
+    let finish!: (value: typeof layout) => void;
+    vi.spyOn(graphLayout, 'layoutModel').mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    history.replaceState(null, '', '#model=m&view=v&route=a~b&relation=ab');
+    await renderView('v');
+    expect(vi.getTimerCount()).toBe(0);
+    await act(async () => { finish(layout); });
+    expect(vi.getTimerCount()).toBe(1);
+    expect(host.querySelector('[data-node="a"]')?.className).toBe('aw-route-current');
+    expect(host.querySelector('[aria-label="Inspector selection"]')?.textContent).toBe('ab');
+  });
+
+  it.each(['a~b~c', 'a~missing', 'c~a', 'a~a'])('clears malformed or unreachable live routes (%s) and invalid channels', async route => {
+    await renderView('v');
+    await navigate('#model=m&view=v&focus=b&lens=service&chapter=happy');
+    expect(button('service').getAttribute('aria-pressed')).toBe('false');
+    expect(host.querySelector('[data-node="b"]')?.className).toBe('aw-route-current');
+    await navigate(`#model=m&view=v&focus=missing&lens=bogus&chapter=missing&relation=missing&route=${route}`);
+    const hash = new URLSearchParams(location.hash.slice(1));
+    for (const key of ['focus', 'lens', 'chapter', 'relation', 'route']) expect(hash.has(key)).toBe(false);
+    expect(host.querySelector('[aria-label="Inspector selection"]')?.textContent).toBe('none');
+    expect((host.querySelector('[aria-label="chapter"]') as HTMLSelectElement).value).toBe('-1');
+    expect(button('clear')).toBeUndefined();
+  });
+
+  it('reapplies the identical link after internal UI changes without remounting the graph', async () => {
+    await renderView('v');
+    const link = '#model=m&view=v&focus=b';
+    await navigate(link);
+    const graph = host.querySelector('[data-flow-theme]');
+    await click(host.querySelector('[data-node="a"]'));
+    expect(host.querySelector('[aria-label="Inspector selection"]')?.textContent).toBe('a');
+    await navigate(link);
+    expect(host.querySelector('[aria-label="Inspector selection"]')?.textContent).toBe('b');
+    expect(host.querySelector('[data-flow-theme]')).toBe(graph);
+  });
+
+  it('cancels old route playback when a live link omits the route', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    await renderView('v');
+    await select('route from', 'a'); await select('route to', 'b'); await click(button('▶ probe'));
+    await navigate('#model=m&view=v&focus=c');
+    await act(async () => vi.advanceTimersByTimeAsync(2200));
+    expect(host.querySelector('[data-node="c"]')?.className).toBe('aw-route-current');
+    expect(button('clear')).toBeUndefined();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+});
 
 describe('Canvas view transitions', () => {
   it.each([
@@ -558,6 +726,20 @@ describe('sequence workspace viewer', () => {
     expect(host.querySelector('[aria-label="Timeline zoom"]')?.textContent).not.toBe('Fit');
     await click(button('Fit'));
     expect(host.querySelector('[aria-label="Timeline zoom"]')?.textContent).toBe('Fit');
+  });
+  it('applies repeated live participant links and clears omitted or invalid selection', async () => {
+    await show();
+    let version = 0;
+    for (const focus of ['b', 'c', 'missing', '']) {
+      history.replaceState(null, '', `#model=sequence-model&view=sequence&focus=${focus}&route=a~b&relation=ab&chapter=happy&lens=service`);
+      await act(async () => root.render(<Canvas model={sequenceModel} modelId="sequence-model" viewId="sequence" permalinkVersion={++version} onSelect={selected} onDeselect={deselected} />));
+      const valid = focus === 'b' || focus === 'c';
+      expect(host.querySelectorAll('[aria-pressed="true"]')).toHaveLength(valid ? 1 : 0);
+      if (valid) expect(selected).toHaveBeenLastCalledWith(focus); else expect(deselected).toHaveBeenCalled();
+      const hash = new URLSearchParams(location.hash.slice(1));
+      expect(hash.get('focus')).toBe(valid ? focus : null);
+      for (const key of ['route', 'relation', 'chapter', 'lens']) expect(hash.has(key)).toBe(false);
+    }
   });
   it('shows an honest missing-timeline state for legacy views instead of a node graph', async () => {
     await show({ ...sequenceModel, views: [{ ...sequenceModel.views[0]!, sequence: null }] });

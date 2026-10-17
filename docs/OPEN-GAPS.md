@@ -12,7 +12,7 @@ Last reviewed: 2026-10-17, after PR #38 (main `68df6cc`) and the task 20c export
 | After the run's refinement added a notification service, the checkout diagram laid out right to left with a connection wrapping around the group (observed in a screenshot, not yet confirmed by a reviewer) | Refined diagrams may read backwards | Task 19 review capture | Confirm during visual review; then Task 20 |
 | Safari/Firefox download behaviour (deferred object-URL revoke) unverified | Exports may fail on WebKit | Task 9 | Task 20 |
 | Physical touch, screen-reader and cross-browser acceptance not run | Accessibility and device support unproven | All UI tasks | Task 20 |
-| Docker Compose runtime never run (loopback port binding, git in image, repos mount) | Private-mode Docker path is unverified | Tasks 11 and 13 | Task 20 |
+| Full local-model inference inside Docker Compose has not been exercised | Private-mode model quality remains unverified in the container | Tasks 11 and 13; task 20d | CI now exercises real Compose startup, private request checks, read-only Git ingestion and the missing-model failure/retry path without downloading a model; successful model inference is separate |
 | Clean-install rerun and documentation/file cleanup (historical plans, scratch references, stale ignored `apps/web/.next-*` build folders from earlier verification runs) | Repository not release-tidy | Post-merge audit; task 18 | Task 20 |
 
 ## Not yet scheduled (needs a decision)

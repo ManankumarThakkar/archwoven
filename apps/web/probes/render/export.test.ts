@@ -15,6 +15,27 @@ const require = createRequire(import.meta.url);
 const here = new URL('.', import.meta.url).pathname;
 
 describe('renderPng (resvg-wasm)', () => {
+  it('paints omitted-boundary membership warnings inside the actual PNG bounds', async () => {
+    await ensureResvg(readFileSync(require.resolve('@resvg/resvg-wasm/index_bg.wasm')));
+    const model = structuredClone(validFullModel), view = model.views.find(v => v.type === 'architecture')!;
+    view.nodes = ['actor.user', 'gateway.api', 'svc.orders']; view.edges = [];
+    model.layout = { 'actor.user': { x: -800, y: -500 }, 'gateway.api': { x: -200, y: -500 }, 'svc.orders': { x: -500, y: -500 } };
+    model.boundaries = [{ id: 'b.core', label: 'W'.repeat(200), wraps: ['actor.user', 'gateway.api'] }];
+    const svg = await buildSvg(model, view.id), footer = svg.match(/<g data-layout-warnings="true">[\s\S]*?<\/g>/)?.[0];
+    expect(footer).toBeTruthy();
+    const [x, y, width, height] = svg.match(/viewBox="([^"]+)"/)![1]!.split(' ').map(Number) as [number, number, number, number];
+    const fonts = [readFileSync(`${here}../../public/fonts/inter-400.woff2`)];
+    const renderer = new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" width="2000" height="2000" font-family="Inter">${footer}</svg>`, { font: { fontBuffers: fonts, defaultFontFamily: 'Inter' } });
+    try {
+      const box = renderer.getBBox()!;
+      expect(box.x).toBeGreaterThanOrEqual(x); expect(box.y).toBeGreaterThanOrEqual(y);
+      expect(box.x + box.width).toBeLessThanOrEqual(x + width);
+      expect(box.y + box.height).toBeLessThanOrEqual(y + height);
+      expect(box.y).toBeGreaterThan(-400);
+    } finally { renderer.free(); }
+    expect(await renderPng(svg, fonts)).not.toEqual(await renderPng(svg.replace(footer!, ''), fonts));
+  });
+
   it('paints the detail caption and dashed internal borders into the actual PNG', async () => {
     await ensureResvg(readFileSync(require.resolve('@resvg/resvg-wasm/index_bg.wasm')));
     const svg = await buildSvg(expandedDetailModel(), 'detail:svc.orders');

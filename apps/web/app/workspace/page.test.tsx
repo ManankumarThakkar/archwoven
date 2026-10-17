@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 
 // Layout is covered separately in Canvas tests and the real-browser pass.
-vi.mock('./Canvas', () => ({ Canvas: ({ viewId, model, onSelect, onMove }: { viewId: string; model: typeof validFullModelExtended; onSelect: (id: string) => void; onMove?: unknown }) => <><output aria-label="Rendered view">{viewId}</output><output aria-label="Rendered API">{model.nodes.find(n=>n.id==='gateway.api')?.label}</output><output aria-label="Can move">{String(!!onMove)}</output><button onClick={()=>onSelect('gateway.api')}>Inspect API</button><button onClick={()=>onSelect('entity.user')}>Inspect entity</button><button onClick={()=>onSelect('e.user-api')}>Inspect connection</button></> }));
+vi.mock('./Canvas', () => ({ Canvas: ({ viewId, model, onSelect, onMove, permalinkVersion }: { permalinkVersion?: number; viewId: string; model: typeof validFullModelExtended; onSelect: (id: string) => void; onMove?: unknown }) => <><output aria-label="Rendered view">{viewId}</output><output aria-label="Permalink version">{permalinkVersion}</output><output aria-label="Rendered API">{model.nodes.find(n=>n.id==='gateway.api')?.label}</output><output aria-label="Can move">{String(!!onMove)}</output><button onClick={()=>onSelect('gateway.api')}>Inspect API</button><button onClick={()=>onSelect('entity.user')}>Inspect entity</button><button onClick={()=>onSelect('e.user-api')}>Inspect connection</button></> }));
 const rasterizer = vi.hoisted(() => ({ ensureResvg: vi.fn(), renderPng: vi.fn() }));
 vi.mock('../../probes/render/export', () => rasterizer);
 
@@ -909,7 +909,30 @@ describe('links pasted into an open tab', () => {
     expect(new URLSearchParams(window.location.hash.slice(1)).get('model')).toBe('m2');
   });
 
-  it('ignores hash changes that keep the same diagram', async () => {
+  it('applies same-diagram views and falls back for omitted or invalid views without any API calls', async () => {
+    await mount();
+    const initialRequests = [...requests];
+    let version = container.querySelector('[aria-label="Permalink version"]')!.textContent;
+    for (const [suffix, view] of [
+      ['&view=view.sequence&focus=gateway.api', 'view.sequence'],
+      ['&view=missing&relation=e.user-api', validFullModelExtended.views[0]!.id],
+      ['&view=view.sequence', 'view.sequence'],
+      ['', validFullModelExtended.views[0]!.id],
+    ]) {
+      await act(async () => {
+        window.history.replaceState(null, '', `/workspace#model=m1${suffix}`);
+        window.dispatchEvent(new HashChangeEvent('hashchange'));
+      });
+      expect(container.querySelector('[aria-label="Rendered view"]')!.textContent).toBe(view);
+      const nextVersion = container.querySelector('[aria-label="Permalink version"]')!.textContent;
+      expect(nextVersion).not.toBe(version);
+      version = nextVersion;
+      expect(new URLSearchParams(window.location.hash.slice(1)).get('view')).toBe(view);
+      expect(requests).toEqual(initialRequests);
+    }
+  });
+
+  it('does not refetch the same diagram for interaction-only hash changes', async () => {
     const calls: string[] = [];
     transport = (input, init) => {
       if (input === '/api/models/m1' && !init) { calls.push(input); return Response.json({ model: validFullModelExtended }); }

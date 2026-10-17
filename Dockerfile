@@ -8,7 +8,7 @@ COPY packages ./packages
 COPY apps/web ./apps/web
 
 RUN pnpm install --frozen-lockfile
-RUN pnpm -r build && pnpm --filter web build
+RUN pnpm -r build
 
 ENV NODE_ENV=production
 # Local deployment: quotas compiled out, Ollama-only inference (§8).

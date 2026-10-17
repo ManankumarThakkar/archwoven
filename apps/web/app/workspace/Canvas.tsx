@@ -45,7 +45,7 @@ const writeHash = (patch: Record<string, string | null>) => {
   history.replaceState(null, '', s ? `#${s}` : window.location.pathname + window.location.search);
 };
 
-type CanvasProps = { model: SystemModel; modelId: string; viewId: string; onSelect: (id: string) => void; onDeselect: () => void; busy?:boolean; onMove?:(positions:Record<string,Point>)=>Promise<boolean> };
+type CanvasProps = { model: SystemModel; modelId: string; viewId: string; permalinkVersion?: number; onSelect: (id: string) => void; onDeselect: () => void; busy?:boolean; onMove?:(positions:Record<string,Point>)=>Promise<boolean> };
 
 export function Canvas(props: CanvasProps) {
   return props.model.views.find(v => v.id === props.viewId)?.type === 'sequence'
@@ -53,7 +53,7 @@ export function Canvas(props: CanvasProps) {
     : <GraphCanvas {...props} />;
 }
 
-function GraphCanvas({ model, modelId, viewId, onSelect, onDeselect, busy=false, onMove }: CanvasProps) {
+function GraphCanvas({ model, modelId, viewId, permalinkVersion = 0, onSelect, onDeselect, busy=false, onMove }: CanvasProps) {
   const [layoutError, setLayoutError] = useState<string | null>(null);
   const [shareBusy, setShareBusy] = useState(false);
   const [shareErr, setShareErr] = useState<string | null>(null);
@@ -71,6 +71,7 @@ function GraphCanvas({ model, modelId, viewId, onSelect, onDeselect, busy=false,
   const [motion, setMotion] = useState<'still' | 'motion'>('motion');
   const rfRef = useRef<ReactFlowInstance<Node, Edge> | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pendingRouteRef = useRef<{ from: string; to: string } | null>(null);
   const previousViewRef = useRef(viewId);
   const fittedCameraRef = useRef<string | null>(null);
   const preserveCameraRef=useRef<string|null>(null);
@@ -134,35 +135,51 @@ function GraphCanvas({ model, modelId, viewId, onSelect, onDeselect, busy=false,
         const route = r.edges.find(route => route.id === id);
         return [{ id, source: e.from, target: e.to, type: route ? 'routed' : undefined, data: route ? { route } : undefined, label: view?.type === 'er' ? erLabel(e) : e.label ?? '', markerStart: markers.start, markerEnd: markers.end, ariaLabel: view?.type === 'er' ? `${e.from} to ${e.to}: ${erLabel(e)}` : undefined, animated: e.type === 'async' && motion === 'motion', style: { stroke: PROVENANCE_STYLE[e.provenance].border, strokeDasharray: e.type === 'async' ? '6 4' : undefined } }];
       });
-      const { boundaries, bounds } = graphScene(model, r);
+      const { boundaries, bounds, warnings } = graphScene(model, r);
       const hulls: Node[] = boundaries.map(b => ({ id: `bnd:${b.id}`, type: 'boundary', position: { x: b.x, y: b.y }, data: { label: b.label, lines: b.lines }, style: { width: b.width, height: b.height }, draggable: false, selectable: false, zIndex: -1 }));
-      setPlaced({ key: layoutKey, nodes: [...hulls, ...nodes], edges, bounds, warnings:r.warnings });
+      setPlaced({ key: layoutKey, nodes: [...hulls, ...nodes], edges, bounds, warnings });
     }).catch(() => { if (alive) setLayoutError('This view could not be laid out. Try another view or refine the diagram.'); });
     return () => { alive = false; };
   }, [model, viewId, motion, layoutKey]);
 
-  // permalinks: read once on mount, write on every interaction
+  // Restore on model replacement and external hash navigation. UI interactions
+  // write with replaceState and keep their existing playback/camera state.
   useEffect(() => {
     const h = readHash();
+    previousViewRef.current = viewId;
+    stopTimer();
+    setProbe(null);
+    setProbeNoRoute(false);
     const focusedNode = model.nodes.find((n) => n.id === h.focus && view?.nodes.includes(n.id));
-    const restoredLens = parseLens(h.lens);
-    const clearLens = focusedNode !== undefined && !lensPasses(focusedNode.kind, restoredLens);
-    if (focusedNode) { setFocusId(focusedNode.id); onSelect(focusedNode.id); }
-    else if (h.focus) { setFocusId(null); writeHash({ focus: null }); onDeselect(); }
-    if (h.route) {
-      const [a, b] = h.route!.split('~');
-      if (a && b) { setProbeFrom(a); setProbeTo(b); }
-    }
-    if (h.chapter) {
-      const i = model.guidedViews.findIndex((g) => g.id === h.chapter);
-      if (i >= 0) setChapterIdx(i);
-    }
-    setLens(clearLens ? [] : restoredLens);
-    if (clearLens) writeHash({ lens: null });
-    if (h.relation && view?.edges.includes(h.relation) && model.edges.some((e) => e.id === h.relation)) { setRelationId(h.relation!); onSelect(h.relation!); }
-    else if (h.relation) { setRelationId(null); writeHash({ relation: null }); onDeselect(); }
+    const availableKinds = lensKindsInView(model, view?.nodes ?? []);
+    const restoredLens = parseLens(h.lens).filter(kind => availableKinds.includes(kind));
+    const nextLens = focusedNode && !lensPasses(focusedNode.kind, restoredLens) ? [] : restoredLens;
+    const relation = h.relation && view?.edges.includes(h.relation) && model.edges.some(e => e.id === h.relation) ? h.relation : null;
+    const chapter = model.guidedViews.findIndex(g => g.id === h.chapter && g.focus.some(id => view?.nodes.includes(id)));
+    const endpoints = h.route?.split('~') ?? [];
+    const path = endpoints.length === 2 && endpoints.every(id => view?.nodes.includes(id))
+      ? journey(model, endpoints[0]!, endpoints[1]!, viewId) : null;
+    const validRoute = path && path.length >= 2;
+    setFocusId(focusedNode?.id ?? null);
+    setRelationId(relation);
+    setLens(nextLens);
+    setChapterIdx(chapter);
+    setProbeFrom(validRoute ? endpoints[0]! : '');
+    setProbeTo(validRoute ? endpoints[1]! : '');
+    if (relation) onSelect(relation);
+    else if (focusedNode) onSelect(focusedNode.id);
+    else onDeselect();
+    writeHash({
+      focus: focusedNode?.id ?? null,
+      relation,
+      lens: serializeLens(nextLens),
+      chapter: chapter >= 0 ? model.guidedViews[chapter]!.id : null,
+      route: validRoute ? `${endpoints[0]}~${endpoints[1]}` : null,
+    });
+    pendingRouteRef.current = validRoute ? { from: endpoints[0]!, to: endpoints[1]! } : null;
+    // Explicit UI view switches reconcile below instead of replaying the link.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modelIdKey(model)]);
+  }, [modelId, modelIdKey(model), permalinkVersion]);
 
   const reach = useMemo(() => (focusId ? reachability(model, focusId, viewId) : null), [model, focusId, viewId]);
   const kindOf = useMemo(() => new Map(model.nodes.map((n) => [n.id, n.kind])), [model]);
@@ -261,14 +278,17 @@ function GraphCanvas({ model, modelId, viewId, onSelect, onDeselect, busy=false,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewId]);
 
-  const playProbe = (from: string, to: string) => {
+  const playProbe = (from: string, to: string, restoring = false) => {
+    pendingRouteRef.current = null;
     stopTimer();
     const path = journey(model, from, to, viewId);
     if (!path || path.length < 2) { setProbe(null); setProbeNoRoute(true); writeHash({ route: null }); return; }
     setProbeNoRoute(false);
-    setRelationId(null);
-    onDeselect();
-    writeHash({ route: `${from}~${to}`, relation: null });
+    if (!restoring) {
+      setRelationId(null);
+      onDeselect();
+      writeHash({ route: `${from}~${to}`, relation: null });
+    }
     if (motion === 'still') { setProbe({ from, to, path, step: path.length - 1 }); return; }
     setProbe({ from, to, path, step: 0 });
     timerRef.current = setInterval(() => {
@@ -288,15 +308,16 @@ function GraphCanvas({ model, modelId, viewId, onSelect, onDeselect, busy=false,
 
   useEffect(() => () => stopTimer(), []);
 
-  // hash-selected route replays when the layout is ready
+  // A destination layout may still be in flight when its permalink arrives.
+  // Start playback only once that layout is visible, and only if UI actions
+  // have not replaced the pending route in the meantime.
   useEffect(() => {
-    const h = readHash();
-    if (h.route && placed.nodes.length) {
-      const [a, b] = h.route!.split('~');
-      if (a && b && !probe) playProbe(a, b);
-    }
+    const pending = pendingRouteRef.current;
+    if (!pending || placed.key !== layoutKey || !placed.nodes.length) return;
+    pendingRouteRef.current = null;
+    if (readHash().route === `${pending.from}~${pending.to}`) playProbe(pending.from, pending.to, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [placed, motion]);
+  }, [placed, layoutKey, permalinkVersion, motion]);
 
   const detailFocus = view && isDetailView(view) ? view.focus : null;
   const decorate = (n: Node): Node => {
@@ -350,7 +371,7 @@ function GraphCanvas({ model, modelId, viewId, onSelect, onDeselect, busy=false,
   return (
     <div className="aw-canvas" style={{ width: '100%', height: '100%', position: 'relative' }}>
       <svg aria-hidden="true" width="0" height="0" style={{ position: 'absolute' }}><defs dangerouslySetInnerHTML={{ __html: GRAPH_MARKER_DEFS + ER_MARKER_DEFS }} /></svg>
-      {!!placed.warnings?.length&&<div role="status" style={{position:'absolute',bottom:8,left:64,right:8,zIndex:6,fontSize:12,color:'#fbbf24',background:'#111a2eee',padding:6,borderRadius:6}}>{placed.warnings.join(' ')}</div>}
+      {!!placed.warnings?.length&&<div role="status" aria-label="Layout warnings" tabIndex={0} style={{position:'absolute',bottom:8,left:64,right:12,maxWidth:'calc(100% - 76px)',maxHeight:'35%',overflow:'auto',overflowWrap:'anywhere',boxSizing:'border-box',zIndex:6,fontSize:12,color:'#fbbf24',background:'#111a2eee',padding:6,borderRadius:6}}>{placed.warnings.join(' ')}</div>}
       <div className="aw-canvas-toolbar" style={{ position: 'absolute', top: 36, left: 8, zIndex: 5, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
         <select aria-label="route from" value={probeFrom} onChange={(e) => setProbeFrom(e.target.value)} style={selectCls} disabled={!!probe}>
           <option value="">from…</option>{viewNodes.map((id) => <option key={id} value={id}>{model.nodes.find((n) => n.id === id)?.label ?? id}</option>)}

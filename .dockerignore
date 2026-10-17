@@ -1,0 +1,19 @@
+# Credentials and user data must never enter the build context.
+**/.env
+**/.env.*
+!.env.local.example
+!**/.env.local.example
+**/*.db
+**/*.db-*
+**/*.sqlite
+**/*.sqlite-*
+data
+**/.git
+.superpowers
+# Rebuild dependencies and generated output inside the image.
+**/node_modules
+**/.next*
+**/dist
+**/coverage
+**/*.tsbuildinfo
+**/.DS_Store
