@@ -1,3 +1,4 @@
+import { reportedTokens } from './usage';
 import { ClarificationSchema, CLARIFICATION_SYSTEM, CLARIFICATION_SCHEMA, type DescriptionOutcome } from './clarification';
 import { generatedViewErrors } from './generated-view';
 import { z } from 'zod';
@@ -46,15 +47,14 @@ const abortedMessage = (signal: AbortSignal) => signal.reason?.name === 'Timeout
   ? 'Local generation timed out — try a smaller description or repository scope.'
   : 'Generation cancelled.';
 
-const addLocalUsage = (total: LocalTaskUsage, part: LocalTaskUsage, repairs: number): LocalTaskUsage => ({
-  ...part, repairs,
-  inputTokens: total.inputTokens + part.inputTokens,
-  outputTokens: total.outputTokens + part.outputTokens,
-  cacheWriteTokens: total.cacheWriteTokens + part.cacheWriteTokens,
-  cacheReadTokens: total.cacheReadTokens + part.cacheReadTokens,
-  latencyMs: total.latencyMs + part.latencyMs,
-  ttftMs: total.ttftMs || part.ttftMs,
-});
+const addLocalUsage = (total: LocalTaskUsage, part: LocalTaskUsage): LocalTaskUsage => {
+  const attempts = [...total.attempts, ...part.attempts.map(attempt => ({ ...attempt, kind: total.attempts.length ? 'repair' as const : 'initial' as const }))];
+  return { ...part, attempts, repairs: attempts.filter(attempt => attempt.kind === 'repair').length,
+    usageComplete: total.usageComplete && part.usageComplete,
+    inputTokens: total.inputTokens + part.inputTokens, outputTokens: total.outputTokens + part.outputTokens,
+    cacheWriteTokens: total.cacheWriteTokens + part.cacheWriteTokens, cacheReadTokens: total.cacheReadTokens + part.cacheReadTokens,
+    latencyMs: total.latencyMs + part.latencyMs, ttftMs: total.ttftMs || part.ttftMs };
+};
 
 export interface LocalTaskUsage extends TaskUsage {
   ttftMs: number;
@@ -73,7 +73,7 @@ export interface OllamaResult {
   error?: string;
 }
 
-const zeroUsage = (model: string, ttftMs = 0): LocalTaskUsage => ({ model, effort: 'medium', inputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 0, latencyMs: 0, repairs: 0, ttftMs });
+const zeroUsage = (model: string, ttftMs = 0): LocalTaskUsage => ({ provider: 'ollama', model, effort: 'medium', attempts: [], transportRetries: 0, usageComplete: true, inputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 0, latencyMs: 0, repairs: 0, ttftMs });
 
 /**
  * One streamed Ollama /api/chat call with schema-constrained decoding
@@ -94,6 +94,7 @@ export async function ollamaChat(
   if (signal.aborted) return { text: '', usage: zeroUsage(model), error: abortedMessage(signal) };
 
   const t0 = Date.now();
+  const failedUsage = (): LocalTaskUsage => ({ ...zeroUsage(model), effort, latencyMs: Date.now() - t0, usageComplete: false, attempts: [{ kind: 'initial', inputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 0, usageComplete: false }] });
   let res: Response;
   try {
     res = await doFetch(`${baseUrl}/api/chat`, {
@@ -103,10 +104,10 @@ export async function ollamaChat(
       body: JSON.stringify({ model, stream: true, think: opts.think ?? false, options: { num_predict: Math.min(MAX_OUTPUT_TOKENS, Math.max(1, Math.floor(opts.maxOutputTokens ?? MAX_OUTPUT_TOKENS))) }, keep_alive: '10m', format, messages }),
     });
   } catch (e) {
-    return { text: '', usage: zeroUsage(model), error: signal.aborted ? abortedMessage(signal) : `ollama request failed: ${e instanceof Error ? e.message : String(e)}` };
+    return { text: '', usage: failedUsage(), error: signal.aborted ? abortedMessage(signal) : `ollama request failed: ${e instanceof Error ? e.message : String(e)}` };
   }
   if (!res.ok || !res.body) {
-    return { text: '', usage: zeroUsage(model), error: `ollama http ${res.status}` };
+    return { text: '', usage: failedUsage(), error: `ollama http ${res.status}` };
   }
 
   let text = '';
@@ -150,16 +151,19 @@ export async function ollamaChat(
     if (streamError || signal.aborted) await reader.cancel().catch(() => undefined);
     reader.releaseLock();
   }
+  const usageComplete = final.done === true && reportedTokens(final.prompt_eval_count) && reportedTokens(final.eval_count);
+  const inputTokens = reportedTokens(final.prompt_eval_count) ? final.prompt_eval_count : 0;
+  const outputTokens = reportedTokens(final.eval_count) ? final.eval_count : 0;
   return {
     text,
     ...(streamError || signal.aborted ? { error: streamError ?? abortedMessage(signal) } : {}),
     usage: {
-      model,
-      effort,
-      inputTokens: final.prompt_eval_count ?? 0,
+      provider: 'ollama', model, effort, usageComplete, transportRetries: 0,
+      attempts: [{ kind: 'initial', inputTokens, outputTokens, cacheWriteTokens: 0, cacheReadTokens: 0, usageComplete }],
+      inputTokens,
       cacheWriteTokens: 0,
       cacheReadTokens: 0,
-      outputTokens: final.eval_count ?? 0,
+      outputTokens,
       latencyMs: Date.now() - t0,
       repairs: 0,
       ttftMs,
@@ -193,12 +197,11 @@ export async function generateModelLocal(
   }
 
   let lastErrors: string[] = [];
-  let repairs = 0;
   let usage = zeroUsage(opts.model ?? LOCAL_MODEL);
 
   for (let attempt = 0; attempt <= MAX_REPAIRS; attempt++) {
     const r = await ollamaChat(messages, opts.allowClarification ? { anyOf: [CLARIFICATION_SCHEMA, format] } : format, opts);
-    usage = addLocalUsage(usage, r.usage, repairs);
+    usage = addLocalUsage(usage, r.usage);
     if (r.error) {
       lastErrors = [r.error];
       break; // transport/stream failure — never retry into a different host
@@ -218,7 +221,6 @@ export async function generateModelLocal(
       if (result.ok && !lastErrors.length) return { ok: true, model: result.model, usage };
     }
     if (attempt < MAX_REPAIRS) {
-      repairs++;
       messages.push({ role: 'assistant', content: r.text });
       messages.push({
         role: 'user',
@@ -250,12 +252,11 @@ export async function generateRefinementLocal(
 
   const refusals: string[] = [];
   let lastErrors: string[] = [];
-  let repairs = 0;
   let usage = zeroUsage(opts.model ?? LOCAL_MODEL);
 
   for (let attempt = 0; attempt <= MAX_REPAIRS; attempt++) {
     const r = await ollamaChat(messages, opsSchema, opts);
-    usage = addLocalUsage(usage, r.usage, repairs);
+    usage = addLocalUsage(usage, r.usage);
     if (r.error) {
       lastErrors = [r.error];
       break;
@@ -286,7 +287,6 @@ export async function generateRefinementLocal(
       }
     }
     if (attempt < MAX_REPAIRS) {
-      repairs++;
       messages.push({ role: 'assistant', content: r.text });
       messages.push({ role: 'user', content: `These EditOps failed validation — fix them and emit the complete corrected array only:\n- ${lastErrors.join('\n- ')}` });
     }
@@ -314,12 +314,11 @@ export async function assembleRepoModelLocal(
   ];
 
   let lastErrors: string[] = [];
-  let repairs = 0;
   let usage = zeroUsage(opts.model ?? LOCAL_MODEL);
 
   for (let attempt = 0; attempt <= MAX_REPAIRS; attempt++) {
     const r = await ollamaChat(messages, generic ? SOURCE_PRESENTATION_SCHEMA : NATIVE_MODEL_JSON_SCHEMA, { ...opts, maxOutputTokens: generic ? 4096 : MAX_OUTPUT_TOKENS });
-    usage = addLocalUsage(usage, r.usage, repairs);
+    usage = addLocalUsage(usage, r.usage);
     if (r.error) {
       lastErrors = [r.error];
       break;
@@ -345,7 +344,6 @@ export async function assembleRepoModelLocal(
       }
     }
     if (attempt < MAX_REPAIRS) {
-      repairs++;
       messages.push({ role: 'assistant', content: r.text });
       messages.push({ role: 'user', content: `The ${generic ? 'source presentation' : 'model'} JSON failed validation with these errors — fix them and emit the complete corrected JSON only:\n- ${lastErrors.join('\n- ')}` });
     }
@@ -370,11 +368,10 @@ export async function expandComponentLocal(
     { role: 'user', content: expansionUserMessage(model, focus, hint) },
   ];
   let lastErrors: string[] = [];
-  let repairs = 0;
   for (let attempt = 0; attempt <= MAX_REPAIRS; attempt++) {
     // Small JSON answer, but gpt-oss reasons in hidden tokens first: keep headroom, stay bounded.
     const r = await ollamaChat(messages, NATIVE_EXPANSION_SCHEMA, { ...opts, maxOutputTokens: 8000 });
-    usage = addLocalUsage(usage, r.usage, repairs);
+    usage = addLocalUsage(usage, r.usage);
     if (r.error) { lastErrors = [r.error]; break; }
     let raw: unknown;
     try { raw = JSON.parse(r.text); } catch (e) { lastErrors = [`expansion was not valid JSON: ${e instanceof Error ? e.message : String(e)}`]; raw = undefined; }
@@ -384,7 +381,6 @@ export async function expandComponentLocal(
       lastErrors = applied.errors;
     }
     if (attempt < MAX_REPAIRS) {
-      repairs++;
       messages.push({ role: 'assistant', content: r.text }, { role: 'user', content: expansionRepair(lastErrors) });
     }
   }

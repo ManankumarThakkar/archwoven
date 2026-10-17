@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { reserve, refundCredits, recordUsage, TIERS, type Clarification } from '@archwoven/jobs';
 import { validateModel, type ViewType } from '@archwoven/model';
+import type { TaskUsage } from '@archwoven/model';
 import {
   serverDeps, estimateTokens, PROMPT_TOKEN_LIMIT, readOrCreateSession, sessionCookie, tierOf,
   creditsExhaustedCopy, STOP_LOSS_COPY, OVERSIZED_COPY, BURST_COPY,
@@ -86,8 +87,10 @@ export async function POST(req: Request) {
   void withSlot(jobId, async () => {
     const day = new Date().toISOString().slice(0, 10);
     const claim = () => { if (entry.settled) return false; entry.settled = true; return true; };
-    const fail = (error: string, usage?: { inputTokens: number; cacheWriteTokens: number; cacheReadTokens: number; outputTokens: number }, retries = 0) => {
-      if (usage) recordUsage(serverDeps.store, { sessionId, tier, action: 'generate', usage, retries, outcome: 'failed' });
+    let pendingUsage: TaskUsage | undefined;
+    let metered = false;
+    const fail = (error: string, usage = pendingUsage, retries = usage?.repairs ?? 0) => {
+      if (usage && !metered) { recordUsage(serverDeps.store, { sessionId, tier, action: 'generate', view, taskId: jobId, modelId: jobId, usage, retries, outcome: 'failed' }); metered = true; }
       if (!claim()) return;
       serverDeps.store.updateJob(jobId, { status: 'failed', error });
       refundCredits(serverDeps.store, sessionId, day, 1);
@@ -98,12 +101,14 @@ export async function POST(req: Request) {
       serverDeps.store.updateJob(jobId, { status: 'running', stage: 'validating' });
       serverDeps.store.updateJob(jobId, { stage: 'generating' });
       const out = await serverDeps.generateModel(prompt, view, { signal: entry.controller.signal, allowClarification: !context });
+      pendingUsage = out.usage;
       if (!entry.settled) serverDeps.store.updateJob(jobId, { stage: 'validating-output' });
       if (!out.ok) return fail(out.errors.join('; '), out.usage, out.usage.repairs);
       if ('questions' in out) {
         const questions = ClarificationSchema.safeParse({ clarificationQuestions: out.questions });
         if (context || !questions.success) return fail('Invalid clarification response. Please retry.', out.usage, out.usage.repairs);
-        recordUsage(serverDeps.store, { sessionId, tier, action: 'generate', usage: out.usage, retries: out.usage.repairs, outcome: entry.settled ? 'failed' : 'ok' });
+        recordUsage(serverDeps.store, { sessionId, tier, action: 'generate', view, taskId: jobId, modelId: jobId, usage: out.usage, retries: out.usage.repairs, outcome: entry.settled ? 'failed' : 'ok' });
+        metered = true;
         if (entry.settled) return;
         serverDeps.store.updateJob(jobId, { status: 'clarifying', clarification: { prompt, view, questions: questions.data.clarificationQuestions } });
         refundCredits(serverDeps.store, sessionId, day, 1);
@@ -113,14 +118,16 @@ export async function POST(req: Request) {
       const checked = validateModel(context && reply ? preserveClarification(out.model, context, reply) : out.model);
       if (!checked.ok) return fail(checked.errors.join('; '), out.usage, out.usage.repairs);
       if (entry.settled) {
-        recordUsage(serverDeps.store, { sessionId, tier, action: 'generate', usage: out.usage, retries: out.usage.repairs, outcome: 'failed' });
+        recordUsage(serverDeps.store, { sessionId, tier, action: 'generate', view, taskId: jobId, modelId: jobId, usage: out.usage, retries: out.usage.repairs, outcome: 'failed' });
+        metered = true;
         return;
       }
       // §9: privacy is server-stamped from deploy mode — model self-report never wins.
       const stamped = { ...checked.model, privacy: privacyForMode(deployMode()) };
       serverDeps.store.saveRevision(jobId, stamped, sessionId);
       serverDeps.store.updateJob(jobId, { stage: 'saving' });
-      recordUsage(serverDeps.store, { sessionId, tier, action: 'generate', usage: out.usage, retries: out.usage.repairs, outcome: out.usage.repairs > 0 ? 'repaired' : 'ok' });
+      recordUsage(serverDeps.store, { sessionId, tier, action: 'generate', view, taskId: jobId, modelId: jobId, usage: out.usage, retries: out.usage.repairs, outcome: out.usage.repairs > 0 ? 'repaired' : 'ok' });
+      metered = true;
       serverDeps.store.updateJob(jobId, { status: 'succeeded' });
       // These persistence operations are synchronous: no cancel/deadline can interleave.
       // Claim only after they finish so a thrown write still follows failure/refund.

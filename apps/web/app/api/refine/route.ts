@@ -54,7 +54,7 @@ export async function POST(req: Request) {
   const out = await withSlot(`refine:${modelId}:${baseRevision}`, () => serverDeps.generateRefinement(instruction, latest, view, { signal: req.signal }));
   if (!out.ok || req.signal.aborted) {
     refundCredits(serverDeps.store, sessionId, day, 0.25);
-    recordUsage(serverDeps.store, { sessionId, tier, action: 'refine', usage: out.usage, retries: out.usage.repairs, outcome: 'failed' });
+    recordUsage(serverDeps.store, { sessionId, tier, action: 'refine', view, modelId, usage: out.usage, retries: out.usage.repairs, outcome: 'failed' });
     return Response.json({ reason: 'refine-failed', errors: !out.ok ? out.errors : ['Refinement cancelled. Your previous diagram is unchanged.'] }, { status: 502, headers });
   }
 
@@ -62,24 +62,29 @@ export async function POST(req: Request) {
   const current = serverDeps.store.getRevision(modelId);
   if (!current || current.revision !== baseRevision) {
     refundCredits(serverDeps.store, sessionId, day, 0.25);
-    recordUsage(serverDeps.store, { sessionId, tier, action: 'refine', usage: out.usage, retries: out.usage.repairs, outcome: 'failed' });
+    recordUsage(serverDeps.store, { sessionId, tier, action: 'refine', view, modelId, usage: out.usage, retries: out.usage.repairs, outcome: 'failed' });
     return Response.json(current ? { reason: 'stale-revision', message: 'The diagram changed while refining. Review the latest version and try again.', model: current, revision: current.revision } : { error: 'model not found' }, { status: current ? 409 : 404, headers });
   }
   const applied = applyEditOps(current, out.ops);
   if (!applied.ok) {
     refundCredits(serverDeps.store, sessionId, day, 0.25);
-    recordUsage(serverDeps.store, { sessionId, tier, action: 'refine', usage: out.usage, retries: out.usage.repairs, outcome: 'failed' });
+    recordUsage(serverDeps.store, { sessionId, tier, action: 'refine', view, modelId, usage: out.usage, retries: out.usage.repairs, outcome: 'failed' });
     return Response.json({ reason: 'refine-failed', errors: applied.errors }, { status: 502, headers });
   }
 
   // A batch that changes nothing must not cost a credit or add an empty revision.
   if (sameModelContent(applied.model, current)) {
     refundCredits(serverDeps.store, sessionId, day, 0.25);
-    recordUsage(serverDeps.store, { sessionId, tier, action: 'refine', usage: out.usage, retries: out.usage.repairs, outcome: 'failed' });
+    recordUsage(serverDeps.store, { sessionId, tier, action: 'refine', view, modelId, usage: out.usage, retries: out.usage.repairs, outcome: 'failed' });
     return Response.json({ reason: 'no-change', message: 'This instruction did not change the diagram, so nothing was saved and no credit was used.' }, { status: 422, headers });
   }
-  serverDeps.store.saveRevision(modelId, applied.model, sessionId);
-  recordUsage(serverDeps.store, { sessionId, tier, action: 'refine', usage: out.usage, retries: out.usage.repairs, outcome: out.usage.repairs > 0 ? 'repaired' : 'ok' });
+  try { serverDeps.store.saveRevision(modelId, applied.model, sessionId); }
+  catch {
+    refundCredits(serverDeps.store, sessionId, day, 0.25);
+    recordUsage(serverDeps.store, { sessionId, tier, action: 'refine', view, modelId, usage: out.usage, retries: out.usage.repairs, outcome: 'failed' });
+    return Response.json({ message: 'Could not save the refinement. No credit was used. Reload before trying again.' }, { status: 500, headers });
+  }
+  recordUsage(serverDeps.store, { sessionId, tier, action: 'refine', view, modelId, usage: out.usage, retries: out.usage.repairs, outcome: out.usage.repairs > 0 ? 'repaired' : 'ok' });
 
   return Response.json({ ops: out.ops, model: applied.model, revision: applied.model.revision, remaining: quota.remaining }, { status: 200, headers });
 }

@@ -14,5 +14,5 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   const queuePosition = job.status === 'queued' ? slotPosition(id) : null;
   const used = serverDeps.store.creditsUsed(sessionId, new Date().toISOString().slice(0, 10));
   const remaining = process.env.ARCHWOVEN_MODE === 'local' ? null : Math.max(0, TIERS[tierOf(sessionId)].pool - used);
-  return Response.json({ questions: job.clarification?.questions ?? [], remaining, status: job.status, stage: job.stage ?? null, modelId: job.modelId, revision, queuePosition, deadlineAt: jobRegistry.get(id)?.deadlineAt ?? null, gaps: job.gaps ?? [], error: job.error ?? null });
+  return Response.json({ usagePending: jobRegistry.has(id), questions: job.clarification?.questions ?? [], remaining, status: job.status, stage: job.stage ?? null, modelId: job.modelId, revision, queuePosition, deadlineAt: jobRegistry.get(id)?.deadlineAt ?? null, gaps: job.gaps ?? [], error: job.error ?? null });
 }

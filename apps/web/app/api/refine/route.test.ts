@@ -4,7 +4,7 @@ import { openStore } from '@archwoven/jobs';
 import { serverDeps } from '../../lib/server';
 import { POST } from './route';
 
-const usage = { model: 'claude-opus-5-5', effort: 'low' as const, inputTokens: 2000, cacheWriteTokens: 0, cacheReadTokens: 1800, outputTokens: 120, latencyMs: 400, repairs: 0 };
+const usage = { provider: 'anthropic' as const, transportRetries: 0, usageComplete: true, attempts: [], model: 'claude-opus-5-5', effort: 'low' as const, inputTokens: 2000, cacheWriteTokens: 0, cacheReadTokens: 1800, outputTokens: 120, latencyMs: 400, repairs: 0 };
 
 // §15: quotas compile out in local mode (reserve → Infinity → JSON null); credit assertions are hosted-only.
 const QUOTA = process.env.ARCHWOVEN_MODE !== 'local';
@@ -126,4 +126,16 @@ describe('refinements that change nothing', () => {
     expect(serverDeps.store.creditsUsed('test-sess', new Date().toISOString().slice(0, 10))).toBe(0);
     expect(serverDeps.store.listCalls('test-sess')).toHaveLength(1);
   });
+});
+
+it('retains provider usage and refunds a refinement when saving fails', async () => {
+  const save = serverDeps.store.saveRevision;
+  serverDeps.store.saveRevision = () => { throw new Error('save unavailable'); };
+  try {
+    const res = await POST(req({ modelId: 'm1', baseRevision: 1, instruction: 'add cache', view: 'sequence' }));
+    expect(res.status).toBe(500);
+    expect(serverDeps.store.lastTask('test-sess')).toMatchObject({ action: 'refine', modelId: 'm1', view: 'sequence', outcome: 'failed', inputTokens: 2000 });
+    expect(serverDeps.store.listCalls('test-sess')).toHaveLength(1);
+    expect(serverDeps.store.creditsUsed('test-sess', new Date().toISOString().slice(0, 10))).toBe(0);
+  } finally { serverDeps.store.saveRevision = save; }
 });

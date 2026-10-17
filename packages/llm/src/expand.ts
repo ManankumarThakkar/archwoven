@@ -1,3 +1,4 @@
+import { newUsageLedger, startAttempt, captureUsage } from './usage';
 import { z } from 'zod';
 import { applyExpansion, expandBlocker, ExpansionSchema, type Expansion, type SystemModel } from '@archwoven/model';
 import {
@@ -80,6 +81,7 @@ export async function expandComponent(
     return { ok: false, errors: ['This diagram is private and local-only, so it cannot be sent to a hosted provider.'], usage: zero };
   if (opts.signal?.aborted) return { ok: false, errors: ['Expansion cancelled.'], usage: zero };
   if (!opts.client && fakeMode()) {
+    zero.provider = 'demo';
     const r = applyExpansion(model, focus, fakeExpansion(model, focus));
     return r.ok ? { ok: true, model: r.model, usage: zero } : { ok: false, errors: r.errors, usage: zero };
   }
@@ -96,9 +98,10 @@ export async function expandComponent(
 
   let lastErrors: string[] = [];
   let repairs = 0;
-  const billed: Required<RawUsage> = { input_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, output_tokens: 0 };
+  const billed = newUsageLedger();
   for (let attempt = 0; attempt <= MAX_REPAIRS; attempt++) {
     if (opts.signal?.aborted) { lastErrors = ['Expansion cancelled.']; break; }
+    startAttempt(billed, repairs);
     let response: Awaited<ReturnType<StructuredClient['beta']['messages']['create']>>;
     try {
       response = await client.beta.messages.create({
@@ -110,10 +113,7 @@ export async function expandComponent(
       if (opts.signal?.aborted) break;
       continue;
     }
-    billed.input_tokens += response.usage.input_tokens ?? 0;
-    billed.cache_creation_input_tokens += response.usage.cache_creation_input_tokens ?? 0;
-    billed.cache_read_input_tokens += response.usage.cache_read_input_tokens ?? 0;
-    billed.output_tokens += response.usage.output_tokens ?? 0;
+    captureUsage(billed, response.usage);
     const text = textOf(response.content);
     let raw: unknown;
     try { raw = JSON.parse(text); } catch (e) { lastErrors = [`expansion was not valid JSON: ${e instanceof Error ? e.message : String(e)}`]; raw = undefined; }

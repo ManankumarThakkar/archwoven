@@ -12,7 +12,7 @@ import { POST as CANCEL } from '../jobs/[id]/cancel/route';
 import { GET } from '../jobs/[id]/route';
 
 const SHA = '0123456789abcdef0123456789abcdef01234567';
-const usage = { model: 'claude-opus-5-5', effort: 'medium' as const, inputTokens: 1000, cacheWriteTokens: 5000, cacheReadTokens: 10000, outputTokens: 1500, latencyMs: 500, repairs: 0 };
+const usage = { provider: 'anthropic' as const, transportRetries: 0, usageComplete: true, attempts: [], model: 'claude-opus-5-5', effort: 'medium' as const, inputTokens: 1000, cacheWriteTokens: 5000, cacheReadTokens: 10000, outputTokens: 1500, latencyMs: 500, repairs: 0 };
 
 // §15: quotas compile out in local mode (reserve → Infinity → JSON null); credit assertions are hosted-only.
 const QUOTA = process.env.ARCHWOVEN_MODE !== 'local';

@@ -8,7 +8,7 @@ import { POST } from './route';
 const QUOTA = process.env.ARCHWOVEN_MODE !== 'local';
 const ctx = { params: Promise.resolve({ id: 'm1' }) };
 const day = () => new Date().toISOString().slice(0, 10);
-const usage = { model: 'claude-opus-5-5', effort: 'low' as const, inputTokens: 900, cacheWriteTokens: 0, cacheReadTokens: 700, outputTokens: 150, latencyMs: 300, repairs: 0 };
+const usage = { provider: 'anthropic' as const, transportRetries: 0, usageComplete: true, attempts: [], model: 'claude-opus-5-5', effort: 'low' as const, inputTokens: 900, cacheWriteTokens: 0, cacheReadTokens: 700, outputTokens: 150, latencyMs: 300, repairs: 0 };
 const expansion = {
   internals: [{ key: 'intake', label: 'Order Intake' }, { key: 'payments', label: 'Payments' }, { key: 'store', label: 'Order Store' }],
   links: [
@@ -137,4 +137,16 @@ describe('POST /api/models/:id/expand', () => {
     expect(res.status).toBe(503);
     expect(calls).toEqual([]);
   });
+});
+
+it('retains usage under the expansion action and refunds when saving fails', async () => {
+  const save = serverDeps.store.saveRevision;
+  serverDeps.store.saveRevision = () => { throw new Error('save unavailable'); };
+  try {
+    const res = await POST(request({ baseRevision: 1, target: 'svc.orders' }), ctx);
+    expect(res.status).toBe(500);
+    expect(serverDeps.store.lastTask('owner')).toMatchObject({ action: 'expand', modelId: 'm1', view: 'component-detail', outcome: 'failed', inputTokens: 900 });
+    expect(serverDeps.store.listCalls('owner')).toHaveLength(1);
+    expect(serverDeps.store.creditsUsed('owner', day())).toBe(0);
+  } finally { serverDeps.store.saveRevision = save; }
 });

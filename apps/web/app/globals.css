@@ -190,3 +190,14 @@ textarea::placeholder, input::placeholder { color: #8290aa; opacity: 1; }
 .aw-orientation p { max-width: 360px; font-size: 11px; line-height: 1.6; margin: 6px 0 0; color: #a9b6ce; }
 .aw-orientation button:disabled { opacity: .65; }
 @media (max-width: 900px) { .aw-orientation { margin-left: 0; } }
+
+.aw-task-usage { position: relative; max-width: 100%; color: #cbd5e1; font-size: 12px; }
+.aw-task-usage > summary { cursor: pointer; border: 1px solid #334155; border-radius: 6px; padding: 5px 8px; overflow-wrap: anywhere; }
+.aw-task-usage > summary:focus-visible { outline: 2px solid #60a5fa; outline-offset: 3px; }
+.aw-task-usage-details { position: absolute; right: 0; z-index: 30; width: min(340px, calc(100vw - 40px)); box-sizing: border-box; margin-top: 8px; padding: 12px 16px; border: 1px solid #475569; border-radius: 10px; background: #111c2e; box-shadow: 0 12px 32px #0008; overflow-wrap: anywhere; line-height: 1.5; }
+.aw-task-usage-details p { margin: 6px 0; }
+.aw-task-usage-details dl { margin: 10px 0; display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; }
+.aw-task-usage-details dl > div { display: flex; justify-content: space-between; gap: 12px; }
+.aw-task-usage-details dd { margin: 0; font-variant-numeric: tabular-nums; color: #f1f5f9; }
+.aw-usage-incomplete { color: #fde68a; }
+@media (max-width: 760px) { .aw-task-usage-details { left: 0; right: auto; } }
