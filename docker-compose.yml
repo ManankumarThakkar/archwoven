@@ -4,6 +4,7 @@
 #   Override with OLLAMA_MODEL on the web service (e.g. gpt-oss:120b on ≥64 GB machines).
 services:
   web:
+    image: archwoven-local
     build: .
     ports:
       - "127.0.0.1:3000:3000" # loopback only (§9): local mode reads folders on this machine
