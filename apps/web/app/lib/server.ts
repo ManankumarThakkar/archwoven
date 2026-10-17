@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { isIP } from 'node:net';
 import { openStore, type Store, type Tier } from '@archwoven/jobs';
 import {
   generateModel, generateRefinement, assembleRepoModel, expandComponent,
@@ -81,11 +82,24 @@ export const sessionCookie = (sessionId: string) =>
 
 export const tierOf = (_sessionId: string): Tier => 'anonymous'; // GitHub OAuth deferred to M6 (external GitHub App registration; private repos covered by local mode)
 
-export function creditsExhaustedCopy(resetAt: number): string {
+/** The address appended by the nearest proxy (the last X-Forwarded-For entry), or null when it is unknown.
+ *  Best-effort: entries before it are client-controlled, so they never decide a bucket. */
+export function clientIp(headers: Headers): string | null {
+  const last = headers.get('x-forwarded-for')?.split(',').at(-1)?.trim();
+  return last && isIP(last) ? last : null;
+}
+
+const resetIn = (resetAt: number): string => {
   const mins = Math.max(0, Math.round((resetAt - Date.now()) / 60_000));
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  return `You've used today's free generations — resets in ${h}h ${m}m. Sign in with GitHub for 30/day.`;
+  return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+};
+const STILL_FREE = 'You can still view, rearrange, rename and export your diagrams.';
+
+/** One honest message per quota refusal; no sign-in tier is offered because none exists in this release. */
+export function quotaMessage(q: { reason: 'credits-exhausted' | 'network-credits-exhausted' | 'stop-loss' | 'burst'; resetAt?: number }): string {
+  if (q.reason === 'credits-exhausted') return `You've used today's free credits. They reset in ${resetIn(q.resetAt ?? Date.now())}. ${STILL_FREE}`;
+  if (q.reason === 'network-credits-exhausted') return `Today's free credits for your network are used up. They reset in ${resetIn(q.resetAt ?? Date.now())}. ${STILL_FREE}`;
+  return q.reason === 'stop-loss' ? STOP_LOSS_COPY : BURST_COPY;
 }
 export const STOP_LOSS_COPY = "Generations are temporarily paused while we stay within today's budget — try again tomorrow.";
 export const OVERSIZED_COPY = "That description is bigger than a single diagram can hold — try focusing on one system or flow.";

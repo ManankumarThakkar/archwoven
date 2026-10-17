@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { openStore } from './store';
-import { reserve, refundCredits, recordUsage, costOf, STOP_LOSS_USD } from './quota';
+import { reserve, refundCredits, recordUsage, costOf, STOP_LOSS_USD, IP_POOL, BURST } from './quota';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const day = () => new Date().toISOString().slice(0, 10);
@@ -131,5 +131,64 @@ hostedOnly('quota (§15 weighted credits, reserve-then-refund)', () => {
     } finally {
       delete process.env.ARCHWOVEN_MODE;
     }
+  });
+});
+
+hostedOnly('network credit pool (SPEC §15: IP as secondary bucket key)', () => {
+  const gen = (sessionId: string, ip: string | null) => ({ sessionId, tier: 'anonymous' as const, action: 'generate' as const, ip, burstWindowSec: 0.001 });
+  /** Reservations 2 ms apart, so the per-session burst window never shadows the credit pools. */
+  const spaced = async (n: number, make: (i: number) => Parameters<typeof reserve>[1], s: ReturnType<typeof openStore>) => { const out = []; for (let i = 0; i < n; i++) { await sleep(2); out.push(reserve(s, make(i))); } return out; };
+
+  it('stops fresh sessions from one network after its daily pool, without spending the refused session\'s credit', async () => {
+    const s = openStore(':memory:');
+    expect((await spaced(IP_POOL, i => gen(`fresh-${i}`, '203.0.113.7'), s)).every(r => r.ok)).toBe(true);
+    await sleep(2);
+    const refused = reserve(s, gen('one-more', '203.0.113.7'));
+    expect(refused).toMatchObject({ ok: false, reason: 'network-credits-exhausted' });
+    if (!refused.ok) expect(refused.resetAt).toBeGreaterThan(Date.now());
+    expect(s.creditsUsed('one-more', day())).toBe(0);
+  });
+
+  it('frees network credit when a failed job is refunded', async () => {
+    const s = openStore(':memory:');
+    expect((await spaced(IP_POOL, i => gen(`fresh-${i}`, '203.0.113.7'), s)).every(r => r.ok)).toBe(true);
+    await sleep(2);
+    expect(reserve(s, gen('before-refund', '203.0.113.7')).ok).toBe(false);
+    refundCredits(s, 'fresh-0', day(), 1);
+    expect(reserve(s, gen('after-refund', '203.0.113.7')).ok).toBe(true);
+  });
+
+  it('keeps networks independent', async () => {
+    const s = openStore(':memory:');
+    expect((await spaced(IP_POOL, i => gen(`fresh-${i}`, '203.0.113.7'), s)).every(r => r.ok)).toBe(true);
+    expect(reserve(s, gen('elsewhere', '198.51.100.4')).ok).toBe(true);
+  });
+
+  it('never pools users whose address is unknown', async () => {
+    const s = openStore(':memory:');
+    expect((await spaced(IP_POOL + 5, i => gen(`unknown-${i}`, null), s)).every(r => r.ok)).toBe(true);
+  });
+
+  it('still applies the per-session pool first', async () => {
+    const s = openStore(':memory:');
+    expect((await spaced(6, () => gen('one', '203.0.113.7'), s)).every(r => r.ok)).toBe(true);
+    await sleep(2);
+    expect(reserve(s, gen('one', '203.0.113.7'))).toMatchObject({ ok: false, reason: 'credits-exhausted' });
+  });
+
+  it('does not share a burst bucket between users whose address is unknown', () => {
+    const s = openStore(':memory:');
+    const fast = (id: string) => ({ ...gen(id, null), burstWindowSec: 60 });
+    for (let i = 0; i < BURST.ip + 3; i++) expect(reserve(s, fast(`burst-${i}`)).ok).toBe(true);
+  });
+});
+
+hostedOnly('remaining credits reflect the tighter pool', () => {
+  it('reports the network headroom when it is below the session headroom', async () => {
+    const s = openStore(':memory:');
+    for (let i = 0; i < IP_POOL - 2; i++) { await sleep(2); reserve(s, { sessionId: `fill-${i}`, tier: 'anonymous', action: 'generate', ip: '203.0.113.7', burstWindowSec: 0.001 }); }
+    await sleep(2);
+    const r = reserve(s, { sessionId: 'newcomer', tier: 'anonymous', action: 'generate', ip: '203.0.113.7', burstWindowSec: 0.001 });
+    expect(r).toEqual({ ok: true, remaining: 1 });
   });
 });

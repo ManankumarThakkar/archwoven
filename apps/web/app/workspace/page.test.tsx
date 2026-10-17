@@ -1132,3 +1132,18 @@ describe('deleting a diagram', () => {
     expect(container.querySelector('#retention-note')?.textContent).toBe('Stored on this machine until you delete it.');
   });
 });
+
+describe('quota refusals', () => {
+  it.each([
+    ['credits-exhausted', 'Daily free credits used up', "You've used today's free credits. They reset in 7h 23m. You can still view, rearrange, rename and export your diagrams."],
+    ['network-credits-exhausted', 'Daily free credits for your network used up', "Today's free credits for your network are used up. They reset in 7h 23m. You can still view, rearrange, rename and export your diagrams."],
+  ])('explains %s without offering a sign-in', async (reason, title, message) => {
+    transport = (input) => input === '/api/generate' ? Response.json({ reason, message, resetAt: Date.now() + 3_600_000 }, { status: 429 }) : undefined;
+    await mount();
+    await fill('#system-description', 'An API gateway in front of an order service.');
+    await click('Generate diagram');
+    await act(async () => { await vi.waitFor(() => expect(container.textContent).toContain(title)); });
+    expect(container.textContent).toContain(message);
+    expect(container.textContent).not.toMatch(/sign in|GitHub for/i);
+  });
+});

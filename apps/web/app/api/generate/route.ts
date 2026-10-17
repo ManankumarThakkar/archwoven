@@ -1,10 +1,10 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { reserve, refundCredits, recordUsage, TIERS, type Clarification } from '@archwoven/jobs';
+import { reserve, refundCredits, recordUsage, creditsRemaining, type Clarification } from '@archwoven/jobs';
 import { validateModel, type ViewType } from '@archwoven/model';
 import type { TaskUsage } from '@archwoven/model';
 import {
   serverDeps, estimateTokens, PROMPT_TOKEN_LIMIT, readOrCreateSession, sessionCookie, tierOf,
-  creditsExhaustedCopy, STOP_LOSS_COPY, OVERSIZED_COPY, BURST_COPY,
+  quotaMessage, clientIp, OVERSIZED_COPY,
   llmNotConfigured, LLM_NOT_CONFIGURED_COPY,
 } from '../../lib/server';
 import { withSlot } from '../../lib/llm-limiter';
@@ -37,8 +37,7 @@ export async function POST(req: Request) {
   const replayOf = (key: string): Response | null => {
     const existing = serverDeps.store.findJobByIdempotencyKey(key, sessionId);
     if (!existing) return null;
-    const used = serverDeps.store.creditsUsed(sessionId, new Date().toISOString().slice(0, 10));
-    return Response.json({ jobId: existing.id, remaining: deployMode() === 'local' ? null : Math.max(0, TIERS[tierOf(sessionId)].pool - used) }, { status: 202, headers });
+    return Response.json({ jobId: existing.id, remaining: deployMode() === 'local' ? null : creditsRemaining(serverDeps.store, { sessionId, tier: tierOf(sessionId), ip: clientIp(req.headers) }) }, { status: 202, headers });
   };
   let context: Clarification | undefined, reply: ClarificationReply | null = null;
   if (body.clarification !== undefined) {
@@ -71,9 +70,9 @@ export async function POST(req: Request) {
 
   const burstWindowSec = Number(process.env.ARCHWOVEN_BURST_WINDOW_SEC ?? 60);
   // Atomic reservation at the gate — parallel requests cannot race past the pool.
-  const quota = reserve(serverDeps.store, { sessionId, tier, action: 'generate', ip: req.headers.get('x-forwarded-for') ?? 'unknown', burstWindowSec });
+  const quota = reserve(serverDeps.store, { sessionId, tier, action: 'generate', ip: clientIp(req.headers), burstWindowSec });
   if (!quota.ok) {
-    const message = quota.reason === 'credits-exhausted' ? creditsExhaustedCopy(quota.resetAt ?? 0) : quota.reason === 'stop-loss' ? STOP_LOSS_COPY : BURST_COPY;
+    const message = quotaMessage(quota);
     return Response.json({ reason: quota.reason, message, resetAt: quota.resetAt }, { status: 429, headers });
   }
 

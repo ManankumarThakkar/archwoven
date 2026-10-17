@@ -14,6 +14,7 @@ function publicAsset(rel: string): string {
 import { BURST, burstWindow, localMode } from '@archwoven/jobs';
 import {
   serverDeps, readOrCreateSession, sessionCookie, BURST_COPY,
+  clientIp,
 } from '../../lib/server';
 import { ensureResvg, renderPng } from '../../../probes/render/export';
 import { buildCardSvg } from './card';
@@ -60,9 +61,9 @@ export async function POST(req: Request) {
   const burstWindowSec = Number(process.env.ARCHWOVEN_BURST_WINDOW_SEC ?? 60);
   const win = burstWindow(burstWindowSec);
   if (!localMode()) {
-    const ip = req.headers.get('x-forwarded-for') ?? 'unknown';
+    const ip = clientIp(req.headers);
     const sessHits = serverDeps.store.bumpBurst(`sess-card:${sessionId}`, win);
-    const ipHits = serverDeps.store.bumpBurst(`ip-card:${ip}`, win);
+    const ipHits = ip ? serverDeps.store.bumpBurst(`ip-card:${ip}`, win) : 0;
     if (sessHits > BURST.session || ipHits > BURST.ip) {
       return Response.json({ reason: 'burst', message: BURST_COPY, resetAt: Date.now() + win * 1000 }, { status: 429, headers });
     }

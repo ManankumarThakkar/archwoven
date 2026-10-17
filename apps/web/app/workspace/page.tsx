@@ -34,7 +34,8 @@ const STAGE_LABEL: Record<Stage, string> = {
 };
 
 const QUOTA_TITLE: Record<string, string> = {
-  'credits-exhausted': 'Daily free generations used up',
+  'credits-exhausted': 'Daily free credits used up',
+  'network-credits-exhausted': 'Daily free credits for your network used up',
   burst: 'Too many at once',
   'stop-loss': 'Generations paused for today',
 };

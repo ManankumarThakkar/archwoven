@@ -12,6 +12,9 @@ export const WEIGHTS = { generate: 1, repo: 2, refine: 0.25, view: 0 } as const;
 export const PRICES = { input: 4, output: 20, cacheWrite: 5, cacheRead: 0.2 };
 export const STOP_LOSS_USD = 15;
 export const BURST = { session: 5, ip: 20 };
+/** §15 secondary bucket: daily credits shared by every anonymous session on one network address
+ *  (about four people behind an office or school NAT). Tunable with the post-launch quota review. */
+export const IP_POOL = 24;
 
 export type Action = keyof typeof WEIGHTS;
 /** Legacy injected adapters may omit identity; that is unpriced, never guessed. */
@@ -42,9 +45,16 @@ const nextUtcMidnight = () => {
   return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1, 0, 0, 0);
 };
 
+/** What a user can actually spend today: the tighter of their session pool and their network's pool. */
+export function creditsRemaining(store: Store, req: { sessionId: string; tier: Tier; ip: string | null }, day = new Date().toISOString().slice(0, 10)): number {
+  const session = TIERS[req.tier].pool - store.creditsUsed(req.sessionId, day);
+  const network = req.ip ? IP_POOL - store.networkCreditsUsed(req.ip, day) : Infinity;
+  return Math.max(0, Math.min(session, network));
+}
+
 export type QuotaResult =
   | { ok: true; remaining: number }
-  | { ok: false; reason: 'credits-exhausted' | 'stop-loss' | 'burst'; resetAt?: number };
+  | { ok: false; reason: 'credits-exhausted' | 'network-credits-exhausted' | 'stop-loss' | 'burst'; resetAt?: number };
 
 export const burstWindow = (raw: number | undefined): number =>
   raw !== undefined && Number.isFinite(raw) && raw > 0 ? raw : 60;
@@ -58,7 +68,8 @@ export const burstWindow = (raw: number | undefined): number =>
  */
 export function reserve(
   store: Store,
-  req: { sessionId: string; tier: Tier; action: Action; ip: string; burstWindowSec?: number },
+  /** `ip` is null when the client address cannot be determined: no network pool or IP burst then applies. */
+  req: { sessionId: string; tier: Tier; action: Action; ip: string | null; burstWindowSec?: number },
 ): QuotaResult {
   if (localMode()) return { ok: true, remaining: Infinity };
 
@@ -67,8 +78,9 @@ export function reserve(
   const weight = WEIGHTS[req.action];
   const day = new Date().toISOString().slice(0, 10);
   const pool = TIERS[req.tier].pool;
-  const used = store.reserveCredits(req.sessionId, day, weight, pool);
+  const used = weight > 0 && req.ip ? store.reserveCredits(req.sessionId, day, weight, pool, { ip: req.ip, pool: IP_POOL }) : store.reserveCredits(req.sessionId, day, weight, pool);
   if (used === null) return { ok: false, reason: 'credits-exhausted', resetAt: nextUtcMidnight() };
+  if (used === 'network') return { ok: false, reason: 'network-credits-exhausted', resetAt: nextUtcMidnight() };
 
   if (weight > 0) {
     const win = burstWindow(req.burstWindowSec);
@@ -76,13 +88,14 @@ export function reserve(
       store.refundCredits(req.sessionId, day, weight);
       return { ok: false, reason: 'burst', resetAt: Date.now() + win * 1000 };
     }
-    if (store.bumpBurst(`ip:${req.ip}`, win) > BURST.ip) {
+    // An unknown address is never one shared bucket: it would throttle every proxy-less user together.
+    if (req.ip && store.bumpBurst(`ip:${req.ip}`, win) > BURST.ip) {
       store.refundCredits(req.sessionId, day, weight);
       return { ok: false, reason: 'burst', resetAt: Date.now() + win * 1000 };
     }
   }
 
-  return { ok: true, remaining: pool - used };
+  return { ok: true, remaining: creditsRemaining(store, req, day) };
 }
 
 /** Give back a reserved credit when the job it reserved for did not succeed. */
