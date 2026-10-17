@@ -23,10 +23,12 @@ Completed foundation: PR #11 clean-download instructions; PR #12 authoritative e
 | 14 | Accurate task/repair usage and provider-aware costs | Merged to main as PR #29; verified |
 | 15 | Supported framework extraction gaps and coverage measurements | Pending |
 | 16 | Retention, expiration and user deletion | Pending |
-| 17 | Threat model and before-egress content secret scanning | PR open against main; verified |
+| 17 | Threat model and before-egress content secret scanning | Merged to main as PR #30; verified |
 | 18 | Public abuse controls and honest exhausted-credit copy | Pending |
 | 19 | Evaluation oracle, representative real-provider results and human-review handoff | Pending |
 | 20 | Cross-browser/accessibility/device acceptance, clean-install rerun and documented cleanup | Pending |
+
+Known gaps not yet fixed are tracked in one place: [OPEN-GAPS.md](OPEN-GAPS.md). Update it in every PR that finds or fixes a gap.
 
 External acceptance work that requires a person/device must be recorded as outstanding if unavailable; do not substitute an automated check. Existing exclusions (hosted private GitHub OAuth, billing, collaboration, light mode) remain unchanged. Owner name/domain clearance remains an owner task.
 
