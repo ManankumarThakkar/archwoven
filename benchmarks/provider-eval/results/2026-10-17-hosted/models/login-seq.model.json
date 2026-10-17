@@ -1,0 +1,224 @@
+{
+  "schemaVersion": "1",
+  "revision": 1,
+  "title": "User Login with JWT",
+  "requirements": [
+    {
+      "id": "req.login",
+      "text": "User logs in with email and password via the web app",
+      "status": "stated"
+    },
+    {
+      "id": "req.hash-check",
+      "text": "Auth service checks the password hash in PostgreSQL",
+      "status": "stated"
+    },
+    {
+      "id": "req.jwt",
+      "text": "Auth service issues a JWT",
+      "status": "stated"
+    },
+    {
+      "id": "req.store-token",
+      "text": "Web app stores the token and loads the dashboard",
+      "status": "stated"
+    }
+  ],
+  "openQuestions": [
+    {
+      "id": "q.failure",
+      "text": "How should failed logins be handled (error, lockout, rate limiting)?",
+      "blockedBy": null
+    },
+    {
+      "id": "q.token-storage",
+      "text": "Where does the web app store the JWT (cookie, memory, local storage)?",
+      "blockedBy": null
+    }
+  ],
+  "nodes": [
+    {
+      "id": "actor.user",
+      "kind": "actor",
+      "label": "User",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "svc.web-app",
+      "kind": "service",
+      "label": "Web App",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "svc.auth",
+      "kind": "service",
+      "label": "Auth Service",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "db.postgres",
+      "kind": "datastore",
+      "label": "PostgreSQL",
+      "provenance": "user-specified",
+      "evidence": []
+    }
+  ],
+  "edges": [
+    {
+      "id": "e.user-web-app",
+      "from": "actor.user",
+      "to": "svc.web-app",
+      "type": "sync",
+      "label": "Login form",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.web-app-auth",
+      "from": "svc.web-app",
+      "to": "svc.auth",
+      "type": "sync",
+      "label": "Authenticate",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.auth-postgres",
+      "from": "svc.auth",
+      "to": "db.postgres",
+      "type": "data",
+      "label": "Read password hash",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    }
+  ],
+  "views": [
+    {
+      "id": "view.login-sequence",
+      "type": "sequence",
+      "orientation": null,
+      "nodes": [
+        "actor.user",
+        "svc.web-app",
+        "svc.auth",
+        "db.postgres"
+      ],
+      "edges": [
+        "e.user-web-app",
+        "e.web-app-auth",
+        "e.auth-postgres"
+      ],
+      "sequence": {
+        "participants": [
+          "actor.user",
+          "svc.web-app",
+          "svc.auth",
+          "db.postgres"
+        ],
+        "messages": [
+          {
+            "seq": 1,
+            "from": "actor.user",
+            "to": "svc.web-app",
+            "label": "Submit email and password",
+            "kind": "call"
+          },
+          {
+            "seq": 2,
+            "from": "svc.web-app",
+            "to": "svc.auth",
+            "label": "Login request",
+            "kind": "call"
+          },
+          {
+            "seq": 3,
+            "from": "svc.auth",
+            "to": "db.postgres",
+            "label": "Fetch password hash by email",
+            "kind": "call"
+          },
+          {
+            "seq": 4,
+            "from": "db.postgres",
+            "to": "svc.auth",
+            "label": "Password hash",
+            "kind": "return"
+          },
+          {
+            "seq": 5,
+            "from": "svc.auth",
+            "to": "svc.auth",
+            "label": "Verify hash and sign JWT",
+            "kind": "call"
+          },
+          {
+            "seq": 6,
+            "from": "svc.auth",
+            "to": "svc.web-app",
+            "label": "JWT",
+            "kind": "return"
+          },
+          {
+            "seq": 7,
+            "from": "svc.web-app",
+            "to": "svc.web-app",
+            "label": "Store token",
+            "kind": "call"
+          },
+          {
+            "seq": 8,
+            "from": "svc.web-app",
+            "to": "actor.user",
+            "label": "Load dashboard",
+            "kind": "return"
+          }
+        ]
+      },
+      "focus": null,
+      "mainPath": [
+        "actor.user",
+        "svc.web-app",
+        "svc.auth",
+        "db.postgres"
+      ]
+    }
+  ],
+  "semanticChecks": {
+    "allowedRoots": [
+      "actor.user"
+    ],
+    "allowedTerminals": [
+      "db.postgres"
+    ],
+    "requiredEdges": [
+      {
+        "from": "svc.web-app",
+        "to": "svc.auth",
+        "type": "sync"
+      },
+      {
+        "from": "svc.auth",
+        "to": "db.postgres",
+        "type": "data"
+      }
+    ],
+    "requiredPaths": [
+      {
+        "from": "actor.user",
+        "to": "db.postgres"
+      }
+    ]
+  },
+  "boundaries": [],
+  "guidedViews": [],
+  "privacy": {
+    "classification": "public",
+    "boundary": "external-allowed"
+  }
+}

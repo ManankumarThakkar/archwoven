@@ -1,0 +1,405 @@
+{
+  "schemaVersion": "1",
+  "revision": 1,
+  "title": "Notification Service Component Detail",
+  "requirements": [
+    {
+      "id": "req.consume",
+      "text": "A queue consumer reads notification requests",
+      "status": "stated"
+    },
+    {
+      "id": "req.render",
+      "text": "A template renderer builds messages",
+      "status": "stated"
+    },
+    {
+      "id": "req.route",
+      "text": "A channel router picks email, SMS or push",
+      "status": "stated"
+    },
+    {
+      "id": "req.adapters",
+      "text": "Adapters call SendGrid, Twilio and Firebase",
+      "status": "stated"
+    },
+    {
+      "id": "req.results",
+      "text": "Delivery results are stored in DynamoDB",
+      "status": "stated"
+    }
+  ],
+  "openQuestions": [
+    {
+      "id": "q.result-writer",
+      "text": "Do adapters write delivery results directly, or does a dedicated result recorder do it?",
+      "blockedBy": "e.email-results"
+    },
+    {
+      "id": "q.retries",
+      "text": "How are failed deliveries retried, and is there a dead-letter queue?",
+      "blockedBy": null
+    }
+  ],
+  "nodes": [
+    {
+      "id": "queue.notification-requests",
+      "kind": "queue",
+      "label": "Notification Request Queue",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "comp.queue-consumer",
+      "kind": "component",
+      "label": "Queue Consumer",
+      "provenance": "user-specified",
+      "evidence": [],
+      "group": "notification"
+    },
+    {
+      "id": "comp.template-renderer",
+      "kind": "component",
+      "label": "Template Renderer",
+      "provenance": "user-specified",
+      "evidence": [],
+      "group": "notification"
+    },
+    {
+      "id": "comp.channel-router",
+      "kind": "component",
+      "label": "Channel Router",
+      "provenance": "user-specified",
+      "evidence": [],
+      "group": "notification"
+    },
+    {
+      "id": "comp.email-adapter",
+      "kind": "component",
+      "label": "Email Adapter",
+      "provenance": "user-specified",
+      "evidence": [],
+      "group": "notification"
+    },
+    {
+      "id": "comp.sms-adapter",
+      "kind": "component",
+      "label": "SMS Adapter",
+      "provenance": "user-specified",
+      "evidence": [],
+      "group": "notification"
+    },
+    {
+      "id": "comp.push-adapter",
+      "kind": "component",
+      "label": "Push Adapter",
+      "provenance": "user-specified",
+      "evidence": [],
+      "group": "notification"
+    },
+    {
+      "id": "ext.sendgrid",
+      "kind": "external",
+      "label": "SendGrid",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "ext.twilio",
+      "kind": "external",
+      "label": "Twilio",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "ext.firebase",
+      "kind": "external",
+      "label": "Firebase",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "db.delivery-results",
+      "kind": "datastore",
+      "label": "Delivery Results (DynamoDB)",
+      "provenance": "user-specified",
+      "evidence": []
+    }
+  ],
+  "edges": [
+    {
+      "id": "e.queue-consumer",
+      "from": "queue.notification-requests",
+      "to": "comp.queue-consumer",
+      "type": "async",
+      "label": "notification request",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.consumer-renderer",
+      "from": "comp.queue-consumer",
+      "to": "comp.template-renderer",
+      "type": "sync",
+      "label": "render request",
+      "role": "main",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "e.renderer-router",
+      "from": "comp.template-renderer",
+      "to": "comp.channel-router",
+      "type": "sync",
+      "label": "rendered message",
+      "role": "main",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "e.router-email",
+      "from": "comp.channel-router",
+      "to": "comp.email-adapter",
+      "type": "sync",
+      "label": "email",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.router-sms",
+      "from": "comp.channel-router",
+      "to": "comp.sms-adapter",
+      "type": "sync",
+      "label": "SMS",
+      "role": "branch",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.router-push",
+      "from": "comp.channel-router",
+      "to": "comp.push-adapter",
+      "type": "sync",
+      "label": "push",
+      "role": "branch",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.email-sendgrid",
+      "from": "comp.email-adapter",
+      "to": "ext.sendgrid",
+      "type": "sync",
+      "label": "send email",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.sms-twilio",
+      "from": "comp.sms-adapter",
+      "to": "ext.twilio",
+      "type": "sync",
+      "label": "send SMS",
+      "role": "branch",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.push-firebase",
+      "from": "comp.push-adapter",
+      "to": "ext.firebase",
+      "type": "sync",
+      "label": "send push",
+      "role": "branch",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.email-results",
+      "from": "comp.email-adapter",
+      "to": "db.delivery-results",
+      "type": "data",
+      "label": "store result",
+      "role": "branch",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "e.sms-results",
+      "from": "comp.sms-adapter",
+      "to": "db.delivery-results",
+      "type": "data",
+      "label": "store result",
+      "role": "branch",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "e.push-results",
+      "from": "comp.push-adapter",
+      "to": "db.delivery-results",
+      "type": "data",
+      "label": "store result",
+      "role": "branch",
+      "provenance": "inferred",
+      "evidence": []
+    }
+  ],
+  "views": [
+    {
+      "id": "view.notification-components",
+      "type": "component-detail",
+      "orientation": "LR",
+      "nodes": [
+        "queue.notification-requests",
+        "comp.queue-consumer",
+        "comp.template-renderer",
+        "comp.channel-router",
+        "comp.email-adapter",
+        "comp.sms-adapter",
+        "comp.push-adapter",
+        "ext.sendgrid",
+        "ext.twilio",
+        "ext.firebase",
+        "db.delivery-results"
+      ],
+      "edges": [
+        "e.queue-consumer",
+        "e.consumer-renderer",
+        "e.renderer-router",
+        "e.router-email",
+        "e.router-sms",
+        "e.router-push",
+        "e.email-sendgrid",
+        "e.sms-twilio",
+        "e.push-firebase",
+        "e.email-results",
+        "e.sms-results",
+        "e.push-results"
+      ],
+      "mainPath": [
+        "queue.notification-requests",
+        "comp.queue-consumer",
+        "comp.template-renderer",
+        "comp.channel-router",
+        "comp.email-adapter",
+        "ext.sendgrid"
+      ]
+    }
+  ],
+  "semanticChecks": {
+    "allowedRoots": [
+      "queue.notification-requests"
+    ],
+    "allowedTerminals": [
+      "ext.sendgrid",
+      "ext.twilio",
+      "ext.firebase",
+      "db.delivery-results"
+    ],
+    "requiredEdges": [
+      {
+        "from": "comp.channel-router",
+        "to": "comp.email-adapter",
+        "type": "sync"
+      },
+      {
+        "from": "comp.channel-router",
+        "to": "comp.sms-adapter",
+        "type": "sync"
+      },
+      {
+        "from": "comp.channel-router",
+        "to": "comp.push-adapter",
+        "type": "sync"
+      },
+      {
+        "from": "comp.email-adapter",
+        "to": "ext.sendgrid",
+        "type": "sync"
+      },
+      {
+        "from": "comp.sms-adapter",
+        "to": "ext.twilio",
+        "type": "sync"
+      },
+      {
+        "from": "comp.push-adapter",
+        "to": "ext.firebase",
+        "type": "sync"
+      }
+    ],
+    "requiredPaths": [
+      {
+        "from": "queue.notification-requests",
+        "to": "db.delivery-results"
+      },
+      {
+        "from": "queue.notification-requests",
+        "to": "ext.sendgrid"
+      }
+    ]
+  },
+  "boundaries": [
+    {
+      "id": "b.notification-service",
+      "label": "Notification Service",
+      "wraps": [
+        "comp.queue-consumer",
+        "comp.template-renderer",
+        "comp.channel-router",
+        "comp.email-adapter",
+        "comp.sms-adapter",
+        "comp.push-adapter"
+      ]
+    }
+  ],
+  "guidedViews": [
+    {
+      "id": "g.intake",
+      "label": "Request intake",
+      "focus": [
+        "queue.notification-requests",
+        "comp.queue-consumer"
+      ],
+      "note": "Notification requests arrive on a queue and are read by the consumer."
+    },
+    {
+      "id": "g.render-route",
+      "label": "Render and route",
+      "focus": [
+        "comp.template-renderer",
+        "comp.channel-router"
+      ],
+      "note": "Messages are built from templates, then routed to email, SMS or push."
+    },
+    {
+      "id": "g.delivery",
+      "label": "Channel delivery",
+      "focus": [
+        "comp.email-adapter",
+        "comp.sms-adapter",
+        "comp.push-adapter",
+        "ext.sendgrid",
+        "ext.twilio",
+        "ext.firebase"
+      ],
+      "note": "Each adapter calls its provider: SendGrid, Twilio or Firebase."
+    },
+    {
+      "id": "g.results",
+      "label": "Delivery results",
+      "focus": [
+        "db.delivery-results"
+      ],
+      "note": "Delivery outcomes are persisted in DynamoDB; the writer is assumed to be each adapter."
+    }
+  ],
+  "privacy": {
+    "classification": "public",
+    "boundary": "external-allowed"
+  }
+}

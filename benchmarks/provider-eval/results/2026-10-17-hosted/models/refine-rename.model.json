@@ -1,0 +1,422 @@
+{
+  "schemaVersion": "1",
+  "revision": 2,
+  "parentId": 1,
+  "title": "Ride-Hailing Platform Architecture",
+  "requirements": [
+    {
+      "id": "req.realtime-location",
+      "text": "Rider and driver mobile apps talk to an API over WebSockets for live location.",
+      "status": "stated"
+    },
+    {
+      "id": "req.matching",
+      "text": "A matching service pairs riders with nearby drivers using a geospatial index in Redis.",
+      "status": "stated"
+    },
+    {
+      "id": "req.trip-storage",
+      "text": "Trips are stored in PostgreSQL.",
+      "status": "stated"
+    },
+    {
+      "id": "req.payments",
+      "text": "Payments go through Stripe.",
+      "status": "stated"
+    },
+    {
+      "id": "req.push",
+      "text": "Push notifications go through Firebase.",
+      "status": "stated"
+    }
+  ],
+  "openQuestions": [
+    {
+      "id": "q.trip-owner",
+      "text": "Which component owns trip records and calls Stripe? A trip service is assumed here.",
+      "blockedBy": "svc.trips"
+    },
+    {
+      "id": "q.push-sender",
+      "text": "Which services send push notifications through Firebase?",
+      "blockedBy": "e.matching-firebase"
+    },
+    {
+      "id": "q.location-write",
+      "text": "Does the API or the matching service write driver locations into the Redis geo index?",
+      "blockedBy": "e.matching-redis"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "actor.rider",
+      "kind": "actor",
+      "label": "Rider",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "actor.driver",
+      "kind": "actor",
+      "label": "Driver",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "component.rider-app",
+      "kind": "component",
+      "label": "Rider Mobile App",
+      "provenance": "user-specified",
+      "evidence": [],
+      "group": "clients"
+    },
+    {
+      "id": "component.driver-app",
+      "kind": "component",
+      "label": "Driver Mobile App",
+      "provenance": "user-specified",
+      "evidence": [],
+      "group": "clients"
+    },
+    {
+      "id": "gateway.api",
+      "kind": "gateway",
+      "label": "API (WebSocket)",
+      "provenance": "user-specified",
+      "evidence": [],
+      "group": "backend"
+    },
+    {
+      "id": "svc.matching",
+      "kind": "service",
+      "label": "Dispatch Service",
+      "provenance": "user-specified",
+      "evidence": [],
+      "group": "backend"
+    },
+    {
+      "id": "store.redis-geo",
+      "kind": "datastore",
+      "label": "Redis Geospatial Index",
+      "provenance": "user-specified",
+      "evidence": [],
+      "group": "backend"
+    },
+    {
+      "id": "svc.trips",
+      "kind": "service",
+      "label": "Trip Service",
+      "provenance": "inferred",
+      "evidence": [],
+      "group": "backend"
+    },
+    {
+      "id": "store.postgres",
+      "kind": "datastore",
+      "label": "PostgreSQL (Trips)",
+      "provenance": "user-specified",
+      "evidence": [],
+      "group": "backend"
+    },
+    {
+      "id": "ext.stripe",
+      "kind": "external",
+      "label": "Stripe",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "ext.firebase",
+      "kind": "external",
+      "label": "Firebase Cloud Messaging",
+      "provenance": "user-specified",
+      "evidence": []
+    }
+  ],
+  "edges": [
+    {
+      "id": "e.rider-uses-app",
+      "from": "actor.rider",
+      "to": "component.rider-app",
+      "type": "sync",
+      "label": "uses",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.driver-uses-app",
+      "from": "actor.driver",
+      "to": "component.driver-app",
+      "type": "sync",
+      "label": "uses",
+      "role": "branch",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.rider-app-api",
+      "from": "component.rider-app",
+      "to": "gateway.api",
+      "type": "sync",
+      "label": "WebSocket live location",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.driver-app-api",
+      "from": "component.driver-app",
+      "to": "gateway.api",
+      "type": "sync",
+      "label": "WebSocket live location",
+      "role": "branch",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.api-matching",
+      "from": "gateway.api",
+      "to": "svc.matching",
+      "type": "sync",
+      "label": "match request / locations",
+      "role": "main",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "e.matching-redis",
+      "from": "svc.matching",
+      "to": "store.redis-geo",
+      "type": "data",
+      "label": "geo query / update",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.api-trips",
+      "from": "gateway.api",
+      "to": "svc.trips",
+      "type": "sync",
+      "label": "trip lifecycle",
+      "role": "branch",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "e.trips-postgres",
+      "from": "svc.trips",
+      "to": "store.postgres",
+      "type": "data",
+      "label": "persist trips",
+      "role": "branch",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.trips-stripe",
+      "from": "svc.trips",
+      "to": "ext.stripe",
+      "type": "sync",
+      "label": "charge payment",
+      "role": "branch",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "e.matching-firebase",
+      "from": "svc.matching",
+      "to": "ext.firebase",
+      "type": "async",
+      "label": "send ride offer push",
+      "role": "async",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "e.firebase-driver-app",
+      "from": "ext.firebase",
+      "to": "component.driver-app",
+      "type": "async",
+      "label": "push notification",
+      "role": "async",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "e.firebase-rider-app",
+      "from": "ext.firebase",
+      "to": "component.rider-app",
+      "type": "async",
+      "label": "push notification",
+      "role": "async",
+      "provenance": "inferred",
+      "evidence": []
+    }
+  ],
+  "views": [
+    {
+      "id": "view.architecture",
+      "type": "architecture",
+      "orientation": "LR",
+      "nodes": [
+        "actor.rider",
+        "actor.driver",
+        "component.rider-app",
+        "component.driver-app",
+        "gateway.api",
+        "svc.matching",
+        "store.redis-geo",
+        "svc.trips",
+        "store.postgres",
+        "ext.stripe",
+        "ext.firebase"
+      ],
+      "edges": [
+        "e.rider-uses-app",
+        "e.driver-uses-app",
+        "e.rider-app-api",
+        "e.driver-app-api",
+        "e.api-matching",
+        "e.matching-redis",
+        "e.api-trips",
+        "e.trips-postgres",
+        "e.trips-stripe",
+        "e.matching-firebase",
+        "e.firebase-driver-app",
+        "e.firebase-rider-app"
+      ],
+      "mainPath": [
+        "actor.rider",
+        "component.rider-app",
+        "gateway.api",
+        "svc.matching",
+        "store.redis-geo"
+      ]
+    }
+  ],
+  "semanticChecks": {
+    "allowedRoots": [
+      "actor.rider",
+      "actor.driver"
+    ],
+    "allowedTerminals": [
+      "store.redis-geo",
+      "store.postgres",
+      "ext.stripe"
+    ],
+    "requiredEdges": [
+      {
+        "from": "component.rider-app",
+        "to": "gateway.api",
+        "type": "sync"
+      },
+      {
+        "from": "component.driver-app",
+        "to": "gateway.api",
+        "type": "sync"
+      },
+      {
+        "from": "svc.matching",
+        "to": "store.redis-geo",
+        "type": "data"
+      },
+      {
+        "from": "svc.trips",
+        "to": "store.postgres",
+        "type": "data"
+      }
+    ],
+    "requiredPaths": [
+      {
+        "from": "actor.rider",
+        "to": "store.redis-geo"
+      },
+      {
+        "from": "actor.driver",
+        "to": "store.postgres"
+      },
+      {
+        "from": "actor.rider",
+        "to": "ext.stripe"
+      }
+    ]
+  },
+  "boundaries": [
+    {
+      "id": "b.clients",
+      "label": "Mobile Clients",
+      "wraps": [
+        "component.rider-app",
+        "component.driver-app"
+      ]
+    },
+    {
+      "id": "b.backend",
+      "label": "Backend",
+      "wraps": [
+        "gateway.api",
+        "svc.matching",
+        "store.redis-geo",
+        "svc.trips",
+        "store.postgres"
+      ]
+    },
+    {
+      "id": "b.third-party",
+      "label": "Third-Party Services",
+      "wraps": [
+        "ext.stripe",
+        "ext.firebase"
+      ]
+    }
+  ],
+  "guidedViews": [
+    {
+      "id": "g.clients",
+      "label": "Apps and live connection",
+      "focus": [
+        "actor.rider",
+        "actor.driver",
+        "component.rider-app",
+        "component.driver-app",
+        "gateway.api"
+      ],
+      "note": "Both apps keep a WebSocket to the API for live location."
+    },
+    {
+      "id": "g.matching",
+      "label": "Matching with geo index",
+      "focus": [
+        "svc.matching",
+        "store.redis-geo"
+      ],
+      "note": "Matching queries Redis geospatial index for nearby drivers."
+    },
+    {
+      "id": "g.trips",
+      "label": "Trips and payments",
+      "focus": [
+        "svc.trips",
+        "store.postgres",
+        "ext.stripe"
+      ],
+      "note": "Assumed trip service persists trips and charges via Stripe."
+    },
+    {
+      "id": "g.push",
+      "label": "Push notifications",
+      "focus": [
+        "ext.firebase",
+        "component.driver-app",
+        "component.rider-app"
+      ],
+      "note": "Firebase delivers pushes; sender services are inferred."
+    }
+  ],
+  "privacy": {
+    "classification": "public",
+    "boundary": "external-allowed"
+  }
+}

@@ -1,0 +1,6 @@
+{"ts":"2026-10-17T18:28:04.738Z","runner":"provider-eval-2026-10-17","case":"todo-api","gate":"semantic","pass":true,"missing":[]}
+{"ts":"2026-10-17T18:28:04.787Z","runner":"provider-eval-2026-10-17","case":"todo-api","gate":"validate","pass":true,"errors":[]}
+{"ts":"2026-10-17T18:28:38.647Z","runner":"provider-eval-2026-10-17","case":"checkout","gate":"semantic","pass":true,"missing":[]}
+{"ts":"2026-10-17T18:28:38.689Z","runner":"provider-eval-2026-10-17","case":"checkout","gate":"validate","pass":true,"errors":[]}
+{"ts":"2026-10-17T18:28:59.141Z","runner":"provider-eval-2026-10-17","case":"boring-crud","gate":"semantic","pass":true,"missing":[]}
+{"ts":"2026-10-17T18:28:59.180Z","runner":"provider-eval-2026-10-17","case":"boring-crud","gate":"validate","pass":true,"errors":[]}

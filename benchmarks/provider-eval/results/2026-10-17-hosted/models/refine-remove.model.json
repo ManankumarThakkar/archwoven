@@ -1,0 +1,480 @@
+{
+  "schemaVersion": "1",
+  "revision": 2,
+  "parentId": 1,
+  "title": "Video Streaming Platform",
+  "requirements": [
+    {
+      "id": "req.clients",
+      "text": "Viewers use web and TV apps through a CDN",
+      "status": "stated"
+    },
+    {
+      "id": "req.gateway",
+      "text": "API gateway routes to catalog, playback and recommendation services",
+      "status": "stated"
+    },
+    {
+      "id": "req.events",
+      "text": "Playback writes view events to Kafka",
+      "status": "stated"
+    },
+    {
+      "id": "req.analytics",
+      "text": "Analytics service consumes view events and stores aggregates in ClickHouse",
+      "status": "stated"
+    },
+    {
+      "id": "req.accounts",
+      "text": "User accounts live in PostgreSQL",
+      "status": "stated"
+    },
+    {
+      "id": "req.sessions",
+      "text": "Sessions live in Redis",
+      "status": "stated"
+    }
+  ],
+  "openQuestions": [
+    {
+      "id": "q.accounts-owner",
+      "text": "Which service owns user accounts and sessions? An account service is proposed.",
+      "blockedBy": "e.gateway-accounts"
+    },
+    {
+      "id": "q.catalog-store",
+      "text": "Where does the catalog service store its metadata?",
+      "blockedBy": null
+    },
+    {
+      "id": "q.reco-data",
+      "text": "Does recommendation read analytics aggregates from ClickHouse?",
+      "blockedBy": null
+    }
+  ],
+  "nodes": [
+    {
+      "id": "actor.viewer",
+      "kind": "actor",
+      "label": "Viewer",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "client.web",
+      "kind": "component",
+      "label": "Web App",
+      "provenance": "user-specified",
+      "evidence": [],
+      "group": "clients"
+    },
+    {
+      "id": "client.tv",
+      "kind": "component",
+      "label": "TV App",
+      "provenance": "user-specified",
+      "evidence": [],
+      "group": "clients"
+    },
+    {
+      "id": "edge.cdn",
+      "kind": "gateway",
+      "label": "CDN",
+      "provenance": "user-specified",
+      "evidence": [],
+      "group": "edge"
+    },
+    {
+      "id": "gw.api",
+      "kind": "gateway",
+      "label": "API Gateway",
+      "provenance": "user-specified",
+      "evidence": [],
+      "group": "edge"
+    },
+    {
+      "id": "svc.catalog",
+      "kind": "service",
+      "label": "Catalog Service",
+      "provenance": "user-specified",
+      "evidence": [],
+      "group": "services"
+    },
+    {
+      "id": "svc.playback",
+      "kind": "service",
+      "label": "Playback Service",
+      "provenance": "user-specified",
+      "evidence": [],
+      "group": "services"
+    },
+    {
+      "id": "svc.accounts",
+      "kind": "service",
+      "label": "Account Service",
+      "provenance": "proposed",
+      "evidence": [],
+      "group": "services"
+    },
+    {
+      "id": "queue.kafka",
+      "kind": "queue",
+      "label": "Kafka View Events",
+      "provenance": "user-specified",
+      "evidence": [],
+      "group": "analytics"
+    },
+    {
+      "id": "svc.analytics",
+      "kind": "service",
+      "label": "Analytics Service",
+      "provenance": "user-specified",
+      "evidence": [],
+      "group": "analytics"
+    },
+    {
+      "id": "db.clickhouse",
+      "kind": "datastore",
+      "label": "ClickHouse Aggregates",
+      "provenance": "user-specified",
+      "evidence": [],
+      "group": "analytics"
+    },
+    {
+      "id": "db.postgres",
+      "kind": "datastore",
+      "label": "PostgreSQL Accounts",
+      "provenance": "user-specified",
+      "evidence": [],
+      "group": "data"
+    },
+    {
+      "id": "cache.redis",
+      "kind": "datastore",
+      "label": "Redis Sessions",
+      "provenance": "user-specified",
+      "evidence": [],
+      "group": "data"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e.viewer-web",
+      "from": "actor.viewer",
+      "to": "client.web",
+      "type": "sync",
+      "label": "watches",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.viewer-tv",
+      "from": "actor.viewer",
+      "to": "client.tv",
+      "type": "sync",
+      "label": "watches",
+      "role": "branch",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.web-cdn",
+      "from": "client.web",
+      "to": "edge.cdn",
+      "type": "sync",
+      "label": "HTTPS",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.tv-cdn",
+      "from": "client.tv",
+      "to": "edge.cdn",
+      "type": "sync",
+      "label": "HTTPS",
+      "role": "branch",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.cdn-gateway",
+      "from": "edge.cdn",
+      "to": "gw.api",
+      "type": "sync",
+      "label": "API requests",
+      "role": "main",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "e.gateway-catalog",
+      "from": "gw.api",
+      "to": "svc.catalog",
+      "type": "sync",
+      "label": "browse catalog",
+      "role": "branch",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.gateway-playback",
+      "from": "gw.api",
+      "to": "svc.playback",
+      "type": "sync",
+      "label": "start playback",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.gateway-accounts",
+      "from": "gw.api",
+      "to": "svc.accounts",
+      "type": "sync",
+      "label": "auth and session",
+      "role": "branch",
+      "provenance": "proposed",
+      "evidence": []
+    },
+    {
+      "id": "e.playback-kafka",
+      "from": "svc.playback",
+      "to": "queue.kafka",
+      "type": "async",
+      "label": "view events",
+      "role": "async",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.kafka-analytics",
+      "from": "queue.kafka",
+      "to": "svc.analytics",
+      "type": "async",
+      "label": "consume events",
+      "role": "async",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.analytics-clickhouse",
+      "from": "svc.analytics",
+      "to": "db.clickhouse",
+      "type": "data",
+      "label": "write aggregates",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.accounts-postgres",
+      "from": "svc.accounts",
+      "to": "db.postgres",
+      "type": "data",
+      "label": "user accounts",
+      "role": "branch",
+      "provenance": "proposed",
+      "evidence": []
+    },
+    {
+      "id": "e.accounts-redis",
+      "from": "svc.accounts",
+      "to": "cache.redis",
+      "type": "data",
+      "label": "sessions",
+      "role": "branch",
+      "provenance": "proposed",
+      "evidence": []
+    }
+  ],
+  "views": [
+    {
+      "id": "view.architecture",
+      "type": "architecture",
+      "orientation": "LR",
+      "nodes": [
+        "actor.viewer",
+        "client.web",
+        "client.tv",
+        "edge.cdn",
+        "gw.api",
+        "svc.catalog",
+        "svc.playback",
+        "svc.accounts",
+        "queue.kafka",
+        "svc.analytics",
+        "db.clickhouse",
+        "db.postgres",
+        "cache.redis"
+      ],
+      "edges": [
+        "e.viewer-web",
+        "e.viewer-tv",
+        "e.web-cdn",
+        "e.tv-cdn",
+        "e.cdn-gateway",
+        "e.gateway-catalog",
+        "e.gateway-playback",
+        "e.gateway-accounts",
+        "e.playback-kafka",
+        "e.kafka-analytics",
+        "e.analytics-clickhouse",
+        "e.accounts-postgres",
+        "e.accounts-redis"
+      ],
+      "mainPath": [
+        "actor.viewer",
+        "client.web",
+        "edge.cdn",
+        "gw.api",
+        "svc.playback",
+        "queue.kafka",
+        "svc.analytics",
+        "db.clickhouse"
+      ]
+    }
+  ],
+  "semanticChecks": {
+    "allowedRoots": [
+      "actor.viewer"
+    ],
+    "allowedTerminals": [
+      "svc.catalog",
+      "db.clickhouse",
+      "db.postgres",
+      "cache.redis"
+    ],
+    "requiredEdges": [
+      {
+        "from": "gw.api",
+        "to": "svc.catalog",
+        "type": "sync"
+      },
+      {
+        "from": "gw.api",
+        "to": "svc.playback",
+        "type": "sync"
+      },
+      {
+        "from": "svc.playback",
+        "to": "queue.kafka",
+        "type": "async"
+      },
+      {
+        "from": "queue.kafka",
+        "to": "svc.analytics",
+        "type": "async"
+      },
+      {
+        "from": "svc.analytics",
+        "to": "db.clickhouse",
+        "type": "data"
+      }
+    ],
+    "requiredPaths": [
+      {
+        "from": "actor.viewer",
+        "to": "db.clickhouse"
+      },
+      {
+        "from": "client.tv",
+        "to": "gw.api"
+      }
+    ]
+  },
+  "boundaries": [
+    {
+      "id": "b.clients",
+      "label": "Client Apps",
+      "wraps": [
+        "client.web",
+        "client.tv"
+      ]
+    },
+    {
+      "id": "b.edge",
+      "label": "Edge",
+      "wraps": [
+        "edge.cdn",
+        "gw.api"
+      ]
+    },
+    {
+      "id": "b.services",
+      "label": "Core Services",
+      "wraps": [
+        "svc.catalog",
+        "svc.playback",
+        "svc.accounts"
+      ]
+    },
+    {
+      "id": "b.analytics",
+      "label": "Analytics Pipeline",
+      "wraps": [
+        "queue.kafka",
+        "svc.analytics",
+        "db.clickhouse"
+      ]
+    },
+    {
+      "id": "b.data",
+      "label": "Account Data",
+      "wraps": [
+        "db.postgres",
+        "cache.redis"
+      ]
+    }
+  ],
+  "guidedViews": [
+    {
+      "id": "g.access",
+      "label": "Viewer access",
+      "focus": [
+        "actor.viewer",
+        "client.web",
+        "client.tv",
+        "edge.cdn",
+        "gw.api"
+      ],
+      "note": "Web and TV apps reach the API gateway through the CDN."
+    },
+    {
+      "id": "g.services",
+      "label": "Gateway routing",
+      "focus": [
+        "gw.api",
+        "svc.catalog",
+        "svc.playback"
+      ],
+      "note": "The gateway routes to catalog, playback and recommendation."
+    },
+    {
+      "id": "g.events",
+      "label": "View event pipeline",
+      "focus": [
+        "svc.playback",
+        "queue.kafka",
+        "svc.analytics",
+        "db.clickhouse"
+      ],
+      "note": "Playback emits view events to Kafka; analytics aggregates into ClickHouse."
+    },
+    {
+      "id": "g.accounts",
+      "label": "Accounts and sessions",
+      "focus": [
+        "svc.accounts",
+        "db.postgres",
+        "cache.redis"
+      ],
+      "note": "Proposed account service owns PostgreSQL accounts and Redis sessions."
+    }
+  ],
+  "privacy": {
+    "classification": "public",
+    "boundary": "external-allowed"
+  }
+}

@@ -1,0 +1,337 @@
+{
+  "schemaVersion": "1",
+  "revision": 1,
+  "title": "Direct-to-S3 File Upload with Virus Scan",
+  "requirements": [
+    {
+      "id": "req.presigned",
+      "text": "Browser obtains a pre-signed S3 URL from the API",
+      "status": "stated"
+    },
+    {
+      "id": "req.direct-upload",
+      "text": "Browser uploads the file directly to S3",
+      "status": "stated"
+    },
+    {
+      "id": "req.notify",
+      "text": "Browser notifies the API after upload; API enqueues a virus scan",
+      "status": "stated"
+    },
+    {
+      "id": "req.scan-result",
+      "text": "Scanner marks the file clean or quarantined",
+      "status": "stated"
+    }
+  ],
+  "openQuestions": [
+    {
+      "id": "oq.status-store",
+      "text": "Where is the clean/quarantined status recorded (file metadata DB, S3 object tags, or a separate quarantine bucket)?",
+      "blockedBy": "e.scanner-files"
+    },
+    {
+      "id": "oq.scanner-read",
+      "text": "Does the scanner fetch the object from S3 itself, or receive the file another way?",
+      "blockedBy": "e.scanner-s3"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "actor.browser",
+      "kind": "actor",
+      "label": "Browser",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "svc.api",
+      "kind": "service",
+      "label": "API",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "store.s3",
+      "kind": "datastore",
+      "label": "S3 Bucket",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "queue.scan",
+      "kind": "queue",
+      "label": "Virus Scan Queue",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "svc.scanner",
+      "kind": "service",
+      "label": "Virus Scanner",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "store.files",
+      "kind": "datastore",
+      "label": "File Metadata Store",
+      "provenance": "inferred",
+      "evidence": []
+    }
+  ],
+  "edges": [
+    {
+      "id": "e.browser-api",
+      "from": "actor.browser",
+      "to": "svc.api",
+      "type": "sync",
+      "label": "get URL / notify upload",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.browser-s3",
+      "from": "actor.browser",
+      "to": "store.s3",
+      "type": "sync",
+      "label": "PUT file (pre-signed)",
+      "role": "branch",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.api-queue",
+      "from": "svc.api",
+      "to": "queue.scan",
+      "type": "async",
+      "label": "enqueue scan",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.queue-scanner",
+      "from": "queue.scan",
+      "to": "svc.scanner",
+      "type": "async",
+      "label": "scan job",
+      "role": "main",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "e.scanner-s3",
+      "from": "svc.scanner",
+      "to": "store.s3",
+      "type": "data",
+      "label": "fetch file",
+      "role": "branch",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "e.scanner-files",
+      "from": "svc.scanner",
+      "to": "store.files",
+      "type": "data",
+      "label": "mark clean / quarantined",
+      "role": "main",
+      "provenance": "inferred",
+      "evidence": []
+    }
+  ],
+  "views": [
+    {
+      "id": "view.upload-sequence",
+      "type": "sequence",
+      "nodes": [
+        "actor.browser",
+        "svc.api",
+        "store.s3",
+        "queue.scan",
+        "svc.scanner",
+        "store.files"
+      ],
+      "edges": [
+        "e.browser-api",
+        "e.browser-s3",
+        "e.api-queue",
+        "e.queue-scanner",
+        "e.scanner-s3",
+        "e.scanner-files"
+      ],
+      "sequence": {
+        "participants": [
+          "actor.browser",
+          "svc.api",
+          "store.s3",
+          "queue.scan",
+          "svc.scanner",
+          "store.files"
+        ],
+        "messages": [
+          {
+            "seq": 1,
+            "from": "actor.browser",
+            "to": "svc.api",
+            "label": "request pre-signed URL",
+            "kind": "call"
+          },
+          {
+            "seq": 2,
+            "from": "svc.api",
+            "to": "actor.browser",
+            "label": "pre-signed URL",
+            "kind": "return"
+          },
+          {
+            "seq": 3,
+            "from": "actor.browser",
+            "to": "store.s3",
+            "label": "PUT file",
+            "kind": "call"
+          },
+          {
+            "seq": 4,
+            "from": "store.s3",
+            "to": "actor.browser",
+            "label": "200 OK",
+            "kind": "return"
+          },
+          {
+            "seq": 5,
+            "from": "actor.browser",
+            "to": "svc.api",
+            "label": "notify upload complete",
+            "kind": "call"
+          },
+          {
+            "seq": 6,
+            "from": "svc.api",
+            "to": "queue.scan",
+            "label": "enqueue virus scan",
+            "kind": "async"
+          },
+          {
+            "seq": 7,
+            "from": "svc.api",
+            "to": "actor.browser",
+            "label": "202 accepted",
+            "kind": "return"
+          },
+          {
+            "seq": 8,
+            "from": "queue.scan",
+            "to": "svc.scanner",
+            "label": "deliver scan job",
+            "kind": "async"
+          },
+          {
+            "seq": 9,
+            "from": "svc.scanner",
+            "to": "store.s3",
+            "label": "fetch file",
+            "kind": "call"
+          },
+          {
+            "seq": 10,
+            "from": "store.s3",
+            "to": "svc.scanner",
+            "label": "file bytes",
+            "kind": "return"
+          },
+          {
+            "seq": 11,
+            "from": "svc.scanner",
+            "to": "store.files",
+            "label": "mark clean",
+            "kind": "call",
+            "fragment": {
+              "type": "alt",
+              "covers": [
+                11,
+                12
+              ]
+            }
+          },
+          {
+            "seq": 12,
+            "from": "svc.scanner",
+            "to": "store.files",
+            "label": "mark quarantined",
+            "kind": "call"
+          }
+        ]
+      },
+      "mainPath": [
+        "actor.browser",
+        "svc.api",
+        "queue.scan",
+        "svc.scanner",
+        "store.files"
+      ]
+    }
+  ],
+  "semanticChecks": {
+    "allowedRoots": [
+      "actor.browser"
+    ],
+    "allowedTerminals": [
+      "store.s3",
+      "store.files"
+    ],
+    "requiredEdges": [
+      {
+        "from": "actor.browser",
+        "to": "svc.api",
+        "type": "sync"
+      },
+      {
+        "from": "actor.browser",
+        "to": "store.s3",
+        "type": "sync"
+      },
+      {
+        "from": "svc.api",
+        "to": "queue.scan",
+        "type": "async"
+      }
+    ],
+    "requiredPaths": [
+      {
+        "from": "actor.browser",
+        "to": "svc.scanner"
+      }
+    ]
+  },
+  "boundaries": [],
+  "guidedViews": [
+    {
+      "id": "gv.upload",
+      "label": "Direct upload",
+      "focus": [
+        "actor.browser",
+        "svc.api",
+        "store.s3"
+      ],
+      "note": "Browser gets a pre-signed URL, then PUTs the file straight to S3."
+    },
+    {
+      "id": "gv.scan",
+      "label": "Async virus scan",
+      "focus": [
+        "svc.api",
+        "queue.scan",
+        "svc.scanner",
+        "store.files"
+      ],
+      "note": "Upload notification enqueues a scan; scanner marks clean or quarantined."
+    }
+  ],
+  "privacy": {
+    "classification": "public",
+    "boundary": "external-allowed"
+  }
+}

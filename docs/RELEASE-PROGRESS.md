@@ -21,11 +21,12 @@ Completed foundation: PR #11 clean-download instructions; PR #12 authoritative e
 | 12 | Subdirectory-first scanning and generated-file exclusions | Merged to main as PR #27; verified |
 | 13 | Truthful working-tree/commit evidence | Merged to main as PR #28; verified |
 | 14 | Accurate task/repair usage and provider-aware costs | Merged to main as PR #29; verified |
-| 15 | Supported framework extraction gaps and coverage measurements | PR #34 open against main; verified |
+| 15 | Supported framework extraction gaps and coverage measurements | Merged to main as PR #34; verified |
 | 16 | Retention, expiration and user deletion | Merged to main as PR #32; verified |
 | 17 | Threat model and before-egress content secret scanning | Merged to main as PR #30; verified |
 | 18 | Public abuse controls and honest exhausted-credit copy | Merged to main as PR #33; verified |
-| 19 | Evaluation oracle, representative real-provider results and human-review handoff | Pending |
+| 19 | Evaluation oracle, representative real-provider results and human-review handoff | PR #35 open against main; verified (named visual reviews await the owner) |
+| 19b | Hosted first-pass validity: give the model the evidence shape | Pending |
 | 20 | Cross-browser/accessibility/device acceptance, clean-install rerun and documented cleanup | Pending |
 
 Known gaps not yet fixed are tracked in one place: [OPEN-GAPS.md](OPEN-GAPS.md). Update it in every PR that finds or fixes a gap.

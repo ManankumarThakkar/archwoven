@@ -1,0 +1,441 @@
+{
+  "schemaVersion": "1",
+  "revision": 1,
+  "title": "Online Course Platform Data Model",
+  "requirements": [
+    {
+      "id": "req.courses",
+      "text": "Instructors create courses",
+      "status": "stated"
+    },
+    {
+      "id": "req.lessons",
+      "text": "Courses contain ordered lessons",
+      "status": "stated"
+    },
+    {
+      "id": "req.enroll",
+      "text": "Students enroll in courses",
+      "status": "stated"
+    },
+    {
+      "id": "req.progress",
+      "text": "Each enrollment tracks progress per lesson",
+      "status": "stated"
+    },
+    {
+      "id": "req.cert",
+      "text": "Each enrollment has a final certificate",
+      "status": "stated"
+    }
+  ],
+  "openQuestions": [
+    {
+      "id": "q.coauthors",
+      "text": "Can a course have multiple instructors (co-authors)? Currently modeled as one instructor per course.",
+      "blockedBy": "e.instructor-course"
+    },
+    {
+      "id": "q.users",
+      "text": "Can one person be both instructor and student? If so, a shared user entity may be preferable.",
+      "blockedBy": null
+    }
+  ],
+  "nodes": [
+    {
+      "id": "entity.instructor",
+      "kind": "entity",
+      "label": "Instructor",
+      "provenance": "user-specified",
+      "evidence": [],
+      "fields": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "key": "pk"
+        },
+        {
+          "name": "email",
+          "type": "string",
+          "key": "uk"
+        },
+        {
+          "name": "name",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "id": "entity.course",
+      "kind": "entity",
+      "label": "Course",
+      "provenance": "user-specified",
+      "evidence": [],
+      "fields": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "key": "pk"
+        },
+        {
+          "name": "instructor_id",
+          "type": "uuid",
+          "key": "fk"
+        },
+        {
+          "name": "title",
+          "type": "string"
+        },
+        {
+          "name": "published_at",
+          "type": "timestamp"
+        }
+      ]
+    },
+    {
+      "id": "entity.lesson",
+      "kind": "entity",
+      "label": "Lesson",
+      "provenance": "user-specified",
+      "evidence": [],
+      "fields": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "key": "pk"
+        },
+        {
+          "name": "course_id",
+          "type": "uuid",
+          "key": "fk"
+        },
+        {
+          "name": "position",
+          "type": "int"
+        },
+        {
+          "name": "title",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "id": "entity.student",
+      "kind": "entity",
+      "label": "Student",
+      "provenance": "user-specified",
+      "evidence": [],
+      "fields": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "key": "pk"
+        },
+        {
+          "name": "email",
+          "type": "string",
+          "key": "uk"
+        },
+        {
+          "name": "name",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "id": "entity.enrollment",
+      "kind": "entity",
+      "label": "Enrollment",
+      "provenance": "user-specified",
+      "evidence": [],
+      "fields": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "key": "pk"
+        },
+        {
+          "name": "student_id",
+          "type": "uuid",
+          "key": "fk"
+        },
+        {
+          "name": "course_id",
+          "type": "uuid",
+          "key": "fk"
+        },
+        {
+          "name": "enrolled_at",
+          "type": "timestamp"
+        },
+        {
+          "name": "status",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "id": "entity.lesson_progress",
+      "kind": "entity",
+      "label": "Lesson Progress",
+      "provenance": "user-specified",
+      "evidence": [],
+      "fields": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "key": "pk"
+        },
+        {
+          "name": "enrollment_id",
+          "type": "uuid",
+          "key": "fk"
+        },
+        {
+          "name": "lesson_id",
+          "type": "uuid",
+          "key": "fk"
+        },
+        {
+          "name": "status",
+          "type": "string"
+        },
+        {
+          "name": "completed_at",
+          "type": "timestamp"
+        }
+      ]
+    },
+    {
+      "id": "entity.certificate",
+      "kind": "entity",
+      "label": "Certificate",
+      "provenance": "user-specified",
+      "evidence": [],
+      "fields": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "key": "pk"
+        },
+        {
+          "name": "enrollment_id",
+          "type": "uuid",
+          "key": "uk"
+        },
+        {
+          "name": "serial",
+          "type": "string",
+          "key": "uk"
+        },
+        {
+          "name": "issued_at",
+          "type": "timestamp"
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "e.instructor-course",
+      "from": "entity.instructor",
+      "to": "entity.course",
+      "type": "relation",
+      "label": "creates",
+      "cardinality": "1:N",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.course-lesson",
+      "from": "entity.course",
+      "to": "entity.lesson",
+      "type": "relation",
+      "label": "contains (ordered)",
+      "cardinality": "1:N",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.student-enrollment",
+      "from": "entity.student",
+      "to": "entity.enrollment",
+      "type": "relation",
+      "label": "enrolls",
+      "cardinality": "1:N",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.course-enrollment",
+      "from": "entity.course",
+      "to": "entity.enrollment",
+      "type": "relation",
+      "label": "has enrollments",
+      "cardinality": "1:N",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.enrollment-progress",
+      "from": "entity.enrollment",
+      "to": "entity.lesson_progress",
+      "type": "relation",
+      "label": "tracks",
+      "cardinality": "1:N",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.lesson-progress",
+      "from": "entity.lesson",
+      "to": "entity.lesson_progress",
+      "type": "relation",
+      "label": "progress on",
+      "cardinality": "1:N",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.enrollment-certificate",
+      "from": "entity.enrollment",
+      "to": "entity.certificate",
+      "type": "relation",
+      "label": "earns",
+      "cardinality": "1:1",
+      "provenance": "user-specified",
+      "evidence": []
+    }
+  ],
+  "views": [
+    {
+      "id": "view.er",
+      "type": "er",
+      "orientation": "LR",
+      "nodes": [
+        "entity.instructor",
+        "entity.course",
+        "entity.lesson",
+        "entity.student",
+        "entity.enrollment",
+        "entity.lesson_progress",
+        "entity.certificate"
+      ],
+      "edges": [
+        "e.instructor-course",
+        "e.course-lesson",
+        "e.student-enrollment",
+        "e.course-enrollment",
+        "e.enrollment-progress",
+        "e.lesson-progress",
+        "e.enrollment-certificate"
+      ]
+    }
+  ],
+  "semanticChecks": {
+    "allowedRoots": [
+      "entity.instructor",
+      "entity.student"
+    ],
+    "allowedTerminals": [
+      "entity.lesson_progress",
+      "entity.certificate"
+    ],
+    "requiredEdges": [
+      {
+        "from": "entity.instructor",
+        "to": "entity.course",
+        "type": "relation"
+      },
+      {
+        "from": "entity.course",
+        "to": "entity.lesson",
+        "type": "relation"
+      },
+      {
+        "from": "entity.student",
+        "to": "entity.enrollment",
+        "type": "relation"
+      },
+      {
+        "from": "entity.course",
+        "to": "entity.enrollment",
+        "type": "relation"
+      },
+      {
+        "from": "entity.enrollment",
+        "to": "entity.lesson_progress",
+        "type": "relation"
+      },
+      {
+        "from": "entity.lesson",
+        "to": "entity.lesson_progress",
+        "type": "relation"
+      },
+      {
+        "from": "entity.enrollment",
+        "to": "entity.certificate",
+        "type": "relation"
+      }
+    ],
+    "requiredPaths": []
+  },
+  "boundaries": [
+    {
+      "id": "b.catalog",
+      "label": "Course Catalog",
+      "wraps": [
+        "entity.instructor",
+        "entity.course",
+        "entity.lesson"
+      ]
+    },
+    {
+      "id": "b.learning",
+      "label": "Learning Records",
+      "wraps": [
+        "entity.student",
+        "entity.enrollment",
+        "entity.lesson_progress",
+        "entity.certificate"
+      ]
+    }
+  ],
+  "guidedViews": [
+    {
+      "id": "g.catalog",
+      "label": "Courses and lessons",
+      "focus": [
+        "entity.instructor",
+        "entity.course",
+        "entity.lesson"
+      ],
+      "note": "Instructors author courses; lessons are ordered by position within a course."
+    },
+    {
+      "id": "g.enrollment",
+      "label": "Enrollment",
+      "focus": [
+        "entity.student",
+        "entity.enrollment",
+        "entity.course"
+      ],
+      "note": "Enrollment links a student to a course."
+    },
+    {
+      "id": "g.progress",
+      "label": "Progress and certificate",
+      "focus": [
+        "entity.enrollment",
+        "entity.lesson_progress",
+        "entity.lesson",
+        "entity.certificate"
+      ],
+      "note": "Per-lesson progress rows per enrollment; one final certificate per enrollment."
+    }
+  ],
+  "privacy": {
+    "classification": "public",
+    "boundary": "external-allowed"
+  }
+}

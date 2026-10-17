@@ -4,6 +4,7 @@
   "subdir": "backend",
   "framework": "fastapi",
   "method": "Hand-checked by reading every file under backend/app at the pinned commit. Evidence is relative to backend/. Labels follow the extractor's naming conventions (router modules as <module>-router, SQLModel tables by their default lower-case table name).",
+  "evidenceRoot": "backend/",
   "excluded": [
     "app.frontend(\"/\", ...) in app/main.py serves the static frontend; it is a mount, not an API endpoint.",
     "Pydantic request/response models in app/models.py without table=True are not database tables.",

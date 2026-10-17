@@ -1,0 +1,6 @@
+{"ts":"2026-10-16T04:34:04.309Z","runner":"postmerge-d6f28bcd","case":"todo-api","gate":"semantic","pass":false,"missing":["node \"orders\" (labels: Order Service|Orders, type: service)"]}
+{"ts":"2026-10-16T04:34:04.347Z","runner":"postmerge-d6f28bcd","case":"todo-api","gate":"validate","pass":true,"errors":[]}
+{"ts":"2026-10-16T04:34:04.389Z","runner":"postmerge-d6f28bcd","case":"boring-crud","gate":"semantic","pass":false,"missing":["node \"db\" (labels: PostgreSQL|DB, type: datastore)"]}
+{"ts":"2026-10-16T04:34:04.431Z","runner":"postmerge-d6f28bcd","case":"boring-crud","gate":"validate","pass":true,"errors":[]}
+{"ts":"2026-10-16T04:34:04.470Z","runner":"postmerge-d6f28bcd","case":"checkout","gate":"semantic","pass":true,"missing":[]}
+{"ts":"2026-10-16T04:34:04.509Z","runner":"postmerge-d6f28bcd","case":"checkout","gate":"validate","pass":true,"errors":[]}

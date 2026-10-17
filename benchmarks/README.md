@@ -32,4 +32,13 @@ Receipts land in `results/<UTC-date>-<runner>.jsonl`; failures pin
 exact build. Defect tags: clipping, node-overlap, label-overlap, hidden-route,
 stacked-edge, weak-hierarchy, unbalanced-whitespace, theme-contrast.
 
-**Current status:** both harnesses and their selftests are implemented. The post-merge real-provider Suite A run produced three schema-valid models; its strict semantic matcher passed 1/3 because two label aliases were rejected, and all named-human visual reviews remain missing. Suite A is ineligible; an API key is no longer the blocker. Suite B has a clean receipt pinned to merged commit `d6f28bcd`, with all eight deterministic cases passing. See [post-merge audit](../docs/POST-MERGE-AUDIT.md) for exact limits and remaining work.
+## provider-eval
+
+Representative real-provider results: first-pass validity, repair success, latency, cost and cache savings across every diagram type, refinements and repository imports, with diagram-level accuracy against ground truth. See [provider-eval/README.md](provider-eval/README.md).
+
+**Current status:** all three harnesses and their selftests are implemented.
+- **Suite A:** the oracle matches whole names after normalising case, punctuation, plurals and parentheticals, and one node may satisfy only one requirement. The two 2026-10-16 rejections were false negatives: the original receipt is kept, and a re-check of the same models passes. A fresh real-provider run (2026-10-17) passed the semantic and validation gates 3/3. Suite A stays ineligible until a named person records the visual reviews ([ordinary-model-floor/review/](ordinary-model-floor/review/README.md)).
+- **Suite B:** a clean receipt is pinned to merged commit `d6f28bcd`, with all eight deterministic cases passing.
+- **Provider evaluation (2026-10-17):** 30/30 cases succeeded, but no hosted description or import was valid on the first attempt; see its README for the cause.
+
+See [post-merge audit](../docs/POST-MERGE-AUDIT.md) for exact limits and remaining work.

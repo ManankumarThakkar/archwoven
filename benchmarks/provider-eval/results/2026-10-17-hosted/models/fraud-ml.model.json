@@ -1,0 +1,268 @@
+{
+  "schemaVersion": "1",
+  "revision": 1,
+  "title": "Fraud Detection System",
+  "requirements": [
+    {
+      "id": "req.score-each-txn",
+      "text": "Payments service sends each transaction to the scoring service and receives a risk score",
+      "status": "stated"
+    },
+    {
+      "id": "req.model-s3",
+      "text": "Scoring service loads its model from S3",
+      "status": "stated"
+    },
+    {
+      "id": "req.features-redis",
+      "text": "Scoring service reads features from a Redis feature store",
+      "status": "stated"
+    },
+    {
+      "id": "req.log-bq",
+      "text": "Scoring decisions are logged to BigQuery",
+      "status": "stated"
+    },
+    {
+      "id": "req.weekly-retrain",
+      "text": "A weekly Airflow pipeline retrains the model from logged decisions",
+      "status": "stated"
+    }
+  ],
+  "openQuestions": [
+    {
+      "id": "q.feature-ingest",
+      "text": "What process populates and refreshes the Redis feature store?",
+      "blockedBy": null
+    },
+    {
+      "id": "q.model-publish",
+      "text": "Does the Airflow pipeline publish retrained models directly to S3?",
+      "blockedBy": "e.airflow-s3"
+    },
+    {
+      "id": "q.log-mode",
+      "text": "Is decision logging to BigQuery asynchronous (streaming) or synchronous?",
+      "blockedBy": "e.scoring-bigquery"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "svc.payments",
+      "kind": "service",
+      "label": "Payments Service",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "svc.scoring",
+      "kind": "service",
+      "label": "Scoring Service",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "ds.s3-models",
+      "kind": "datastore",
+      "label": "S3 Model Store",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "ds.redis-features",
+      "kind": "datastore",
+      "label": "Redis Feature Store",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "ds.bigquery",
+      "kind": "datastore",
+      "label": "BigQuery Decision Log",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "svc.airflow-retrain",
+      "kind": "service",
+      "label": "Airflow Weekly Retraining",
+      "provenance": "user-specified",
+      "evidence": []
+    }
+  ],
+  "edges": [
+    {
+      "id": "e.payments-scoring",
+      "from": "svc.payments",
+      "to": "svc.scoring",
+      "type": "sync",
+      "label": "score txn, get risk score",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.scoring-s3",
+      "from": "svc.scoring",
+      "to": "ds.s3-models",
+      "type": "data",
+      "label": "load model",
+      "role": "branch",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.scoring-redis",
+      "from": "svc.scoring",
+      "to": "ds.redis-features",
+      "type": "data",
+      "label": "read features",
+      "role": "branch",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.scoring-bigquery",
+      "from": "svc.scoring",
+      "to": "ds.bigquery",
+      "type": "async",
+      "label": "log decision",
+      "role": "async",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "e.bigquery-airflow",
+      "from": "ds.bigquery",
+      "to": "svc.airflow-retrain",
+      "type": "data",
+      "label": "weekly training data",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.airflow-s3",
+      "from": "svc.airflow-retrain",
+      "to": "ds.s3-models",
+      "type": "data",
+      "label": "publish retrained model",
+      "role": "main",
+      "provenance": "inferred",
+      "evidence": []
+    }
+  ],
+  "views": [
+    {
+      "id": "view.architecture",
+      "type": "architecture",
+      "orientation": "LR",
+      "nodes": [
+        "svc.payments",
+        "svc.scoring",
+        "ds.s3-models",
+        "ds.redis-features",
+        "ds.bigquery",
+        "svc.airflow-retrain"
+      ],
+      "edges": [
+        "e.payments-scoring",
+        "e.scoring-s3",
+        "e.scoring-redis",
+        "e.scoring-bigquery",
+        "e.bigquery-airflow",
+        "e.airflow-s3"
+      ],
+      "mainPath": [
+        "svc.payments",
+        "svc.scoring",
+        "ds.bigquery",
+        "svc.airflow-retrain",
+        "ds.s3-models"
+      ]
+    }
+  ],
+  "semanticChecks": {
+    "allowedRoots": [
+      "svc.payments"
+    ],
+    "allowedTerminals": [
+      "ds.s3-models",
+      "ds.redis-features"
+    ],
+    "requiredEdges": [
+      {
+        "from": "svc.payments",
+        "to": "svc.scoring",
+        "type": "sync"
+      },
+      {
+        "from": "svc.scoring",
+        "to": "ds.s3-models",
+        "type": "data"
+      },
+      {
+        "from": "svc.scoring",
+        "to": "ds.redis-features",
+        "type": "data"
+      },
+      {
+        "from": "ds.bigquery",
+        "to": "svc.airflow-retrain",
+        "type": "data"
+      }
+    ],
+    "requiredPaths": [
+      {
+        "from": "svc.payments",
+        "to": "svc.airflow-retrain"
+      }
+    ]
+  },
+  "boundaries": [
+    {
+      "id": "b.online",
+      "label": "Online Scoring",
+      "wraps": [
+        "svc.payments",
+        "svc.scoring",
+        "ds.redis-features"
+      ]
+    },
+    {
+      "id": "b.offline",
+      "label": "Offline Training",
+      "wraps": [
+        "ds.bigquery",
+        "svc.airflow-retrain"
+      ]
+    }
+  ],
+  "guidedViews": [
+    {
+      "id": "g.scoring",
+      "label": "Real-time scoring",
+      "focus": [
+        "svc.payments",
+        "svc.scoring",
+        "ds.s3-models",
+        "ds.redis-features"
+      ],
+      "note": "Each transaction is scored using the S3 model and Redis features."
+    },
+    {
+      "id": "g.retrain",
+      "label": "Retraining loop",
+      "focus": [
+        "ds.bigquery",
+        "svc.airflow-retrain",
+        "ds.s3-models"
+      ],
+      "note": "Logged decisions feed a weekly Airflow retrain; publishing to S3 is inferred."
+    }
+  ],
+  "privacy": {
+    "classification": "public",
+    "boundary": "external-allowed"
+  }
+}

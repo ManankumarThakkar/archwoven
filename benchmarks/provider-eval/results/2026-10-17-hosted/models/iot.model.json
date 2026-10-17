@@ -1,0 +1,298 @@
+{
+  "schemaVersion": "1",
+  "revision": 1,
+  "title": "Temperature Sensor Telemetry Platform",
+  "requirements": [
+    {
+      "id": "req.ingest",
+      "text": "Thousands of temperature sensors publish readings over MQTT to a broker.",
+      "status": "stated"
+    },
+    {
+      "id": "req.validate",
+      "text": "An ingestion service validates readings and writes them to TimescaleDB.",
+      "status": "stated"
+    },
+    {
+      "id": "req.alert",
+      "text": "An alerting service watches thresholds and pages on-call engineers through PagerDuty.",
+      "status": "stated"
+    },
+    {
+      "id": "req.dashboard",
+      "text": "A Grafana dashboard reads from TimescaleDB.",
+      "status": "stated"
+    }
+  ],
+  "openQuestions": [
+    {
+      "id": "oq.alert-source",
+      "text": "Does the alerting service query TimescaleDB or subscribe to the MQTT broker directly?",
+      "blockedBy": "e.alerting-timescaledb"
+    },
+    {
+      "id": "oq.invalid-readings",
+      "text": "What happens to readings that fail validation (drop, log, dead-letter)?",
+      "blockedBy": null
+    }
+  ],
+  "nodes": [
+    {
+      "id": "actor.sensors",
+      "kind": "actor",
+      "label": "Temperature Sensors",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "queue.mqtt-broker",
+      "kind": "queue",
+      "label": "MQTT Broker",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "svc.ingestion",
+      "kind": "service",
+      "label": "Ingestion Service",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "ds.timescaledb",
+      "kind": "datastore",
+      "label": "TimescaleDB",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "svc.alerting",
+      "kind": "service",
+      "label": "Alerting Service",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "ext.pagerduty",
+      "kind": "external",
+      "label": "PagerDuty",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "actor.oncall",
+      "kind": "actor",
+      "label": "On-call Engineers",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "svc.grafana",
+      "kind": "service",
+      "label": "Grafana Dashboard",
+      "provenance": "user-specified",
+      "evidence": []
+    }
+  ],
+  "edges": [
+    {
+      "id": "e.sensors-broker",
+      "from": "actor.sensors",
+      "to": "queue.mqtt-broker",
+      "type": "async",
+      "label": "publish readings (MQTT)",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.broker-ingestion",
+      "from": "queue.mqtt-broker",
+      "to": "svc.ingestion",
+      "type": "async",
+      "label": "deliver readings",
+      "role": "main",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "e.ingestion-timescaledb",
+      "from": "svc.ingestion",
+      "to": "ds.timescaledb",
+      "type": "data",
+      "label": "write validated readings",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.alerting-timescaledb",
+      "from": "svc.alerting",
+      "to": "ds.timescaledb",
+      "type": "data",
+      "label": "read readings for thresholds",
+      "role": "branch",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "e.alerting-pagerduty",
+      "from": "svc.alerting",
+      "to": "ext.pagerduty",
+      "type": "sync",
+      "label": "trigger incident",
+      "role": "branch",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.pagerduty-oncall",
+      "from": "ext.pagerduty",
+      "to": "actor.oncall",
+      "type": "async",
+      "label": "page",
+      "role": "async",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.grafana-timescaledb",
+      "from": "svc.grafana",
+      "to": "ds.timescaledb",
+      "type": "data",
+      "label": "query metrics",
+      "role": "branch",
+      "provenance": "user-specified",
+      "evidence": []
+    }
+  ],
+  "views": [
+    {
+      "id": "view.architecture",
+      "type": "architecture",
+      "orientation": "LR",
+      "nodes": [
+        "actor.sensors",
+        "queue.mqtt-broker",
+        "svc.ingestion",
+        "ds.timescaledb",
+        "svc.alerting",
+        "ext.pagerduty",
+        "actor.oncall",
+        "svc.grafana"
+      ],
+      "edges": [
+        "e.sensors-broker",
+        "e.broker-ingestion",
+        "e.ingestion-timescaledb",
+        "e.alerting-timescaledb",
+        "e.alerting-pagerduty",
+        "e.pagerduty-oncall",
+        "e.grafana-timescaledb"
+      ],
+      "mainPath": [
+        "actor.sensors",
+        "queue.mqtt-broker",
+        "svc.ingestion",
+        "ds.timescaledb"
+      ]
+    }
+  ],
+  "semanticChecks": {
+    "allowedRoots": [
+      "actor.sensors",
+      "svc.alerting",
+      "svc.grafana"
+    ],
+    "allowedTerminals": [
+      "ds.timescaledb",
+      "actor.oncall"
+    ],
+    "requiredEdges": [
+      {
+        "from": "actor.sensors",
+        "to": "queue.mqtt-broker",
+        "type": "async"
+      },
+      {
+        "from": "svc.ingestion",
+        "to": "ds.timescaledb",
+        "type": "data"
+      },
+      {
+        "from": "svc.alerting",
+        "to": "ext.pagerduty",
+        "type": "sync"
+      },
+      {
+        "from": "svc.grafana",
+        "to": "ds.timescaledb",
+        "type": "data"
+      }
+    ],
+    "requiredPaths": [
+      {
+        "from": "actor.sensors",
+        "to": "ds.timescaledb"
+      },
+      {
+        "from": "svc.alerting",
+        "to": "actor.oncall"
+      }
+    ]
+  },
+  "boundaries": [
+    {
+      "id": "b.ingestion",
+      "label": "Ingestion Pipeline",
+      "wraps": [
+        "queue.mqtt-broker",
+        "svc.ingestion"
+      ]
+    },
+    {
+      "id": "b.monitoring",
+      "label": "Monitoring and Alerting",
+      "wraps": [
+        "svc.alerting",
+        "svc.grafana"
+      ]
+    }
+  ],
+  "guidedViews": [
+    {
+      "id": "g.ingest",
+      "label": "Sensor ingestion",
+      "focus": [
+        "actor.sensors",
+        "queue.mqtt-broker",
+        "svc.ingestion",
+        "ds.timescaledb"
+      ],
+      "note": "Sensors publish over MQTT; the ingestion service validates readings and stores them in TimescaleDB."
+    },
+    {
+      "id": "g.alerting",
+      "label": "Threshold alerting",
+      "focus": [
+        "svc.alerting",
+        "ext.pagerduty",
+        "actor.oncall"
+      ],
+      "note": "The alerting service checks thresholds and pages on-call engineers via PagerDuty."
+    },
+    {
+      "id": "g.dashboard",
+      "label": "Dashboards",
+      "focus": [
+        "svc.grafana",
+        "ds.timescaledb"
+      ],
+      "note": "Grafana reads time-series data from TimescaleDB for visualization."
+    }
+  ],
+  "privacy": {
+    "classification": "public",
+    "boundary": "external-allowed"
+  }
+}

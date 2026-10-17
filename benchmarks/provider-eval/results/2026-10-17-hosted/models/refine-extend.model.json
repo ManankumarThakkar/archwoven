@@ -1,0 +1,413 @@
+{
+  "schemaVersion": "1",
+  "revision": 2,
+  "parentId": 1,
+  "title": "Internal HR Leave Management Tool",
+  "requirements": [
+    {
+      "id": "req.sso",
+      "text": "Employees sign in with Okta SSO",
+      "status": "stated"
+    },
+    {
+      "id": "req.leave-submit",
+      "text": "Employees submit leave requests through a React app to a Django backend",
+      "status": "stated"
+    },
+    {
+      "id": "req.storage",
+      "text": "Django backend stores data in MySQL",
+      "status": "stated"
+    },
+    {
+      "id": "req.notify",
+      "text": "Managers are emailed through SendGrid",
+      "status": "stated"
+    },
+    {
+      "id": "req.workday-sync",
+      "text": "Nightly Celery job syncs leave balances to Workday",
+      "status": "stated"
+    }
+  ],
+  "openQuestions": [
+    {
+      "id": "q.broker",
+      "text": "Which Celery broker is used (Redis, RabbitMQ)?",
+      "blockedBy": "queue.celery-broker"
+    },
+    {
+      "id": "q.manager-approval",
+      "text": "Do managers approve requests in the React app or only receive email?",
+      "blockedBy": null
+    }
+  ],
+  "nodes": [
+    {
+      "id": "actor.employee",
+      "kind": "actor",
+      "label": "Employee",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "actor.manager",
+      "kind": "actor",
+      "label": "Manager",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "svc.webapp",
+      "kind": "component",
+      "label": "React Web App",
+      "provenance": "user-specified",
+      "evidence": [],
+      "group": "internal"
+    },
+    {
+      "id": "svc.backend",
+      "kind": "service",
+      "label": "Django Backend",
+      "provenance": "user-specified",
+      "evidence": [],
+      "group": "internal"
+    },
+    {
+      "id": "ds.mysql",
+      "kind": "datastore",
+      "label": "MySQL",
+      "provenance": "user-specified",
+      "evidence": [],
+      "group": "internal"
+    },
+    {
+      "id": "svc.celery-beat",
+      "kind": "component",
+      "label": "Celery Beat Scheduler",
+      "provenance": "inferred",
+      "evidence": [],
+      "group": "internal"
+    },
+    {
+      "id": "queue.celery-broker",
+      "kind": "queue",
+      "label": "Celery Broker",
+      "provenance": "inferred",
+      "evidence": [],
+      "group": "internal"
+    },
+    {
+      "id": "svc.celery-worker",
+      "kind": "service",
+      "label": "Celery Worker (Nightly Sync)",
+      "provenance": "user-specified",
+      "evidence": [],
+      "group": "internal"
+    },
+    {
+      "id": "ext.okta",
+      "kind": "external",
+      "label": "Okta SSO",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "ext.sendgrid",
+      "kind": "external",
+      "label": "SendGrid",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "ext.workday",
+      "kind": "external",
+      "label": "Workday",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "ds.s3-reports",
+      "kind": "datastore",
+      "label": "S3 Bucket (CSV Reports)",
+      "provenance": "user-specified",
+      "evidence": []
+    }
+  ],
+  "edges": [
+    {
+      "id": "e.employee-webapp",
+      "from": "actor.employee",
+      "to": "svc.webapp",
+      "type": "sync",
+      "label": "Uses app",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.webapp-okta",
+      "from": "svc.webapp",
+      "to": "ext.okta",
+      "type": "sync",
+      "label": "SSO sign-in",
+      "role": "branch",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.webapp-backend",
+      "from": "svc.webapp",
+      "to": "svc.backend",
+      "type": "sync",
+      "label": "Submit leave request",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.backend-okta",
+      "from": "svc.backend",
+      "to": "ext.okta",
+      "type": "sync",
+      "label": "Validate tokens",
+      "role": "branch",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "e.backend-mysql",
+      "from": "svc.backend",
+      "to": "ds.mysql",
+      "type": "data",
+      "label": "Read/write leave data",
+      "role": "branch",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.backend-sendgrid",
+      "from": "svc.backend",
+      "to": "ext.sendgrid",
+      "type": "sync",
+      "label": "Send manager email",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.sendgrid-manager",
+      "from": "ext.sendgrid",
+      "to": "actor.manager",
+      "type": "async",
+      "label": "Email notification",
+      "role": "main",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.beat-broker",
+      "from": "svc.celery-beat",
+      "to": "queue.celery-broker",
+      "type": "async",
+      "label": "Enqueue nightly sync",
+      "role": "async",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "e.broker-worker",
+      "from": "queue.celery-broker",
+      "to": "svc.celery-worker",
+      "type": "async",
+      "label": "Deliver sync task",
+      "role": "async",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "e.worker-mysql",
+      "from": "svc.celery-worker",
+      "to": "ds.mysql",
+      "type": "data",
+      "label": "Read leave balances",
+      "role": "branch",
+      "provenance": "inferred",
+      "evidence": []
+    },
+    {
+      "id": "e.worker-workday",
+      "from": "svc.celery-worker",
+      "to": "ext.workday",
+      "type": "sync",
+      "label": "Sync leave balances",
+      "role": "async",
+      "provenance": "user-specified",
+      "evidence": []
+    },
+    {
+      "id": "e.worker-s3",
+      "from": "svc.celery-worker",
+      "to": "ds.s3-reports",
+      "type": "data",
+      "label": "Export CSV report",
+      "provenance": "user-specified",
+      "evidence": []
+    }
+  ],
+  "views": [
+    {
+      "id": "view.architecture",
+      "type": "architecture",
+      "orientation": "LR",
+      "nodes": [
+        "actor.employee",
+        "actor.manager",
+        "svc.webapp",
+        "svc.backend",
+        "ds.mysql",
+        "svc.celery-beat",
+        "queue.celery-broker",
+        "svc.celery-worker",
+        "ext.okta",
+        "ext.sendgrid",
+        "ext.workday",
+        "ds.s3-reports"
+      ],
+      "edges": [
+        "e.employee-webapp",
+        "e.webapp-okta",
+        "e.webapp-backend",
+        "e.backend-okta",
+        "e.backend-mysql",
+        "e.backend-sendgrid",
+        "e.sendgrid-manager",
+        "e.beat-broker",
+        "e.broker-worker",
+        "e.worker-mysql",
+        "e.worker-workday",
+        "e.worker-s3"
+      ],
+      "mainPath": [
+        "actor.employee",
+        "svc.webapp",
+        "svc.backend",
+        "ext.sendgrid",
+        "actor.manager"
+      ]
+    }
+  ],
+  "semanticChecks": {
+    "allowedRoots": [
+      "actor.employee",
+      "svc.celery-beat"
+    ],
+    "allowedTerminals": [
+      "actor.manager",
+      "ds.mysql",
+      "ext.okta",
+      "ext.workday",
+      "ds.s3-reports"
+    ],
+    "requiredEdges": [
+      {
+        "from": "svc.webapp",
+        "to": "svc.backend",
+        "type": "sync"
+      },
+      {
+        "from": "svc.backend",
+        "to": "ds.mysql",
+        "type": "data"
+      },
+      {
+        "from": "svc.backend",
+        "to": "ext.sendgrid",
+        "type": "sync"
+      },
+      {
+        "from": "svc.celery-worker",
+        "to": "ext.workday",
+        "type": "sync"
+      }
+    ],
+    "requiredPaths": [
+      {
+        "from": "actor.employee",
+        "to": "ds.mysql"
+      },
+      {
+        "from": "actor.employee",
+        "to": "actor.manager"
+      },
+      {
+        "from": "svc.celery-beat",
+        "to": "ext.workday"
+      }
+    ]
+  },
+  "boundaries": [
+    {
+      "id": "boundary.internal",
+      "label": "Internal HR Platform",
+      "wraps": [
+        "svc.webapp",
+        "svc.backend",
+        "ds.mysql",
+        "svc.celery-beat",
+        "queue.celery-broker",
+        "svc.celery-worker"
+      ]
+    },
+    {
+      "id": "boundary.saas",
+      "label": "Third-party SaaS",
+      "wraps": [
+        "ext.okta",
+        "ext.sendgrid",
+        "ext.workday"
+      ]
+    }
+  ],
+  "guidedViews": [
+    {
+      "id": "gv.signin",
+      "label": "Sign-in",
+      "focus": [
+        "actor.employee",
+        "svc.webapp",
+        "ext.okta",
+        "svc.backend"
+      ],
+      "note": "Employees authenticate via Okta SSO; backend validates tokens."
+    },
+    {
+      "id": "gv.leave-request",
+      "label": "Leave request flow",
+      "focus": [
+        "svc.webapp",
+        "svc.backend",
+        "ds.mysql",
+        "ext.sendgrid",
+        "actor.manager"
+      ],
+      "note": "Requests are stored in MySQL and managers are emailed via SendGrid."
+    },
+    {
+      "id": "gv.nightly-sync",
+      "label": "Nightly Workday sync",
+      "focus": [
+        "svc.celery-beat",
+        "queue.celery-broker",
+        "svc.celery-worker",
+        "ds.mysql",
+        "ext.workday"
+      ],
+      "note": "A scheduled Celery task reads balances and pushes them to Workday."
+    }
+  ],
+  "privacy": {
+    "classification": "public",
+    "boundary": "external-allowed"
+  }
+}

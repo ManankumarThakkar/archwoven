@@ -18,7 +18,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { execFileSync, execSync } from 'node:child_process';
-import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -27,7 +27,7 @@ const argv = process.argv.slice(2);
 const flag = (name, dflt) => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : dflt; };
 const args = [];
 for (let i = 0; i < argv.length; i++) {
-  if (argv[i] === '--results-dir' || argv[i] === '--runner') { i++; continue; }
+  if (argv[i] === '--results-dir' || argv[i] === '--runner' || argv[i] === '--validator') { i++; continue; }
   if (argv[i].startsWith('--')) continue;
   args.push(argv[i]);
 }
@@ -35,10 +35,13 @@ const [cmd, ...rest] = args;
 const resultsDir = flag('--results-dir', join(here, 'results'));
 const runner = flag('--runner', process.env.USER ?? 'local');
 const p = (s) => (isAbsolute(s) ? s : resolve(here, s));
+// A fixed copy of the validator bundle for scratch runs, so a concurrent build rewriting dist/ cannot be read half-written.
+const validatorFile = flag('--validator') ? p(flag('--validator')) : undefined;
 const manifest = JSON.parse(readFileSync(join(here, 'manifest.json'), 'utf8'));
 const FIXTURES = { 'valid-full-extended': join(repoRoot, 'packages/model/src/fixtures/valid-full-extended.json') };
 
 async function loadValidator({ rebuild = false } = {}) {
+  if (validatorFile) return import(pathToFileURL(validatorFile).href);
   const dist = join(repoRoot, 'packages/model/dist/index.js');
   if (rebuild || !existsSync(dist)) execSync('pnpm --filter @archwoven/model build', { cwd: repoRoot, stdio: 'inherit' });
   return import(pathToFileURL(dist).href);
@@ -214,13 +217,17 @@ async function verify() {
     console.error(`verify: source checkout is ${sourceState}; commit the source changes and use a clean checkout for pinned evidence, or use --scratch --results-dir <temporary-directory> for an ineligible diagnostic run`);
     process.exit(1);
   }
+  if (!scratch && validatorFile) {
+    console.error('verify: pinned evidence builds the validator from source; --validator is only for --scratch runs');
+    process.exit(1);
+  }
   // A pinned run must not silently consume stale ignored dist/ output.
   const v = await loadValidator({ rebuild: !scratch });
   const results = manifest.cases.map((name) => runCase(readCase(join(here, 'cases', `${name}.case.json`)), v));
-  const dist = join(repoRoot, 'packages/model/dist/index.js');
+  const dist = validatorFile ?? join(repoRoot, 'packages/model/dist/index.js');
   const packageSha256 = existsSync(dist) ? createHash('sha256').update(readFileSync(dist)).digest('hex') : 'unbuilt';
   const distDir = dirname(dist);
-  const builtFiles = readdirSync(distDir, { recursive: true }).filter((name) => name.endsWith('.js')).sort();
+  const builtFiles = validatorFile ? [basename(dist)] : readdirSync(distDir, { recursive: true }).filter((name) => name.endsWith('.js')).sort();
   const validatorSha256 = fingerprint(builtFiles.map((name) => [name, readFileSync(join(distDir, name), 'utf8')]));
   const provenance = { mode: scratch ? 'scratch' : 'pinned', sourceState, validatorSha256 };
   const doc = { provenance, kind: 'repair-rounds-receipts', suite: manifest.suite, ts: new Date().toISOString(), runner, repositoryCommit, packageSha256, results };
