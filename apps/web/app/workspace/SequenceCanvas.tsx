@@ -13,8 +13,8 @@ const focusHash = (id: string | null) => {
   window.history.replaceState(null, '', encoded ? `#${encoded}` : window.location.pathname + window.location.search);
 };
 
-export function SequenceCanvas({ model, modelId, viewId, onSelect, onDeselect }: {
-  model: SystemModel; modelId: string; viewId: string; onSelect: (id: string) => void; onDeselect: () => void;
+export function SequenceCanvas({ model, modelId, viewId, permalinkVersion = 0, onSelect, onDeselect }: {
+  model: SystemModel; modelId: string; viewId: string; permalinkVersion?: number; onSelect: (id: string) => void; onDeselect: () => void;
 }) {
   const viewport = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState<number | null>(1);
@@ -31,9 +31,9 @@ export function SequenceCanvas({ model, modelId, viewId, onSelect, onDeselect }:
     const valid = id && seq?.participants.includes(id) && model.nodes.some(n => n.id === id) ? id : null;
     setFocused(valid); focusHash(valid);
     if (valid) onSelect(valid); else onDeselect();
-    // Reconcile saved selection when this model/view revision replaces the timeline.
+    // Reconcile selection after model/view replacement or external hash navigation.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modelId, viewId, model.revision]);
+  }, [modelId, viewId, model.revision, permalinkVersion]);
 
   const select = (id: string) => { setFocused(id); focusHash(id); onSelect(id); };
   if (!rendered.diagram) return <div className="aw-canvas" style={{ padding: 24 }} role="alert">{rendered.error}</div>;

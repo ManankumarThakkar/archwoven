@@ -65,6 +65,7 @@ export default function WorkspacePage() {
   const [summary, setSummary] = useState('');
   const [refining, setRefining] = useState(false);
   const [activeView, setActiveView] = useState<string>('');
+  const [permalinkVersion, setPermalinkVersion] = useState(0);
   const [remaining, setRemaining] = useState<number | null>(null);
   const [lastTask, setLastTask] = useState<TaskReport | null>(null);
   const usageSequence = useRef(0);
@@ -187,12 +188,21 @@ export default function WorkspacePage() {
   loadModelRef.current = loadModel;
   useEffect(() => {
     const onHashChange = () => {
-      const id = new URLSearchParams(window.location.hash.slice(1)).get('model');
-      if (id && id !== requestedModelRef.current) void loadModelRef.current(id);
+      const hash = new URLSearchParams(window.location.hash.slice(1));
+      const id = hash.get('model');
+      if (id && id !== requestedModelRef.current) { void loadModelRef.current(id); return; }
+      // Apply the view and interaction channels together, after the destination
+      // canvas renders. Our own replaceState writes never emit hashchange.
+      if (!model || (id && id !== modelId)) return;
+      const chosen = model.views.find(v => v.id === hash.get('view'))?.id ?? model.views[0]?.id ?? '';
+      setActiveView(chosen);
+      setPermalinkVersion(version => version + 1);
+      if (chosen) hash.set('view', chosen); else hash.delete('view');
+      window.history.replaceState(null, '', `#${hash}`);
     };
     window.addEventListener('hashchange', onHashChange);
     return () => window.removeEventListener('hashchange', onHashChange);
-  }, []);
+  }, [model, modelId]);
 
   const poll = async (jobId: string, preferredView?: ViewType) => {
     let runningSince: number | null = null;
@@ -586,7 +596,7 @@ export default function WorkspacePage() {
             {inDetail && expandedCount > 0 && model.nodes.some(n => n.provenance === 'source-supported') && <p role="note" className="aw-detail-caption aw-detail-source">Internals are inferred, not found in source.</p>}
             {driftLines.length > 0 && <div role="status" className="aw-detail-drift">{driftLines.map(line => <p key={line}>{line}</p>)}</div>}
             {inDetail && expandBlocker(model, detailFocus) === null && <ExpandInternals key={detailFocus} label={focusLabel} cost={deploy === 'hosted'} busy={refining} onExpand={hint => expand(detailFocus, hint)} />}
-            <div style={{ flex: 1, minHeight: 0 }}><Canvas model={model} modelId={modelId ?? ''} viewId={currentView?.id ?? ''} busy={refining} onMove={inDetail ? undefined : positions=>directEdit({type:'move',positions})} onSelect={setSelected} onDeselect={() => setSelected(null)} /></div>
+            <div style={{ flex: 1, minHeight: 0 }}><Canvas permalinkVersion={permalinkVersion} model={model} modelId={modelId ?? ''} viewId={currentView?.id ?? ''} busy={refining} onMove={inDetail ? undefined : positions=>directEdit({type:'move',positions})} onSelect={setSelected} onDeselect={() => setSelected(null)} /></div>
             <RefineBar busy={refining} summary={summary} canUndo={history.length > 1} onRefine={refine} onUndo={doUndo} onExport={doExport} sources={exportSources}
               onDelete={() => { void deleteDiagram(); }} retention={deploy === 'local' ? 'Stored on this machine until you delete it.' : 'Kept for 30 days after the last change.'} />
           </main>
