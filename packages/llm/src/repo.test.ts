@@ -236,7 +236,7 @@ describe('assembleRepoModel (injection-hardened, mocked SDK)', () => {
   });
 });
 
-describe('M4 semantic fields in the assembly pipeline', () => {
+describe('semantic fields in the assembly pipeline', () => {
   it('REPO_SYSTEM shows the evidence object shape instead of an opaque encoded string', () => {
     const contract = JSON.parse(REPO_SYSTEM.split('<model-json-schema>\n')[1]!.split('\n</model-json-schema>')[0]!);
     const node = contract.properties.nodes.items.properties;

@@ -5,7 +5,7 @@ import { dirname, join, posix } from 'node:path';
 import { createGunzip } from 'node:zlib';
 
 /**
- * Safe tar unpack (§14) — an explicit ustar block reader, not a library
+ * Safe tar unpack — an explicit ustar block reader, not a library
  * extractor. Security-critical boundary: every entry's raw path, typeflag,
  * size and checksum are validated BEFORE any write; symlinks/hardlinks/
  * devices are refused, never followed; binary content is sniffed in memory

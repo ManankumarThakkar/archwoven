@@ -6,7 +6,7 @@
  * detect → extract); no model is called.
  *
  * Usage: pnpm build:packages && node apps/web/e2e/ground-truth.mjs
- * Numbers are published verbatim in docs/EXTRACTION-GROUND-TRUTH.md.
+ * Prints recall and precision per construct, misses and extras included.
  */
 import { extractSpringBoot, extractFastApi } from '@archwoven/extract';
 import { ingestRepo } from '@archwoven/ingest';

@@ -3,7 +3,7 @@ import { detectFramework } from './detect';
 
 const readMap = (map: Record<string, string>) => (p: string) => map[p] ?? '';
 
-describe('detectFramework (§5 Spring Boot | FastAPI)', () => {
+describe('detectFramework (Spring Boot | FastAPI)', () => {
   it('spring-boot: build file + @SpringBootApplication source', () => {
     const files = ['pom.xml', 'src/main/java/com/shop/App.java'];
     const read = readMap({

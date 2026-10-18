@@ -31,7 +31,7 @@ const d1 = mkdtempSync(join(tmpdir(), 'aw-bench-pass-'));
 const r1 = inDir(d1);
 expect('check good → 0', r1('check', 'cases/todo-api.case.json', 'fixtures/good.model.json').status, 0);
 expect('check missing-edge → 1', r1('check', 'cases/todo-api.case.json', 'fixtures/missing-edge.model.json').status, 1);
-// Real post-merge provider outputs: naming variants of required nodes bind; near misses do not.
+// Real provider outputs: naming variants of required nodes bind; near misses do not.
 expect('check real todo-api ("Orders Service") → 0', r1('check', 'cases/todo-api.case.json', 'fixtures/postmerge-todo-api.model.json').status, 0);
 expect('check real boring-crud ("Catalog DB (PostgreSQL)") → 0', r1('check', 'cases/boring-crud.case.json', 'fixtures/postmerge-boring-crud.model.json').status, 0);
 expect('check real checkout → 0', r1('check', 'cases/checkout.case.json', 'fixtures/postmerge-checkout.model.json').status, 0);

@@ -18,8 +18,8 @@ import { EXPANSION_SYSTEM, NATIVE_EXPANSION_SCHEMA, expansionRepair, expansionUs
  * footprint vs 120b's 65 GB resident — same family, same constrained-decoding path. */
 export const LOCAL_MODEL = process.env.OLLAMA_MODEL ?? 'gpt-oss:20b';
 /**
- * Local runaway guard. NOT the hosted 8192 lock (§15 is scoped "hosted mode"; its
- * table says local/private = no quotas, quota code compiled out) — gpt-oss spends
+ * Local runaway guard. NOT the hosted 8192 lock (that limit applies to hosted mode
+ * only; local/private mode has no quotas) — gpt-oss spends
  * thousands of tokens on hidden reasoning
  * that `think:false` does not suppress on Ollama, so 8000 truncated the JSON answer.
  * 16000 leaves headroom for reasoning + a full model; still bounded, never unbounded.
@@ -172,7 +172,7 @@ export async function ollamaChat(
 }
 
 /**
- * Generate a full SystemModel locally (§8 private flow): streamed, schema-
+ * Generate a full SystemModel locally (private flow): streamed, schema-
  * constrained, validated, repaired within the same budget as the hosted path.
  */
 export function generateModelLocal(prompt: string, view: ViewType, opts?: LocalInferenceOptions & { allowClarification?: false }): Promise<GenerateOutcome>;
@@ -235,7 +235,7 @@ export async function generateModelLocal(
 const opsSchema = z.toJSONSchema(z.array(EditOpSchema));
 
 /**
- * Refinement as bounded EditOps, locally (§8): same apply-then-accept
+ * Refinement as bounded EditOps, locally: same apply-then-accept
  * semantics as refine.ts, same repair budget, ollama only.
  */
 export async function generateRefinementLocal(
@@ -296,7 +296,7 @@ export async function generateRefinementLocal(
 }
 
 /**
- * Repo→SystemModel assembly, locally (§8): the untrusted fragment stays on
+ * Repo→SystemModel assembly, locally: the untrusted fragment stays on
  * this machine — same fence, same pinning, ollama only.
  */
 export async function assembleRepoModelLocal(
@@ -352,7 +352,7 @@ export async function assembleRepoModelLocal(
   return { ok: false, errors: lastErrors, usage };
 }
 
-/** Local expansion (§8): the private model never leaves this machine; same contract and rules as hosted. */
+/** Local expansion: the private model never leaves this machine; same contract and rules as hosted. */
 export async function expandComponentLocal(
   model: SystemModel,
   focus: string,

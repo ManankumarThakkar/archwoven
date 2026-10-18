@@ -34,7 +34,7 @@ export async function POST(req: Request) {
     return Response.json({ error: 'invalid JSON body' }, { status: 400, headers });
   }
 
-  // §8: localPath is the private-clone import — accepted ONLY in local mode,
+  // localPath is the private-clone import — accepted ONLY in local mode,
   // and rejected before any filesystem touch on a hosted deploy.
   let localPath = body.localPath !== undefined && body.localPath !== null && body.localPath !== '' ? String(body.localPath) : null;
   let parsed: ParsedRepoUrl | null = null;
@@ -91,7 +91,7 @@ export async function POST(req: Request) {
   const controller = new AbortController();
   repoJobRegistry.set(jobId, { controller, settled: false });
 
-  // Durable fire-and-forget job behind the §15 concurrency slot.
+  // Durable fire-and-forget job behind the model-call concurrency slot.
   void withSlot(jobId, async () => {
     const day = new Date().toISOString().slice(0, 10);
     const claim = () => {
@@ -148,7 +148,7 @@ export async function POST(req: Request) {
         metered = true;
         return;
       }
-      // §9: privacy is server-stamped from deploy mode — model self-report never wins.
+      // Privacy is server-stamped from deploy mode — model self-report never wins.
       // Ingest disclosures live with the model, so a reload shows exactly what the first load did.
       const stamped = { ...appendDisclosures(checked.model, disclosures), privacy: privacyForMode(deployMode()) };
       serverDeps.store.saveRevision(jobId, stamped, sessionId);

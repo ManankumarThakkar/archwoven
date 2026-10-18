@@ -7,10 +7,10 @@ const day = () => new Date().toISOString().slice(0, 10);
 const usage = { provider: 'anthropic', model: 'claude-opus-5-5', inputTokens: 1000, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 500 };
 
 // Hosted gates only — in local mode quotas compile out entirely (own test below),
-// so the parity CI run (ARCHWOVEN_MODE=local) skips these by design (§15).
+// so the parity CI run (ARCHWOVEN_MODE=local) skips these by design.
 const hostedOnly = process.env.ARCHWOVEN_MODE === 'local' ? describe.skip : describe;
 
-hostedOnly('quota (§15 weighted credits, reserve-then-refund)', () => {
+hostedOnly('quota (weighted credits, reserve-then-refund)', () => {
   it('anonymous gets exactly 6 reserved generations then credits-exhausted with reset countdown', async () => {
     const s = openStore(':memory:');
     // burstWindowSec tiny + spaced so the 5/min burst gate doesn't shadow the daily-credit gate
@@ -134,7 +134,7 @@ hostedOnly('quota (§15 weighted credits, reserve-then-refund)', () => {
   });
 });
 
-hostedOnly('network credit pool (SPEC §15: IP as secondary bucket key)', () => {
+hostedOnly('network credit pool (IP as secondary bucket key)', () => {
   const gen = (sessionId: string, ip: string | null) => ({ sessionId, tier: 'anonymous' as const, action: 'generate' as const, ip, burstWindowSec: 0.001 });
   /** Reservations 2 ms apart, so the per-session burst window never shadows the credit pools. */
   const spaced = async (n: number, make: (i: number) => Parameters<typeof reserve>[1], s: ReturnType<typeof openStore>) => { const out = []; for (let i = 0; i < n; i++) { await sleep(2); out.push(reserve(s, make(i))); } return out; };

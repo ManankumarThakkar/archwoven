@@ -14,7 +14,7 @@ export function ensureResvg(wasmBytes: Uint8Array | ArrayBuffer | Promise<Uint8A
 
 /**
  * SVG string → PNG bytes at 2x. Fonts must be supplied explicitly —
- * resvg-wasm has no system fonts (Review Focus 4: blank text without fontBuffers).
+ * resvg-wasm has no system fonts (blank text without fontBuffers).
  */
 export async function renderPng(
   svg: string,

@@ -21,7 +21,7 @@ const springTree = (): string => {
   return d;
 };
 
-describe('ingestLocal (private clone import, §8)', () => {
+describe('ingestLocal (private clone import)', () => {
   it('uses bounded generic analysis for local Go repos without executing source', async () => {
     const d = tmp();
     writeFileSync(join(d, 'main.go'), 'package main\nfunc main() {}');

@@ -14,7 +14,7 @@ import { GET } from '../jobs/[id]/route';
 const SHA = '0123456789abcdef0123456789abcdef01234567';
 const usage = { provider: 'anthropic' as const, transportRetries: 0, usageComplete: true, attempts: [], model: 'claude-opus-5-5', effort: 'medium' as const, inputTokens: 1000, cacheWriteTokens: 5000, cacheReadTokens: 10000, outputTokens: 1500, latencyMs: 500, repairs: 0 };
 
-// §15: quotas compile out in local mode (reserve → Infinity → JSON null); credit assertions are hosted-only.
+// Quotas compile out in local mode (reserve → Infinity → JSON null); credit assertions are hosted-only.
 const QUOTA = process.env.ARCHWOVEN_MODE !== 'local';
 const hostedOnly = QUOTA ? it : it.skip;
 
@@ -128,7 +128,7 @@ describe('POST /api/repo', () => {
     expect(rev.nodes.flatMap((n) => n.evidence).every((e) => e.commit === SHA)).toBe(true);
   });
 
-  hostedOnly('quota: 4th repo of the day blocked at pool 6 / weight 2 with §15 copy', async () => {
+  hostedOnly('quota: 4th repo of the day blocked at pool 6 / weight 2 with the quota message', async () => {
     for (let i = 0; i < 3; i++) {
       const r = await POST(req({ url: 'https://github.com/foo/bar' }));
       expect(r.status).toBe(202);
@@ -202,7 +202,7 @@ describe('POST /api/repo', () => {
 
   it('reanalyzes the same repository after an old extraction failure and charges only successful work', async () => {
     const body = { url: 'https://github.com/foo/bar', idempotencyKey: 'retry-old-extractor' };
-    serverDeps.ingestRepo = async () => ({ ok: false, reason: 'unsupported', message: 'No Spring Boot or FastAPI constructs found — M3 supports those two frameworks.' });
+    serverDeps.ingestRepo = async () => ({ ok: false, reason: 'unsupported', message: 'No Spring Boot or FastAPI constructs found.' });
     const first = await POST(req(body));
     const { jobId: oldId } = await first.json() as { jobId: string };
     expect((await waitJob(oldId)).status).toBe('failed');
@@ -282,7 +282,7 @@ describe('POST /api/repo', () => {
     expect(serverDeps.store.getJob(bId)!.status).toBe('cancelled');
   });
 
-  it('tokens spent before a cancel are still metered (I1)', async () => {
+  it('tokens spent before a cancel are still metered', async () => {
     serverDeps.assembleRepoModel = (_f, _m, opts) =>
       new Promise((res) => {
         opts?.signal?.addEventListener('abort', () => res({ ok: false as const, errors: ['cancelled'], usage })); // mirrors the loop-top abort return
@@ -377,7 +377,7 @@ describe('POST /api/repo', () => {
   });
 });
 
-describe('POST /api/repo localPath (§8 private import)', () => {
+describe('POST /api/repo localPath (private import)', () => {
   it('hosted mode: localPath → 400 before any ingest runs', async () => {
     const prevMode = process.env.ARCHWOVEN_MODE;
     delete process.env.ARCHWOVEN_MODE; // force hosted regardless of suite mode

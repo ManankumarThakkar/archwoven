@@ -58,7 +58,7 @@ describe('journey', () => {
   });
 });
 
-describe('scale (fastapi-grade, Review Focus 3)', () => {
+describe('scale (fastapi-grade)', () => {
   const big = () => {
     const nodes = Array.from({ length: 700 }, (_, i) => `n${i}`);
     const edges = Array.from({ length: 1300 }, (_, i): [string, string] => [nodes[i % 700]!, nodes[i < 700 ? (i + 1) % 700 : (i * 7 + 3) % 700]!]);

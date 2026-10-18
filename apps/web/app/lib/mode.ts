@@ -5,7 +5,7 @@ export const deployMode = (): 'hosted' | 'local' =>
   process.env.ARCHWOVEN_MODE === 'local' ? 'local' : 'hosted';
 
 /**
- * Server-side privacy stamp (§9). The model's self-reported privacy is never
+ * Server-side privacy stamp. The model's self-reported privacy is never
  * security input — the deployment mode decides what left the machine.
  */
 export const privacyForMode = (mode: 'hosted' | 'local'): Privacy =>

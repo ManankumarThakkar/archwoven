@@ -2,7 +2,7 @@ import type { SystemModel } from '@archwoven/model';
 import { journey, reachability } from '../../workspace/graph-inspect';
 
 /**
- * 1200×630 share card SVG (route/reach). TEXT SURFACE RULE (Review Focus 4):
+ * 1200×630 share card SVG (route/reach). TEXT SURFACE RULE:
  * only model titles + node labels appear here — never evidence paths, commits,
  * or repo names. Text is escaped; the SVG is rendered to PNG server-side.
  */

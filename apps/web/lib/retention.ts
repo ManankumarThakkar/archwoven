@@ -1,6 +1,6 @@
 type SweepStore = { sweepExpired(): { models: number; jobs: number }; close(): void };
 
-/** Hosted retention (SPEC §1): sweep at boot, then every 24 hours, on its own short-lived connection.
+/** Hosted retention: sweep at boot, then every 24 hours, on its own short-lived connection.
  *  A failed run is logged and retried on the next tick; the timer never keeps the process alive. */
 export function startRetentionSweeper(open: () => SweepStore, log: (line: string) => void = console.log, intervalMs = 86_400_000): () => void {
   const run = () => {

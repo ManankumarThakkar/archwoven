@@ -92,7 +92,7 @@ export async function POST(req: Request) {
 
   const entry = { controller: new AbortController(), settled: false };
   jobRegistry.set(jobId, entry);
-  // Durable fire-and-forget job behind the §15 concurrency slot; stages and the
+  // Durable fire-and-forget job behind the model-call concurrency slot; stages and the
   // queue position are surfaced by /api/jobs polling.
   void withSlot(jobId, async () => {
     const day = new Date().toISOString().slice(0, 10);
@@ -132,7 +132,7 @@ export async function POST(req: Request) {
         metered = true;
         return;
       }
-      // §9: privacy is server-stamped from deploy mode — model self-report never wins.
+      // Privacy is server-stamped from deploy mode — model self-report never wins.
       const stamped = { ...checked.model, privacy: privacyForMode(deployMode()) };
       serverDeps.store.saveRevision(jobId, stamped, sessionId);
       serverDeps.store.updateJob(jobId, { stage: 'saving' });

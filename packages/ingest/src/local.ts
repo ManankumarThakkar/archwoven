@@ -10,7 +10,7 @@ import { readCommit, InvalidCommitScope } from './commit';
 export { gitRevParse } from './commit';
 
 /**
- * Local-clone ingest (§8 private flow): reads the pinned commit in the user's clone — no
+ * Local-clone ingest (private flow): reads the pinned commit in the user's clone — no
  * tarball, no network, no temp copy (nothing to retain). Same vendor/binary
  * filtering and caps as the hosted unpack, same IngestResult contract.
  */

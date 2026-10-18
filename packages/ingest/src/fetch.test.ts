@@ -7,7 +7,7 @@ const json = (body: unknown, status = 200) =>
 
 const SHA = '0123456789abcdef0123456789abcdef01234567';
 
-describe('pinCommit (§ commit pinning)', () => {
+describe('pinCommit (commit pinning)', () => {
   it('no ref → default branch SHA via two API hops', async () => {
     const seen: string[] = [];
     const fetcher: GithubApiFetch = async (url) => {
@@ -73,7 +73,7 @@ describe('pinCommit (§ commit pinning)', () => {
   });
 });
 
-describe('fetchTarball (§14 size caps)', () => {
+describe('fetchTarball (size caps)', () => {
   it('rejects by Content-Length before downloading', async () => {
     const fetcher: GithubApiFetch = async () =>
       new Response(null, { status: 200, headers: { 'content-length': String(10 * 1024 * 1024) } });

@@ -17,7 +17,7 @@ export function RefineBar({
   /** Source references in the model's evidence; null when evidence carries none. */
   sources: { private: boolean; repos: string[] } | null;
   onDelete: () => void;
-  /** How long this deployment keeps the diagram (SPEC §1). */
+  /** How long this deployment keeps the diagram. */
   retention: string;
 }) {
   const [instruction, setInstruction] = useState('');

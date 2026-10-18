@@ -4,7 +4,7 @@ import { openStore } from '@archwoven/jobs';
 import { serverDeps } from '../../../../lib/server';
 import { POST } from './route';
 
-// §15: quotas compile out in local mode; credit assertions are hosted-only.
+// Quotas compile out in local mode; credit assertions are hosted-only.
 const QUOTA = process.env.ARCHWOVEN_MODE !== 'local';
 const ctx = { params: Promise.resolve({ id: 'm1' }) };
 const day = () => new Date().toISOString().slice(0, 10);

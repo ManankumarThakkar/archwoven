@@ -1,6 +1,6 @@
 import type { ViewType } from '@archwoven/model';
 
-/** Real generation stages surfaced by /api/jobs polling (queued = §15 concurrency slot). */
+/** Real generation stages surfaced by /api/jobs polling (queued = waiting for a model-call slot). */
 export const STAGES = ['queued', 'validating', 'generating', 'fetching', 'extracting', 'designing', 'validating-output', 'laying-out', 'saving'] as const;
 export type Stage = (typeof STAGES)[number];
 

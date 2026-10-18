@@ -21,7 +21,7 @@ const maliciousModel = (): SystemModel => {
 };
 
 // Executable POSITIONS must be unreachable; inert escaped text inside <text>
-// nodes is the expected, harmless outcome (§11: no execution, no remote fetch).
+// nodes is the expected, harmless outcome (no execution, no remote fetch).
 const assertSafe = (svg: string): void => {
   expect(svg).not.toMatch(/<script/i);
   expect(svg).not.toMatch(/<iframe|<img|<image|<foreignObject/i);

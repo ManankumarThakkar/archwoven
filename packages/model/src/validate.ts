@@ -66,7 +66,7 @@ export function validateModel(raw: unknown): ValidationResult {
     errors.push(`parentId ${m.parentId} must equal revision - 1 (${m.revision - 1})`);
   }
 
-  // --- M4 semantic enforcement (only when semanticChecks present) ---
+  // --- Semantic enforcement (only when semanticChecks present) ---
   const adjacency = new Map<string, string[]>();
   const incoming = new Map<string, number>();
   for (const e of m.edges) {

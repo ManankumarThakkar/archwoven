@@ -12,7 +12,7 @@ import { ingestRepo, ingestLocal, gitRevParse, type IngestResult } from '@archwo
 import { extractSpringBoot, extractFastApi, type Fragment } from '@archwoven/extract';
 import type { SystemModel, ViewType } from '@archwoven/model';
 
-/** §9: in local deployments every raw fetch passes the egress guard; hosted uses plain fetch. */
+/** In local deployments every raw fetch passes the egress guard; hosted uses plain fetch. */
 const egressFetch: typeof fetch = deployMode() === 'local' ? makeEgressGuard(LOCAL_EGRESS_ALLOW) : fetch;
 
 /** Hosted without a key dies deep in the SDK ("Could not resolve authentication
@@ -38,7 +38,7 @@ export const serverDeps: {
   assembleRepoModel: (fragment: Fragment, meta: { owner: string; repo: string; sha: string; framework: string }, opts?: { signal?: AbortSignal }) => Promise<GenerateOutcome>;
 } = {
   store: openStore(process.env.ARCHWOVEN_DB ?? 'data/archwoven.db'),
-  // §8/§9 routing: fake first (canned, zero network); local mode goes to Ollama
+  // Routing: fake first (canned, zero network); local mode goes to Ollama
   // behind the egress guard — a private job can never reach a hosted provider,
   // not even by accident in a repair or failure path.
   generateModel: (prompt, view, opts) =>
@@ -53,10 +53,10 @@ export const serverDeps: {
     fakeMode() ? expandComponent(model, target, hint)
       : deployMode() === 'local' ? expandComponentLocal(model, target, hint, { fetchImpl: egressFetch, signal: opts?.signal })
         : expandComponent(model, target, hint, opts),
-  // §14: URLs reaching this seam are already parseRepoUrl-validated (github.com only);
+  // URLs reaching this seam are already parseRepoUrl-validated (github.com only);
   // repo content is untrusted data, never executed — extraction is static analysis only.
   ingestRepo: (parsed, opts) => ingestRepo(parsed, { fetcher: (url, init) => egressFetch(url, init), extractSpringBoot, extractFastApi }, opts),
-  // §8: private clone import — reads the user's own directory, no network at all.
+  // Private clone import — reads the user's own directory, no network at all.
   ingestLocal: (dir, opts) => ingestLocal(dir, { revParse: gitRevParse, extractSpringBoot, extractFastApi }, opts),
   assembleRepoModel: (fragment, meta, opts) =>
     fakeMode() ? assembleRepoModel(fragment, meta, opts)
@@ -80,7 +80,7 @@ export function readOrCreateSession(req: Request): { sessionId: string; minted: 
 export const sessionCookie = (sessionId: string) =>
   `aw_sid=${sessionId}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${90 * 24 * 3600}${deployMode() === 'hosted' && process.env.NODE_ENV === 'production' ? '; Secure' : ''}`;
 
-export const tierOf = (_sessionId: string): Tier => 'anonymous'; // GitHub OAuth deferred to M6 (external GitHub App registration; private repos covered by local mode)
+export const tierOf = (_sessionId: string): Tier => 'anonymous'; // No sign-in tier: private repositories are handled by local mode
 
 /** The address appended by the nearest proxy (the last X-Forwarded-For entry), or null when it is unknown.
  *  Best-effort: entries before it are client-controlled, so they never decide a bucket. */

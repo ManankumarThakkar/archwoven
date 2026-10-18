@@ -1,8 +1,8 @@
 import type { EdgeType, SystemModel } from '@archwoven/model';
 
 /**
- * Relationship passport (§2): the identity of an edge WITHOUT its evidence internals —
- * evidence count only, never source paths or commit SHAs (privacy §5). The inspector
+ * Relationship passport: the identity of an edge WITHOUT its evidence internals —
+ * evidence count only, never source paths or commit SHAs (privacy). The inspector
  * keeps the full evidence links; the passport only counts them.
  */
 export interface Passport {

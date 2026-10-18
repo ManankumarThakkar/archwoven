@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseRepoUrl } from './url';
 
-describe('parseRepoUrl (§14 URL validation + SSRF block)', () => {
+describe('parseRepoUrl (URL validation + SSRF block)', () => {
   it('accepts a plain repo URL', () => {
     expect(parseRepoUrl('https://github.com/spring-projects/spring-petclinic')).toEqual({
       ok: true, owner: 'spring-projects', repo: 'spring-petclinic',

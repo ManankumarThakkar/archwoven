@@ -32,7 +32,7 @@ const positional = (args: SyntaxNode | null | undefined): SyntaxNode[] =>
   args?.namedChildren.filter((a) => a.type !== 'keyword_argument' && a.type !== 'comment') ?? [];
 
 /**
- * Static FastAPI structure extraction (SPEC §3 matrix): applications and routers,
+ * Static FastAPI structure extraction: applications and routers,
  * include_router chains (module attributes, aliases, relative imports, nested
  * routers, constructor and include prefixes), endpoints with their full mounted
  * paths, Depends chains (factories that return or yield, Annotated aliases,
@@ -369,7 +369,7 @@ export async function extractFastApi(dir: string, inventory?: SourceInventory): 
             requiredEdges.push({ from: src, to: target.id, type: 'sync' });
           }
         }
-        // BackgroundTasks.add_task(fn, ...) → async edge to a background queue node (SPEC §3 messaging subset)
+        // BackgroundTasks.add_task(fn, ...) → async edge to a background queue node (messaging subset)
         for (const bt of (fn?.text ?? '').matchAll(/add_task\(\s*(\w+)/g)) {
           const qid = `py:${m.rel}:bg:${bt[1]}`;
           addNode(qid, 'queue', `background:${bt[1]}`, ev);

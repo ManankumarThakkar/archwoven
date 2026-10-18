@@ -69,7 +69,7 @@ const EMBEDDED: [RegExp, string][] = [
 ];
 
 /**
- * Static Spring Boot structure extraction (SPEC §3 matrix): controllers, services,
+ * Static Spring Boot structure extraction: controllers, services,
  * repositories, DI edges, JPA entity owning-side relations, Kafka topics, datasource.
  * Placeholders (${VAR}) and dynamic wiring become explicit gaps — never guesses.
  */
@@ -221,7 +221,7 @@ export async function extractSpringBoot(dir: string, inventory?: SourceInventory
         }
       }
 
-      // External calls (SPEC §3 matrix): URL literals in service/component/controller bodies + @FeignClient urls
+      // External calls: URL literals in service/component/controller bodies + @FeignClient urls
       if (kind && kind !== 'entity') {
         for (const m of cls.text.matchAll(/https?:\/\/([^/"'\s]+)/g)) {
           const extId = `java.ext.${m[1]!.replace(/\W+/g, '-')}`;

@@ -1,5 +1,5 @@
 /**
- * Egress guard (§9): in local/private deployments every outbound call goes
+ * Egress guard: in local/private deployments every outbound call goes
  * through this wrapper. A host outside the allowlist is refused BEFORE the
  * request is built — no DNS, no socket, nothing half-sent. Model download
  * happens via `ollama pull` (outside this process), so the fetch allowlist is

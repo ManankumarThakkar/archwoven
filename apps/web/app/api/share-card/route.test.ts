@@ -7,7 +7,7 @@ import { POST } from './route';
 
 const SHA = '0123456789abcdef0123456789abcdef01234567';
 
-// §15: burst gates compile out in local mode — the hosted 429 ladders are hosted-only.
+// Burst gates compile out in local mode — the hosted 429 ladders are hosted-only.
 const QUOTA = process.env.ARCHWOVEN_MODE !== 'local';
 const hostedOnly = QUOTA ? it : it.skip;
 const req = (body: unknown, cookie = 'aw_sid=test-sess') =>
@@ -39,7 +39,7 @@ describe('POST /api/share-card', () => {
     expect((await POST(req({ modelId: 'ghost', kind: 'reach', from: 'gateway.api' }))).status).toBe(404);
   });
 
-  hostedOnly('burst ladder: 5 cards then 429 with §15 copy (weight 0 — credits untouched)', async () => {
+  hostedOnly('burst ladder: 5 cards then 429 with the burst message (weight 0 — credits untouched)', async () => {
     for (let i = 0; i < 5; i++) {
       const r = await POST(req({ modelId: 'm1', kind: 'reach', from: 'gateway.api' }));
       expect(r.status, `call ${i + 1}`).toBe(200);
@@ -58,7 +58,7 @@ describe('POST /api/share-card', () => {
   });
 });
 
-describe('buildCardSvg — privacy surface (Review Focus 4)', () => {
+describe('buildCardSvg — privacy surface', () => {
   it('contains node labels but never evidence paths or commit SHAs', () => {
     const m = structuredClone(validFullModelExtended);
     m.nodes[0]!.evidence = [{ repo: 'foo/bar', commit: SHA, path: 'src/main/java/SecretLocation.java', lines: [1, 2] }];
@@ -71,7 +71,7 @@ describe('buildCardSvg — privacy surface (Review Focus 4)', () => {
   });
 });
 
-describe('share-card burst — §15 local mode + separate bucket (I3/I4)', () => {
+describe('share-card burst — local mode and a separate bucket', () => {
   it('local mode: burst compiled out — 7 cards all 200', async () => {
     const prevMode = process.env.ARCHWOVEN_MODE;
     process.env.ARCHWOVEN_MODE = 'local';

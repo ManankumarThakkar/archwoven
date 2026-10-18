@@ -1,8 +1,8 @@
 /**
- * §15 concurrency cap: at most N model calls run in parallel; excess jobs wait
+ * Concurrency cap: at most N model calls run in parallel; excess jobs wait
  * in a FIFO queue with a visible position (surfaced by /api/jobs polling).
- * In-process by design — M2 is single-node (SPEC: no queue infra until measured
- * need); a scale-out would move this to shared state.
+ * In-process by design for a single-node deployment; a scale-out would move this
+ * to shared state.
  */
 const defaultLimit = () => {
   const n = Number(process.env.ARCHWOVEN_MAX_PARALLEL ?? 2);

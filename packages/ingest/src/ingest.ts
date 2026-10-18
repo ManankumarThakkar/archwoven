@@ -11,7 +11,7 @@ import { summarizeSkipped } from './disclosures';
 /**
  * Repo ingest orchestration: pin → fetch → unpack → detect → extract.
  * The SHA pinned here is the analysis's only truth; temp files are removed
- * in `finally` (§14 retention: temp clones deleted after the job).
+ * in `finally` (temporary clones are deleted after the job).
  */
 export interface IngestDeps {
   fetcher: GithubApiFetch;

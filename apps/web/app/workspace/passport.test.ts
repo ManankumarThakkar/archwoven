@@ -46,7 +46,7 @@ describe('passportFor', () => {
     expect(passportFor(model, 'svc.orders')).toBeNull();
   });
 
-  it('never leaks evidence paths or commit SHAs (§5 privacy)', () => {
+  it('never leaks evidence paths or commit SHAs', () => {
     const json = JSON.stringify(passportFor(model, 'e.lookup'));
     expect(json).not.toContain('src/');
     expect(json).not.toContain('OrdersService');
