@@ -2,7 +2,7 @@
 
 A single, living list of known gaps that are not yet fixed, so none is lost between tasks. Each entry links to where it was found. When a gap is fixed, delete its row in the same PR; when one is found, add it here in the PR that found it.
 
-Last reviewed: 2026-10-17, after PRs #43 and #44 (main `43dbc19`) and the task 20h browser checks. Current evidence and its limits are recorded in [RELEASE-ACCEPTANCE.md](RELEASE-ACCEPTANCE.md). Release tasks refer to `RELEASE-PROGRESS.md`.
+Last reviewed: 2026-10-17, after PR #45 (main `174bf15`) and the hosted import re-run. Current evidence and its limits are recorded in [RELEASE-ACCEPTANCE.md](RELEASE-ACCEPTANCE.md). Release tasks refer to `RELEASE-PROGRESS.md`.
 
 ## Scheduled into a release task
 
