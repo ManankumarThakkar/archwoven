@@ -19,6 +19,9 @@ export function hostedJobLimits(): HostedJobLimits {
 }
 
 export const HOSTED_UNAVAILABLE_COPY = 'AI generation is temporarily unavailable. You can still view, edit and download your diagrams.';
+/** Direct edits and undo still use the server's SQLite store, which Vercel does not have. */
+export const EDITS_UNAVAILABLE_COPY = 'Editing and undo are not available in this deployment yet. You can still refine with AI, view and download your diagrams.';
+export const editsUnavailable = () => process.env.VERCEL === '1' && hostedJobs() !== null;
 export const HOSTED_NOT_CONFIGURED_COPY = 'AI generation is unavailable: hosted job storage is not configured. You can still view, edit and download your diagrams.';
 
 let cached: { key: string; jobs: HostedJobs } | undefined;
@@ -70,7 +73,7 @@ export async function runHostedJob(jobs: HostedJobs, jobId: string, work: (signa
   }, cancelPollMs);
   let outcome: JobOutcome;
   try { outcome = await work(controller.signal); }
-  catch { outcome = { status: 'failed', error: 'Generation failed. You can retry it.' }; }
+  catch { outcome = { status: 'failed', error: 'This request failed. You can retry it.' }; }
   finally { clearTimeout(timer); clearInterval(watcher); }
   if (timedOut) outcome = { status: 'failed', error: JOB_TIMEOUT_COPY };
   await jobs.finish(jobId, claimant, outcome.status, outcome.error ?? '', outcome.fields ?? {}).catch(() => undefined);

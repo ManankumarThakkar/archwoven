@@ -165,9 +165,20 @@ return {f[2], f[3], f[4] or '', f[5] or '', f[6], f[7] or '0', f[8] or '', f[9] 
 const CANCELLED = `return redis.call('HGET', KEYS[1], 'cancel') == '1' and 1 or 0`;
 const PUT_OWNED = `redis.call('HSET', KEYS[1], 'owner', ARGV[1], 'value', ARGV[2]) redis.call('EXPIRE', KEYS[1], tonumber(ARGV[3])) return 'ok'`;
 const GET_OWNED = `local v = redis.call('HMGET', KEYS[1], 'owner', 'value') if v[1] ~= ARGV[1] then return false end return v[2]`;
+// A model write lands only for its owner and only over the revision the change was based on.
+const PUT_MODEL = `
+local v = redis.call('HMGET', KEYS[1], 'owner', 'revision')
+if v[1] and v[1] ~= ARGV[1] then return 'not-owner' end
+-- Records saved before revisions were tracked carry no revision field and are not checked.
+if v[1] and ARGV[3] ~= '' and v[2] and v[2] ~= ARGV[3] then return 'stale' end
+redis.call('HSET', KEYS[1], 'owner', ARGV[1], 'value', ARGV[2], 'revision', ARGV[4])
+redis.call('EXPIRE', KEYS[1], tonumber(ARGV[5]))
+return 'ok'`;
 const DELETE_OWNED = `if redis.call('HGET', KEYS[1], 'owner') ~= ARGV[1] then return 0 end return redis.call('DEL', KEYS[1])`;
 
 const ID = /^[0-9a-f-]{36}$/;
+/** Owned values: a diagram, a job's result, or the visitor's last task report (keyed by the owner hash). */
+type OwnedKind = 'model' | 'result' | 'lasttask';
 const IDEMPOTENCY = /^[\w:.-]{1,128}$/;
 
 export function openHostedJobs({ url, token, prefix, ownerKey = token, now = () => Date.now(), call = redisRest(url, token) }: {
@@ -178,7 +189,7 @@ export function openHostedJobs({ url, token, prefix, ownerKey = token, now = () 
   // A session id is a bearer credential: store only a keyed hash of it.
   const ownerOf = (sessionId: string) => createHmac('sha256', ownerKey).update(`${prefix}owner:${sessionId}`).digest('hex').slice(0, 32);
   const networkOf = (network: string | null | undefined) => network ? createHmac('sha256', ownerKey).update(`${prefix}network:${network}`).digest('hex').slice(0, 32) : '';
-  const ownedKey = (kind: 'model' | 'lasttask', key: string) => kind === 'model' ? ID.test(key) : /^[0-9a-f]{32}$/.test(key);
+  const ownedKey = (kind: OwnedKind, key: string) => kind === 'lasttask' ? /^[0-9a-f]{32}$/.test(key) : ID.test(key);
   const run = (script: string, keys: string[], args: (string | number)[]) => call(['EVAL', script, keys.length, ...keys, ...args.map(String)]);
   const p = `${prefix}`;
   return {
@@ -230,16 +241,29 @@ export function openHostedJobs({ url, token, prefix, ownerKey = token, now = () 
       await call(['HDEL', `${p}job:${id(jobId)}`, 'clarification']);
     },
     /** Values readable only by the session that owns them, for 24 hours. */
-    async putOwned(kind: 'model' | 'lasttask', key: string, sessionId: string, value: unknown): Promise<void> {
+    /** Save a diagram's current revision; `baseRevision` null writes unconditionally (a new diagram). */
+    async putModel(modelId: string, sessionId: string, model: { revision: number; [field: string]: unknown }, baseRevision: number | null): Promise<'ok' | 'stale' | 'not-owner'> {
+      if (!ID.test(modelId)) throw new Error('Invalid key.');
+      return await run(PUT_MODEL, [`${p}model:${modelId}`], [ownerOf(sessionId), JSON.stringify(model), baseRevision === null ? '' : baseRevision, model.revision, RESULT_TTL_SECONDS]) as 'ok' | 'stale' | 'not-owner';
+    },
+    /** Whether a diagram id is free, this session's, or another visitor's, and this session's stored copy. */
+    async modelState(modelId: string, sessionId: string): Promise<{ owner: 'absent' | 'self' | 'other'; model: { revision?: unknown } | null }> {
+      if (!ID.test(modelId)) return { owner: 'other', model: null };
+      const [owner, value] = await call(['HMGET', `${p}model:${modelId}`, 'owner', 'value']) as [string | null, string | null];
+      if (owner === null) return { owner: 'absent', model: null };
+      if (owner !== ownerOf(sessionId)) return { owner: 'other', model: null };
+      return { owner: 'self', model: value ? JSON.parse(value) as { revision?: unknown } : null };
+    },
+    async putOwned(kind: OwnedKind, key: string, sessionId: string, value: unknown): Promise<void> {
       if (!ownedKey(kind, key)) throw new Error('Invalid key.');
       await run(PUT_OWNED, [`${p}${kind}:${key}`], [ownerOf(sessionId), JSON.stringify(value), RESULT_TTL_SECONDS]);
     },
-    async getOwned<T>(kind: 'model' | 'lasttask', key: string, sessionId: string): Promise<T | null> {
+    async getOwned<T>(kind: OwnedKind, key: string, sessionId: string): Promise<T | null> {
       if (!ownedKey(kind, key)) return null;
       const value = await run(GET_OWNED, [`${p}${kind}:${key}`], [ownerOf(sessionId)]) as string | null;
       return value ? JSON.parse(value) as T : null;
     },
-    async deleteOwned(kind: 'model' | 'lasttask', key: string, sessionId: string): Promise<boolean> {
+    async deleteOwned(kind: OwnedKind, key: string, sessionId: string): Promise<boolean> {
       if (!ownedKey(kind, key)) return false;
       return await run(DELETE_OWNED, [`${p}${kind}:${key}`], [ownerOf(sessionId)]) === 1;
     },

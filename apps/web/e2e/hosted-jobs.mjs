@@ -103,7 +103,40 @@ if (mode === 'flows') {
         check(scope, 'the form is usable after cancelling', await reopened.getByRole('button', { name: /Generate diagram/ }).isEnabled());
         await reopened.screenshot({ path: join(out, `${name}-${width}-cancelled.png`), fullPage: true });
 
-        // 6. Another visitor cannot read the job or its diagram.
+        // 6. Refinement as a hosted job: the result is applied and survives a reload.
+        await start(reopened);
+        await diagram(reopened);
+        const instruction = reopened.getByRole('textbox', { name: 'Refinement instruction', exact: true });
+        await instruction.fill('Rename the API gateway to Edge Gateway');
+        await instruction.press('Enter');
+        await reopened.getByText('Edge Gateway').first().waitFor({ timeout: 30_000 }).catch(() => undefined);
+        check(scope, 'a refinement job applies its result', await reopened.locator('.react-flow__node').filter({ hasText: 'Edge Gateway' }).count() === 1 && await instruction.inputValue() === '');
+        await reopened.reload();
+        check(scope, 'the refined diagram survives a reload', await diagram(reopened) && await reopened.locator('.react-flow__node').filter({ hasText: 'Edge Gateway' }).count() === 1);
+
+        // 7. An edit made in another tab while a refinement runs wins; the late result is refused.
+        await start(reopened);
+        await diagram(reopened);
+        const diagramUrl = reopened.url();
+        const editor = await context.newPage();
+        await editor.goto(diagramUrl);
+        await diagram(editor);
+        await instruction.fill('Rename the API gateway to Edge Gateway');
+        await instruction.press('Enter');
+        await editor.getByRole('button', { name: 'Find node /', exact: true }).click();
+        await editor.getByRole('textbox', { name: 'Find node', exact: true }).fill('Order Service');
+        await editor.getByRole('textbox', { name: 'Find node', exact: true }).press('Enter');
+        await editor.getByRole('textbox', { name: 'Element name', exact: true }).fill('Orders API');
+        await editor.getByRole('button', { name: 'Save name', exact: true }).click();
+        await editor.getByText('Name saved.').first().waitFor();
+        await reopened.getByText(/changed while refining/).first().waitFor({ timeout: 30_000 }).catch(() => undefined);
+        check(scope, 'a late refinement over a newer edit is refused with an explanation', await reopened.getByText(/changed while refining/).first().isVisible());
+        check(scope, 'the refused refinement keeps the typed instruction', await instruction.inputValue() === 'Rename the API gateway to Edge Gateway');
+        await reopened.reload();
+        check(scope, 'the edit from the other tab is kept', await diagram(reopened) && await reopened.locator('.react-flow__node').filter({ hasText: 'Orders API' }).count() === 1 && await reopened.locator('.react-flow__node').filter({ hasText: 'Edge Gateway' }).count() === 0);
+        await editor.close();
+
+        // 8. Another visitor cannot read the job or its diagram.
         const stranger = await browser.newContext();
         const peek = await stranger.newPage();
         await peek.goto(`${base}/workspace`);

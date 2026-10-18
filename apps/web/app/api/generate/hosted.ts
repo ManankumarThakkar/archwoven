@@ -84,7 +84,7 @@ export async function postHostedGenerate(req: Request, jobs: HostedJobs | 'misco
       if (signal.aborted) { await report('failed'); return { status: 'failed', error: 'Cancelled.' }; }
       // Privacy is server-stamped from deploy mode — model self-report never wins.
       const stamped = { ...checked.model, privacy: privacyForMode(deployMode()) };
-      await jobs.putOwned('model', jobId, sessionId, stamped);
+      await jobs.putModel(jobId, sessionId, stamped, null);
       // A development server keeps editing working through its local store; Vercel has none.
       if (process.env.VERCEL !== '1') serverDeps.store.saveRevision(jobId, stamped, sessionId);
       await report(out.usage.repairs > 0 ? 'repaired' : 'ok');
