@@ -22,6 +22,7 @@ let transport: (input: string, init?: RequestInit) => Response | Promise<Respons
 beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true, React });
   sessionStorage.clear();
+  localStorage.clear();
   window.history.replaceState(null, '', '/workspace');
   requests.length = 0;
   status = 200;
@@ -103,6 +104,62 @@ async function click(label: string) {
   expect(button, `Button containing ${label}`).toBeDefined();
   await act(async () => button.click());
 }
+
+describe('hosted money limits in the header', () => {
+  it('describes the daily limit instead of credits when the server uses spending caps', async () => {
+    transport = (input) => input === '/api/quota' ? Response.json({ remaining: null, pool: null, fake: false }) : undefined;
+    await mount();
+    await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+    expect(container.textContent).toContain('Free AI · daily limit');
+    expect(container.textContent).not.toMatch(/\/\s*credits today|null/);
+  });
+});
+
+describe('reconnecting to a job after the tab closes', () => {
+  const settle = async () => { for (let i = 0; i < 50; i++) await act(async () => { await new Promise(r => setTimeout(r, 20)); }); };
+  it('remembers the running job, resumes it on the next visit, and forgets it once it finishes', async () => {
+    let phase: 'running' | 'done' = 'running';
+    transport = (input) => {
+      if (input === '/api/generate') return Response.json({ jobId: 'job-closed-tab', remaining: 5, resumable: true }, { status: 202 });
+      if (input === '/api/jobs/job-closed-tab') return Response.json(phase === 'running' ? { status: 'running', stage: 'generating', deadlineAt: Date.now() + 60_000 } : { status: 'succeeded', modelId: 'm-resumed', revision: 1 });
+      return undefined;
+    };
+    await mount(); await fill('#system-description', 'A shop where customers order through an API backed by PostgreSQL'); await click('Generate diagram');
+    await settle();
+    expect(JSON.parse(localStorage.getItem('aw_activeJob') ?? 'null')).toMatchObject({ jobId: 'job-closed-tab' });
+    // The tab closes while the job runs; a new visit to the workspace picks it up.
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    phase = 'done';
+    await mount(); await settle();
+    expect(requests).toContain('/api/models/m-resumed');
+    expect(container.querySelector('[aria-label="Rendered view"]')).toBeTruthy();
+    expect(localStorage.getItem('aw_activeJob')).toBeNull();
+  });
+  it('forgets a job that failed, so the next visit starts fresh', async () => {
+    localStorage.setItem('aw_activeJob', JSON.stringify({ jobId: 'job-failed' }));
+    transport = (input) => input === '/api/jobs/job-failed' ? Response.json({ status: 'failed', error: 'This job stopped before it finished, so it was not completed. You can retry it.' }) : undefined;
+    await mount(); await settle();
+    expect(container.textContent).toContain('This job stopped before it finished');
+    expect(localStorage.getItem('aw_activeJob')).toBeNull();
+  });
+  it('keeps the single-server flow as it was: nothing is remembered unless the server can resume the job', async () => {
+    let polls = 0;
+    transport = (input) => {
+      if (input === '/api/generate') return Response.json({ jobId: 'local-job', remaining: 5 }, { status: 202 });
+      if (input === '/api/jobs/local-job') return Response.json(++polls < 3 ? { status: 'running', stage: 'generating', deadlineAt: Date.now() + 60_000 } : { status: 'failed', error: 'stopped' });
+      return undefined;
+    };
+    await mount(); await fill('#system-description', 'A shop where customers order through an API backed by PostgreSQL'); await click('Generate diagram');
+    expect(localStorage.getItem('aw_activeJob')).toBeNull();
+    await settle();
+  });
+  it('ignores a stored value that is not a job', async () => {
+    localStorage.setItem('aw_activeJob', '{"jobId":"../../api/admin"}');
+    await mount(); await settle();
+    expect(requests.some(r => r.startsWith('/api/jobs/'))).toBe(false);
+  });
+});
 
 describe('saved diagram restoration', () => {
   it('opens the requested sequence view after generation and preserves it in the reload link', async () => {

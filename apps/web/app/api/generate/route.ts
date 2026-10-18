@@ -14,12 +14,18 @@ import { jobRegistry, startJobDeadline, JOB_TIMEOUT_COPY } from '../../lib/job-r
 import { ClarificationSchema } from '@archwoven/llm';
 import { parseReply, continuationPrompt, preserveClarification, type ClarificationReply } from '../../lib/clarification';
 import { secretGate } from '../../../lib/secret-gate';
+import { hostedJobs } from '../../lib/hosted-runner';
+import { postHostedGenerate } from './hosted';
 
 export const runtime = 'nodejs';
+// Hosted jobs run inside this invocation via after(): up to 60 s waiting for a slot plus 180 s of work.
+export const maxDuration = 300;
 
 const VALID_VIEWS: ViewType[] = ['architecture', 'sequence', 'er', 'component-detail'];
 
 export async function POST(req: Request) {
+  const jobs = hostedJobs();
+  if (jobs) return postHostedGenerate(req, jobs);
   const { sessionId, minted } = readOrCreateSession(req);
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (minted) headers['set-cookie'] = sessionCookie(sessionId);

@@ -1,5 +1,6 @@
-import { randomUUID } from 'node:crypto';
+import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { isIP } from 'node:net';
+import { after } from 'next/server';
 import { openStore, type Store, type Tier } from '@archwoven/jobs';
 import {
   generateModel, generateRefinement, assembleRepoModel, expandComponent,
@@ -43,12 +44,15 @@ export const serverDeps: {
   ingestRepo: (parsed: { owner: string; repo: string; ref?: string; subdir?: string }, opts?: { signal?: AbortSignal; onStage?: (stage: 'fetching' | 'extracting') => void }) => Promise<IngestResult>;
   ingestLocal: (dir: string, opts?: { subdir?: string; signal?: AbortSignal; onStage?: (stage: 'fetching' | 'extracting') => void }) => Promise<IngestResult>;
   assembleRepoModel: (fragment: Fragment, meta: { owner: string; repo: string; sha: string; framework: string }, opts?: { signal?: AbortSignal; spender?: Spender }) => Promise<GenerateOutcome>;
+  /** Work that continues after the response: Next.js after(), which Vercel keeps alive until maxDuration. */
+  schedule: (task: () => Promise<void>) => void;
 } = {
   get store(): Store {
     if (hostingProbeRequested()) throw new Error('Application storage is unavailable during hosting diagnostics.');
     return applicationStore ??= openStore(process.env.ARCHWOVEN_DB ?? 'data/archwoven.db');
   },
   set store(value: Store) { applicationStore = value; },
+  schedule: (task) => after(task),
   // Routing: fake first (canned, zero network); local mode goes to Ollama
   // behind the egress guard — a private job can never reach a hosted provider,
   // not even by accident in a repair or failure path.
@@ -97,16 +101,34 @@ export const PROMPT_TOKEN_LIMIT = 25_000;
  *  exact count_tokens call inside generateModel (CJK text defeats chars/4). */
 export const estimateTokens = (text: string) => Math.ceil(text.length / 4);
 
+/** With ARCHWOVEN_SESSION_SECRET set, a session counts only if the server signed it, so job
+ *  ownership and visitor limits rest on server-issued identities. Without it, existing
+ *  cookies keep working unchanged (local mode, and data saved under them). */
+const sessionSecret = () => process.env.ARCHWOVEN_SESSION_SECRET?.trim() || null;
+const signSession = (sessionId: string, secret: string) => createHmac('sha256', secret).update(`aw-session:${sessionId}`).digest('base64url').slice(0, 22);
+
 export function readOrCreateSession(req: Request): { sessionId: string; minted: boolean } {
   const raw = req.headers.get('cookie') ?? '';
+  const secret = sessionSecret();
+  if (secret) {
+    const signed = /(?:^|;\s*)aw_sid=([0-9a-f-]{36})\.([\w-]{22})(?:;|$)/.exec(raw);
+    if (signed) {
+      const expected = Buffer.from(signSession(signed[1]!, secret)), received = Buffer.from(signed[2]!);
+      if (expected.length === received.length && timingSafeEqual(expected, received)) return { sessionId: signed[1]!, minted: false };
+    }
+    return { sessionId: randomUUID(), minted: true };
+  }
   const match = /(?:^|;\s*)aw_sid=([\w-]+)/.exec(raw);
   if (match) return { sessionId: match[1]!, minted: false };
   return { sessionId: randomUUID(), minted: true };
 }
 
 /** Secure on hosted production (HTTPS); local and development servers run over http on loopback. */
-export const sessionCookie = (sessionId: string) =>
-  `aw_sid=${sessionId}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${90 * 24 * 3600}${deployMode() === 'hosted' && process.env.NODE_ENV === 'production' ? '; Secure' : ''}`;
+export const sessionCookie = (sessionId: string) => {
+  const secret = sessionSecret();
+  const value = secret ? `${sessionId}.${signSession(sessionId, secret)}` : sessionId;
+  return `aw_sid=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${90 * 24 * 3600}${deployMode() === 'hosted' && process.env.NODE_ENV === 'production' ? '; Secure' : ''}`;
+};
 
 export const tierOf = (_sessionId: string): Tier => 'anonymous'; // No sign-in tier: private repositories are handled by local mode
 

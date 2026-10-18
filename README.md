@@ -162,6 +162,19 @@ node --env-file=/path/to/private.env scripts/spending-ledger.mjs unknown        
 
 `init` never replaces an existing ledger, and `renew --start <date>` starts the next annual window only after the current one has ended. Unknown usage keeps its whole hold until the owner confirms the actual charge in the provider's usage console and runs `resolve <attempt-id> <usd> --evidence "<what the console showed>"` in an interactive terminal; the amount can never exceed the hold, and the evidence is kept on the attempt. A preview prefix has its own caps, so preview and production caps together must stay within the $84 annual allowance. On Vercel, a missing or invalid configuration refuses paid requests. A development server without these variables keeps its previous behaviour, and local mode is unchanged. `apps/web/e2e/spending-limits.mjs` checks the limit, pause and outage messages in a real browser against a disposable Redis, without inference.
 
+### Hosted jobs
+
+With the same Redis variables and `ARCHWOVEN_SESSION_SECRET` (at least 32 random characters) set, description generation runs as a hosted job that any instance can serve:
+
+- The request returns at once with a job id bound to the visitor's signed session cookie; other visitors get 404 for the job and its diagram. With the secret set, session cookies that the server did not sign are replaced.
+- Repeating a request with the same description and diagram type returns the same job while it can still succeed; a retry after a failure, cancellation or expiry starts a new one. A visitor has one active job at a time, a network at most 2, and at most 8 jobs wait for a running slot.
+- The invocation that accepted the job runs it after responding (`after()`): up to 60 seconds waiting for a slot, then up to 180 seconds of work, inside Vercel Hobby's 300-second limit. Closing the tab does not stop it; the browser remembers the running job and reconnects on reload or on the next visit.
+- Exactly one instance can start a job, and nothing is retried. If the instance dies, the job reads as failed once its deadline passes, and the visitor can retry; an ambiguous paid request is never sent again automatically.
+- Cancelling stops the job at its next check. The provider attempt in flight keeps its spending hold, because its usage is unknown.
+- Job status, questions and results expire 24 hours after the job was created. Spending records are kept separately and do not expire.
+
+Repository imports, refinement and expansion still use the server's SQLite store; on a development server they keep working alongside hosted jobs, but on Vercel they are not yet available. Without these variables, jobs stay in the server's SQLite database as before, and local mode is unchanged. On Vercel, missing or invalid configuration refuses generation with an explanation. `apps/web/e2e/hosted-jobs.mjs` checks acceptance, reload and close/reopen recovery, two tabs, cancellation, owner isolation and a killed server in Chromium and WebKit. It runs the production build against real Redis with `apps/web/e2e/fixture-provider.mjs`, a labelled test fixture that returns a recorded model instead of calling a provider, so it tests the job lifecycle, not model quality.
+
 ## Private mode
 
 `ARCHWOVEN_MODE=local` turns quotas off, routes every inference call to a local Ollama, marks every saved model `private · local-only`, and puts every outbound request behind an allowlist. Nothing leaves the machine.
