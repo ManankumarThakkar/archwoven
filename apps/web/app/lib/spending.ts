@@ -82,7 +82,7 @@ let ledgers: { key: string; ledger: SpendingLedger } | undefined;
 /** The hosted client for one request. Development servers without a ledger keep
  * their existing behaviour; on Vercel a missing or invalid ledger refuses paid work. */
 export function spendingClient(who: Spender | undefined): StructuredClient | undefined {
-  const url = process.env.UPSTASH_REDIS_REST_URL?.trim(), token = process.env.UPSTASH_REDIS_REST_TOKEN?.trim(), prefix = process.env.ARCHWOVEN_SPEND_PREFIX?.trim();
+  const url = process.env.UPSTASH_REDIS_REST_URL?.trim(), token = process.env.UPSTASH_REDIS_REST_TOKEN?.trim(), prefix = process.env.ARCHWOVEN_REDIS_PREFIX?.trim();
   const onVercel = process.env.VERCEL === '1';
   if (!url && !token && !prefix) return onVercel ? refusing(NOT_CONFIGURED) : undefined;
   const loopback = /^http:\/\/(127\.0\.0\.1|localhost):\d+\/?$/.test(url ?? '');

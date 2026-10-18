@@ -151,7 +151,7 @@ Hosted AI requests are charged against a spending ledger in Redis (Upstash REST)
 
 Reported usage settles the hold; missing usage, provider failures and crashes keep the whole hold. A charge above its hold pauses all paid requests for inspection. Attempt, month and annual records never expire; only per-day visitor and network totals expire after 35 days. Identities are stored only as keyed hashes. If Redis cannot be reached, paid requests are refused with an explanation, while viewing, editing and downloading keep working.
 
-Configure `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` and `ARCHWOVEN_SPEND_PREFIX` (for example `archwoven:`, or `archwoven-preview:` for previews) as server-side variables, then create the ledger once from a private env file:
+Configure `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` and `ARCHWOVEN_REDIS_PREFIX` (for example `archwoven:`, or `archwoven-preview:` for previews) as server-side variables, then create the ledger once from a private env file:
 
 ```bash
 node --env-file=/path/to/private.env scripts/spending-ledger.mjs init --start 2026-11-01 --annual 84 --month 7 --visitor-day <usd> --network-day <usd>

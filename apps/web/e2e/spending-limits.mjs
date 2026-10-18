@@ -2,7 +2,7 @@
 /** Real browser -> API -> hosted spending ledger -> refusal and recovery checks.
  * No inference: every scenario refuses before a provider request is sent.
  * node apps/web/e2e/spending-limits.mjs <localhost-url> <temporary-app.db> <outDir> <toolsDir> <redis-shim-pid> [chromium,webkit]
- * The server and this script share UPSTASH_REDIS_REST_URL / _TOKEN / ARCHWOVEN_SPEND_PREFIX from the
+ * The server and this script share UPSTASH_REDIS_REST_URL / _TOKEN / ARCHWOVEN_REDIS_PREFIX from the
  * environment and must point at a disposable Redis whose prefix has no ledger yet. SIGUSR1 to the
  * shim process toggles a Redis outage.
  */
@@ -18,7 +18,7 @@ if (!base || !appFile || !out || !tools || !shimPid) throw new Error('Expected l
 const url = new URL(base);
 if (url.protocol !== 'http:' || !['127.0.0.1', 'localhost'].includes(url.hostname)) throw new Error('Use a disposable localhost server');
 if (![tmpdir(), '/tmp', '/private/tmp'].some(dir => realpathSync(appFile).startsWith(realpathSync(dir) + sep))) throw new Error('The app database must be temporary');
-const { UPSTASH_REDIS_REST_URL: redisUrl, UPSTASH_REDIS_REST_TOKEN: token, ARCHWOVEN_SPEND_PREFIX: prefix } = process.env;
+const { UPSTASH_REDIS_REST_URL: redisUrl, UPSTASH_REDIS_REST_TOKEN: token, ARCHWOVEN_REDIS_PREFIX: prefix } = process.env;
 if (!/^http:\/\/127\.0\.0\.1:\d+$/.test(redisUrl ?? '') || !token || !prefix) throw new Error('Point the spending ledger at a disposable loopback Redis');
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const require = createRequire(join(tools, 'package.json'));

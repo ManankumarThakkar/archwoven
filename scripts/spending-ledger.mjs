@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Operator commands for the hosted spending ledger. Reads UPSTASH_REDIS_REST_URL,
- * UPSTASH_REDIS_REST_TOKEN and ARCHWOVEN_SPEND_PREFIX from the environment
+ * UPSTASH_REDIS_REST_TOKEN and ARCHWOVEN_REDIS_PREFIX from the environment
  * (for example `node --env-file=<private file> scripts/spending-ledger.mjs status`)
  * and never prints them.
  *
@@ -17,8 +17,8 @@ import { parseUsd } from '../packages/jobs/src/evaluation-budget.ts';
 const [command, ...rest] = process.argv.slice(2);
 const flag = name => { const i = rest.indexOf(name); return i >= 0 ? rest[i + 1] : undefined; };
 const usage = 'Usage: spending-ledger.mjs init --start YYYY-MM-DD --annual <usd> --month <usd> --visitor-day <usd> --network-day <usd> | status | pause "<reason>" | resume | unknown | resolve <attempt-id> <usd> --evidence "<text>" | renew --start YYYY-MM-DD';
-const { UPSTASH_REDIS_REST_URL: url, UPSTASH_REDIS_REST_TOKEN: token, ARCHWOVEN_SPEND_PREFIX: prefix } = process.env;
-if (!url || !token || !prefix) throw new Error('Set UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN and ARCHWOVEN_SPEND_PREFIX first.');
+const { UPSTASH_REDIS_REST_URL: url, UPSTASH_REDIS_REST_TOKEN: token, ARCHWOVEN_REDIS_PREFIX: prefix } = process.env;
+if (!url || !token || !prefix) throw new Error('Set UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN and ARCHWOVEN_REDIS_PREFIX first.');
 const ledger = openSpendingLedger({ url, token, prefix });
 const usd = nanos => `$${(nanos / 1e9).toFixed(4)}`;
 

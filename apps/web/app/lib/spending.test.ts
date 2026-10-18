@@ -102,7 +102,7 @@ describe('hosted spending guard', () => {
 describe('choosing the hosted client', () => {
   afterEach(() => vi.unstubAllEnvs());
   const env = (values: Record<string, string>) => { for (const [key, value] of Object.entries(values)) vi.stubEnv(key, value); };
-  beforeEach(() => env({ ARCHWOVEN_MODE: 'hosted', ARCHWOVEN_FAKE: '0', ANTHROPIC_API_KEY: 'test-key-not-real', UPSTASH_REDIS_REST_URL: '', UPSTASH_REDIS_REST_TOKEN: '', ARCHWOVEN_SPEND_PREFIX: '', VERCEL: '' }));
+  beforeEach(() => env({ ARCHWOVEN_MODE: 'hosted', ARCHWOVEN_FAKE: '0', ANTHROPIC_API_KEY: 'test-key-not-real', UPSTASH_REDIS_REST_URL: '', UPSTASH_REDIS_REST_TOKEN: '', ARCHWOVEN_REDIS_PREFIX: '', VERCEL: '' }));
 
   it('keeps unconfigured development servers as they are', () => {
     expect(spendingClient(who)).toBeUndefined();
@@ -112,12 +112,12 @@ describe('choosing the hosted client', () => {
     env({ VERCEL: '1' });
     await expect(spendingClient(who)!.beta.messages.create(request)).rejects.toThrow(/spending limits are not configured/);
     await expect(spendingClient(who)!.messages.countTokens(request)).rejects.toBeInstanceOf(ProviderRequestNotSentError);
-    env({ UPSTASH_REDIS_REST_URL: 'http://127.0.0.1:6379', UPSTASH_REDIS_REST_TOKEN: 'token', ARCHWOVEN_SPEND_PREFIX: 'archwoven:' });
+    env({ UPSTASH_REDIS_REST_URL: 'http://127.0.0.1:6379', UPSTASH_REDIS_REST_TOKEN: 'token', ARCHWOVEN_REDIS_PREFIX: 'archwoven:' });
     await expect(spendingClient(who)!.beta.messages.create(request)).rejects.toThrow(/spending limits are not configured/);
   });
 
   it('on Vercel, refuses paid work that has no verified network address', async () => {
-    env({ VERCEL: '1', UPSTASH_REDIS_REST_URL: 'https://example.upstash.io', UPSTASH_REDIS_REST_TOKEN: 'token', ARCHWOVEN_SPEND_PREFIX: 'archwoven:' });
+    env({ VERCEL: '1', UPSTASH_REDIS_REST_URL: 'https://example.upstash.io', UPSTASH_REDIS_REST_TOKEN: 'token', ARCHWOVEN_REDIS_PREFIX: 'archwoven:' });
     const network = vi.fn(async () => { throw new Error('no network in this test'); });
     vi.stubGlobal('fetch', network);
     try {
@@ -127,7 +127,7 @@ describe('choosing the hosted client', () => {
   });
 
   it('refuses a request that arrives without a server-issued visitor', async () => {
-    env({ UPSTASH_REDIS_REST_URL: 'https://example.upstash.io', UPSTASH_REDIS_REST_TOKEN: 'token', ARCHWOVEN_SPEND_PREFIX: 'archwoven:' });
+    env({ UPSTASH_REDIS_REST_URL: 'https://example.upstash.io', UPSTASH_REDIS_REST_TOKEN: 'token', ARCHWOVEN_REDIS_PREFIX: 'archwoven:' });
     await expect(spendingClient(undefined)!.beta.messages.create(request)).rejects.toThrow(/temporarily unavailable/);
   });
 });
