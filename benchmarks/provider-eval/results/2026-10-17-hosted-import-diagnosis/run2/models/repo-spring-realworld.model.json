@@ -1,0 +1,553 @@
+{
+  "schemaVersion": "1",
+  "revision": 1,
+  "title": "Spring Boot RealWorld Example App",
+  "requirements": [],
+  "openQuestions": [
+    {
+      "id": "q.runtime.wiring",
+      "text": "Only one dependency edge (UserService to UserRepository) was extracted. How do the API controllers wire to the query, command and repository classes at runtime?"
+    },
+    {
+      "id": "q.datastore",
+      "text": "The MyBatis repositories imply a database, but none appears in the fragment. Which datastore backs them?"
+    },
+    {
+      "id": "q.userrepository.impl",
+      "text": "Is UserRepository implemented by MyBatisUserRepository? The fragment does not bind them."
+    },
+    {
+      "id": "gap.ingest.1",
+      "text": "Skipped 2 binary files: example-logo.png, graphql-schema.png."
+    },
+    {
+      "id": "gap.ingest.2",
+      "text": "Skipped 1 vendored, generated or lock file or folder: gradle/wrapper/gradle-wrapper.jar."
+    }
+  ],
+  "nodes": [
+    {
+      "id": "java.articleapi",
+      "kind": "service",
+      "label": "ArticleApi",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "gothinkster/spring-boot-realworld-example-app",
+          "commit": "ee17e31aafe733d98c4853c8b9a74d7f2f6c924a",
+          "path": "src/main/java/io/spring/api/ArticleApi.java",
+          "lines": [
+            27,
+            88
+          ],
+          "note": "GET/PUT/DELETE /articles/{slug}"
+        }
+      ],
+      "group": "api"
+    },
+    {
+      "id": "java.articlefavoriteapi",
+      "kind": "service",
+      "label": "ArticleFavoriteApi",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "gothinkster/spring-boot-realworld-example-app",
+          "commit": "ee17e31aafe733d98c4853c8b9a74d7f2f6c924a",
+          "path": "src/main/java/io/spring/api/ArticleFavoriteApi.java",
+          "lines": [
+            21,
+            62
+          ],
+          "note": "POST/DELETE /articles/{slug}/favorite"
+        }
+      ],
+      "group": "api"
+    },
+    {
+      "id": "java.articlesapi",
+      "kind": "service",
+      "label": "ArticlesApi",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "gothinkster/spring-boot-realworld-example-app",
+          "commit": "ee17e31aafe733d98c4853c8b9a74d7f2f6c924a",
+          "path": "src/main/java/io/spring/api/ArticlesApi.java",
+          "lines": [
+            21,
+            60
+          ],
+          "note": "POST /articles, GET /articles, GET /articles/feed"
+        }
+      ],
+      "group": "api"
+    },
+    {
+      "id": "java.commentsapi",
+      "kind": "service",
+      "label": "CommentsApi",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "gothinkster/spring-boot-realworld-example-app",
+          "commit": "ee17e31aafe733d98c4853c8b9a74d7f2f6c924a",
+          "path": "src/main/java/io/spring/api/CommentsApi.java",
+          "lines": [
+            32,
+            94
+          ],
+          "note": "/articles/{slug}/comments endpoints"
+        }
+      ],
+      "group": "api"
+    },
+    {
+      "id": "java.currentuserapi",
+      "kind": "service",
+      "label": "CurrentUserApi",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "gothinkster/spring-boot-realworld-example-app",
+          "commit": "ee17e31aafe733d98c4853c8b9a74d7f2f6c924a",
+          "path": "src/main/java/io/spring/api/CurrentUserApi.java",
+          "lines": [
+            23,
+            58
+          ],
+          "note": "GET/PUT /user"
+        }
+      ],
+      "group": "api"
+    },
+    {
+      "id": "java.profileapi",
+      "kind": "service",
+      "label": "ProfileApi",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "gothinkster/spring-boot-realworld-example-app",
+          "commit": "ee17e31aafe733d98c4853c8b9a74d7f2f6c924a",
+          "path": "src/main/java/io/spring/api/ProfileApi.java",
+          "lines": [
+            21,
+            78
+          ],
+          "note": "/profiles/{username} endpoints"
+        }
+      ],
+      "group": "api"
+    },
+    {
+      "id": "java.tagsapi",
+      "kind": "service",
+      "label": "TagsApi",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "gothinkster/spring-boot-realworld-example-app",
+          "commit": "ee17e31aafe733d98c4853c8b9a74d7f2f6c924a",
+          "path": "src/main/java/io/spring/api/TagsApi.java",
+          "lines": [
+            11,
+            26
+          ],
+          "note": "GET /tags"
+        }
+      ],
+      "group": "api"
+    },
+    {
+      "id": "java.usersapi",
+      "kind": "service",
+      "label": "UsersApi",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "gothinkster/spring-boot-realworld-example-app",
+          "commit": "ee17e31aafe733d98c4853c8b9a74d7f2f6c924a",
+          "path": "src/main/java/io/spring/api/UsersApi.java",
+          "lines": [
+            30,
+            67
+          ],
+          "note": "POST /users, POST /users/login"
+        }
+      ],
+      "group": "api"
+    },
+    {
+      "id": "java.articlequeryservice",
+      "kind": "service",
+      "label": "ArticleQueryService",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "gothinkster/spring-boot-realworld-example-app",
+          "commit": "ee17e31aafe733d98c4853c8b9a74d7f2f6c924a",
+          "path": "src/main/java/io/spring/application/ArticleQueryService.java",
+          "lines": [
+            23,
+            184
+          ]
+        }
+      ],
+      "group": "application"
+    },
+    {
+      "id": "java.commentqueryservice",
+      "kind": "service",
+      "label": "CommentQueryService",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "gothinkster/spring-boot-realworld-example-app",
+          "commit": "ee17e31aafe733d98c4853c8b9a74d7f2f6c924a",
+          "path": "src/main/java/io/spring/application/CommentQueryService.java",
+          "lines": [
+            17,
+            85
+          ]
+        }
+      ],
+      "group": "application"
+    },
+    {
+      "id": "java.profilequeryservice",
+      "kind": "component",
+      "label": "ProfileQueryService",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "gothinkster/spring-boot-realworld-example-app",
+          "commit": "ee17e31aafe733d98c4853c8b9a74d7f2f6c924a",
+          "path": "src/main/java/io/spring/application/ProfileQueryService.java",
+          "lines": [
+            12,
+            35
+          ]
+        }
+      ],
+      "group": "application"
+    },
+    {
+      "id": "java.tagsqueryservice",
+      "kind": "service",
+      "label": "TagsQueryService",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "gothinkster/spring-boot-realworld-example-app",
+          "commit": "ee17e31aafe733d98c4853c8b9a74d7f2f6c924a",
+          "path": "src/main/java/io/spring/application/TagsQueryService.java",
+          "lines": [
+            8,
+            16
+          ]
+        }
+      ],
+      "group": "application"
+    },
+    {
+      "id": "java.userqueryservice",
+      "kind": "service",
+      "label": "UserQueryService",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "gothinkster/spring-boot-realworld-example-app",
+          "commit": "ee17e31aafe733d98c4853c8b9a74d7f2f6c924a",
+          "path": "src/main/java/io/spring/application/UserQueryService.java",
+          "lines": [
+            9,
+            17
+          ]
+        }
+      ],
+      "group": "application"
+    },
+    {
+      "id": "java.articlecommandservice",
+      "kind": "service",
+      "label": "ArticleCommandService",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "gothinkster/spring-boot-realworld-example-app",
+          "commit": "ee17e31aafe733d98c4853c8b9a74d7f2f6c924a",
+          "path": "src/main/java/io/spring/application/article/ArticleCommandService.java",
+          "lines": [
+            11,
+            38
+          ]
+        }
+      ],
+      "group": "application"
+    },
+    {
+      "id": "java.userservice",
+      "kind": "service",
+      "label": "UserService",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "gothinkster/spring-boot-realworld-example-app",
+          "commit": "ee17e31aafe733d98c4853c8b9a74d7f2f6c924a",
+          "path": "src/main/java/io/spring/application/user/UserService.java",
+          "lines": [
+            17,
+            57
+          ]
+        }
+      ],
+      "group": "application"
+    },
+    {
+      "id": "java.userrepository",
+      "kind": "service",
+      "label": "UserRepository",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "gothinkster/spring-boot-realworld-example-app",
+          "commit": "ee17e31aafe733d98c4853c8b9a74d7f2f6c924a",
+          "path": "src/main/java/io/spring/application/user/UserService.java",
+          "lines": [
+            17,
+            57
+          ]
+        }
+      ],
+      "group": "application"
+    },
+    {
+      "id": "java.graphqlcustomizeexceptionhandler",
+      "kind": "component",
+      "label": "GraphQLCustomizeExceptionHandler",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "gothinkster/spring-boot-realworld-example-app",
+          "commit": "ee17e31aafe733d98c4853c8b9a74d7f2f6c924a",
+          "path": "src/main/java/io/spring/graphql/exception/GraphQLCustomizeExceptionHandler.java",
+          "lines": [
+            24,
+            114
+          ]
+        }
+      ],
+      "group": "graphql"
+    },
+    {
+      "id": "java.mybatisarticlefavoriterepository",
+      "kind": "service",
+      "label": "MyBatisArticleFavoriteRepository",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "gothinkster/spring-boot-realworld-example-app",
+          "commit": "ee17e31aafe733d98c4853c8b9a74d7f2f6c924a",
+          "path": "src/main/java/io/spring/infrastructure/repository/MyBatisArticleFavoriteRepository.java",
+          "lines": [
+            10,
+            35
+          ]
+        }
+      ],
+      "group": "infrastructure"
+    },
+    {
+      "id": "java.mybatisarticlerepository",
+      "kind": "service",
+      "label": "MyBatisArticleRepository",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "gothinkster/spring-boot-realworld-example-app",
+          "commit": "ee17e31aafe733d98c4853c8b9a74d7f2f6c924a",
+          "path": "src/main/java/io/spring/infrastructure/repository/MyBatisArticleRepository.java",
+          "lines": [
+            11,
+            57
+          ]
+        }
+      ],
+      "group": "infrastructure"
+    },
+    {
+      "id": "java.mybatiscommentrepository",
+      "kind": "component",
+      "label": "MyBatisCommentRepository",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "gothinkster/spring-boot-realworld-example-app",
+          "commit": "ee17e31aafe733d98c4853c8b9a74d7f2f6c924a",
+          "path": "src/main/java/io/spring/infrastructure/repository/MyBatisCommentRepository.java",
+          "lines": [
+            10,
+            33
+          ]
+        }
+      ],
+      "group": "infrastructure"
+    },
+    {
+      "id": "java.mybatisuserrepository",
+      "kind": "service",
+      "label": "MyBatisUserRepository",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "gothinkster/spring-boot-realworld-example-app",
+          "commit": "ee17e31aafe733d98c4853c8b9a74d7f2f6c924a",
+          "path": "src/main/java/io/spring/infrastructure/repository/MyBatisUserRepository.java",
+          "lines": [
+            11,
+            60
+          ]
+        }
+      ],
+      "group": "infrastructure"
+    },
+    {
+      "id": "java.defaultjwtservice",
+      "kind": "component",
+      "label": "DefaultJwtService",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "gothinkster/spring-boot-realworld-example-app",
+          "commit": "ee17e31aafe733d98c4853c8b9a74d7f2f6c924a",
+          "path": "src/main/java/io/spring/infrastructure/service/DefaultJwtService.java",
+          "lines": [
+            17,
+            54
+          ]
+        }
+      ],
+      "group": "infrastructure"
+    }
+  ],
+  "edges": [
+    {
+      "id": "java.e1",
+      "from": "java.userservice",
+      "to": "java.userrepository",
+      "type": "sync",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "gothinkster/spring-boot-realworld-example-app",
+          "commit": "ee17e31aafe733d98c4853c8b9a74d7f2f6c924a",
+          "path": "src/main/java/io/spring/application/user/UserService.java",
+          "lines": [
+            17,
+            57
+          ]
+        }
+      ]
+    }
+  ],
+  "views": [
+    {
+      "id": "view.architecture",
+      "type": "architecture",
+      "orientation": "LR",
+      "nodes": [
+        "java.articleapi",
+        "java.articlefavoriteapi",
+        "java.articlesapi",
+        "java.commentsapi",
+        "java.currentuserapi",
+        "java.profileapi",
+        "java.tagsapi",
+        "java.usersapi",
+        "java.articlequeryservice",
+        "java.commentqueryservice",
+        "java.profilequeryservice",
+        "java.tagsqueryservice",
+        "java.userqueryservice",
+        "java.articlecommandservice",
+        "java.userservice",
+        "java.userrepository",
+        "java.graphqlcustomizeexceptionhandler",
+        "java.mybatisarticlefavoriterepository",
+        "java.mybatisarticlerepository",
+        "java.mybatiscommentrepository",
+        "java.mybatisuserrepository",
+        "java.defaultjwtservice"
+      ],
+      "edges": [
+        "java.e1"
+      ]
+    }
+  ],
+  "semanticChecks": {
+    "allowedRoots": [],
+    "allowedTerminals": [],
+    "requiredEdges": [
+      {
+        "from": "java.userservice",
+        "to": "java.userrepository",
+        "type": "sync"
+      }
+    ],
+    "requiredPaths": []
+  },
+  "boundaries": [
+    {
+      "id": "boundary.api",
+      "label": "REST API layer",
+      "wraps": [
+        "java.articleapi",
+        "java.articlefavoriteapi",
+        "java.articlesapi",
+        "java.commentsapi",
+        "java.currentuserapi",
+        "java.profileapi",
+        "java.tagsapi",
+        "java.usersapi"
+      ]
+    },
+    {
+      "id": "boundary.application",
+      "label": "Application layer",
+      "wraps": [
+        "java.articlequeryservice",
+        "java.commentqueryservice",
+        "java.profilequeryservice",
+        "java.tagsqueryservice",
+        "java.userqueryservice",
+        "java.articlecommandservice",
+        "java.userservice",
+        "java.userrepository"
+      ]
+    },
+    {
+      "id": "boundary.infrastructure",
+      "label": "Infrastructure layer",
+      "wraps": [
+        "java.mybatisarticlefavoriterepository",
+        "java.mybatisarticlerepository",
+        "java.mybatiscommentrepository",
+        "java.mybatisuserrepository",
+        "java.defaultjwtservice"
+      ]
+    },
+    {
+      "id": "boundary.graphql",
+      "label": "GraphQL layer",
+      "wraps": [
+        "java.graphqlcustomizeexceptionhandler"
+      ]
+    }
+  ],
+  "guidedViews": [],
+  "privacy": {
+    "classification": "public",
+    "boundary": "external-allowed"
+  }
+}
