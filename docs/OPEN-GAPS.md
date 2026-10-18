@@ -2,7 +2,7 @@
 
 A single, living list of known gaps that are not yet fixed, so none is lost between tasks. Each entry links to where it was found. When a gap is fixed, delete its row in the same PR; when one is found, add it here in the PR that found it.
 
-Last reviewed: 2026-10-17, release stack PRs #39–#42 (landing on main via PR #43) and final acceptance. Current evidence and its limits are recorded in [RELEASE-ACCEPTANCE.md](RELEASE-ACCEPTANCE.md). Release tasks refer to `RELEASE-PROGRESS.md`.
+Last reviewed: 2026-10-17, after PRs #43 and #44 (main `43dbc19`) and the task 20h browser checks. Current evidence and its limits are recorded in [RELEASE-ACCEPTANCE.md](RELEASE-ACCEPTANCE.md). Release tasks refer to `RELEASE-PROGRESS.md`.
 
 ## Scheduled into a release task
 
@@ -10,8 +10,8 @@ Last reviewed: 2026-10-17, release stack PRs #39–#42 (landing on main via PR #
 |---|---|---|---|
 | Named-person visual reviews of the Suite A diagrams are missing | Evaluation not eligible for publication | Post-merge audit | Owner review: three historical screenshots and matching models are now tracked, checksum-checked in CI and linked from `benchmarks/ordinary-model-floor/review/README.md`; verdicts still pending |
 | After the run's refinement added a notification service, the checkout diagram laid out right to left with a connection wrapping around the group (observed in a screenshot, not yet confirmed by a reviewer) | Refined diagrams may read backwards | Task 19 review capture | Confirm during visual review; then Task 20 |
-| Safari/Firefox download behaviour (deferred object-URL revoke) unverified | Delivery remains unproven on those browsers; actual Chrome SVG/PNG files passed inspection | Task 9 | Task 20 |
-| Physical touch, screen-reader and cross-browser acceptance not run | Accessibility and device support unproven | All UI tasks | Task 20 |
+| Firefox and the Safari application are unverified: Playwright WebKit passed downloads, axe and keyboard checks, but Playwright's Firefox build would not start on this macOS 27 machine | Exports and keyboard use are unproven in Firefox and real Safari | Tasks 9 and 20h | Run `apps/web/e2e/browser-acceptance.mjs` where Playwright Firefox starts, and with Safari after `safaridriver --enable` |
+| Physical touch and screen-reader acceptance not run (automated axe WCAG 2.1 A/AA and keyboard checks pass in Chromium and WebKit) | Accessibility for assistive technology and real touch devices is unproven | All UI tasks; task 20h | Owner: VoiceOver on macOS/iOS and a phone or tablet pass |
 | Full local-model inference inside Docker Compose has not been exercised | Private-mode model quality remains unverified in the container | Tasks 11 and 13; task 20d | CI now exercises real Compose startup, private request checks, read-only Git ingestion and the missing-model failure/retry path without downloading a model; successful model inference is separate |
 
 ## Not yet scheduled (needs a decision)
