@@ -105,6 +105,38 @@ ARCHWOVEN_MODE=hosted ARCHWOVEN_FAKE=0 pnpm --filter web start --hostname 127.0.
 
 Development output goes to `.next-dev` and production output to `.next`, so a build never disturbs a running dev server. To run another instance, use a separate output directory and port, for example `ARCHWOVEN_NEXT_DIST_DIR=.next-review pnpm dev --port 3001`.
 
+### Vercel preview diagnostics
+
+The application currently uses SQLite and process-local job coordination; the hosted Redis backend and reservation ledger are not implemented yet. Do not expose the application APIs as a public service until those are ready.
+
+To check serverless dependency packaging without a provider key:
+
+```bash
+pnpm build
+pnpm hosting:preflight
+```
+
+The preflight copies only the diagnostic function's traced files to a temporary directory outside the checkout, then runs real Java/Python extraction and secret detection with outbound `fetch` rejected. This is a packaging check, not a network sandbox. It reports traced size before platform wrappers. CI runs the same check; this does not certify Vercel execution, job recovery or Redis behavior.
+
+For a **Vercel Preview environment only**, use the `apps/web` root directory, Node.js 24, and build command `cd ../.. && pnpm build`. Set these server-side environment variables before deploying:
+
+```text
+ARCHWOVEN_MODE=hosted
+ARCHWOVEN_FAKE=0
+ARCHWOVEN_HOSTING_PROBE=1
+ARCHWOVEN_HOSTING_PROBE_TOKEN=<a randomly generated secret of 32–256 printable characters, without spaces>
+```
+
+Generate the secret with a password manager. Do not use a `NEXT_PUBLIC_` variable or add a provider key. Diagnostic mode skips SQLite startup and blocks all application APIs with HTTP 503. Only `/api/hosting-probe` is available, with bearer authentication; it accepts no source input, returns only check results, and calls no provider. The server refuses diagnostic mode outside a Vercel preview. Leave these diagnostic variables unset in normal local deployments and Production.
+
+Set the same token in your shell without putting it in command history, then run:
+
+```bash
+node scripts/hosting-preflight.mjs --url https://your-preview.vercel.app
+```
+
+If Deployment Protection is enabled, the runner also accepts `VERCEL_AUTOMATION_BYPASS_SECRET` from the shell. It sends secrets only in headers and refuses redirects. A passing preview probe confirms dependency execution only; paid generation stays unavailable in this mode.
+
 ## Private mode
 
 `ARCHWOVEN_MODE=local` turns quotas off, routes every inference call to a local Ollama, marks every saved model `private · local-only`, and puts every outbound request behind an allowlist. Nothing leaves the machine.

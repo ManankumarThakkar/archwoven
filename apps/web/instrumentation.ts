@@ -1,4 +1,5 @@
 import { assertSafeRuntime, deployMode } from './app/lib/mode';
+import { assertHostingProbeRuntime, hostingProbeRequested } from './lib/hosting-probe';
 
 /**
  * Next.js server boot hook — runs exactly once per process (dev and prod).
@@ -10,6 +11,9 @@ import { assertSafeRuntime, deployMode } from './app/lib/mode';
  */
 export async function register(): Promise<void> {
   assertSafeRuntime();
+  assertHostingProbeRuntime();
+  // The isolated preview has no application APIs, local database or background sweep.
+  if (hostingProbeRequested()) return;
   // NEXT_RUNTIME is compile-time replaced — the edge build DCEs this import;
   // node:sqlite must never reach the edge bundle (see 5ff0568).
   if (process.env.NEXT_RUNTIME === 'nodejs') {

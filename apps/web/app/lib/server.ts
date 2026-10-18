@@ -8,6 +8,7 @@ import {
   type GenerateOutcome, type DescriptionOutcome, type RefineOutcome, type ExpandOutcome,
 } from '@archwoven/llm';
 import { deployMode, fakeMode } from './mode';
+import { hostingProbeRequested } from '../../lib/hosting-probe';
 import { ingestRepo, ingestLocal, gitRevParse, type IngestResult } from '@archwoven/ingest';
 import { extractSpringBoot, extractFastApi, type Fragment } from '@archwoven/extract';
 import type { SystemModel, ViewType } from '@archwoven/model';
@@ -21,6 +22,10 @@ export const LLM_NOT_CONFIGURED_COPY =
   'No LLM is configured for this server. Set ANTHROPIC_API_KEY in apps/web/.env.local and restart, or run locally with Ollama: ARCHWOVEN_MODE=local pnpm dev.';
 export const llmNotConfigured = (): boolean =>
   deployMode() === 'hosted' && !fakeMode() && (process.env.ANTHROPIC_API_KEY ?? '').trim().length === 0;
+
+// Next can preload route modules before middleware rejects their requests.
+// Importing a route must not create a database in a read-only function bundle.
+let applicationStore: Store | undefined;
 
 /**
  * Server singletons + injectable seams. Tests replace `serverDeps.store`
@@ -37,7 +42,11 @@ export const serverDeps: {
   ingestLocal: (dir: string, opts?: { subdir?: string; signal?: AbortSignal; onStage?: (stage: 'fetching' | 'extracting') => void }) => Promise<IngestResult>;
   assembleRepoModel: (fragment: Fragment, meta: { owner: string; repo: string; sha: string; framework: string }, opts?: { signal?: AbortSignal }) => Promise<GenerateOutcome>;
 } = {
-  store: openStore(process.env.ARCHWOVEN_DB ?? 'data/archwoven.db'),
+  get store(): Store {
+    if (hostingProbeRequested()) throw new Error('Application storage is unavailable during hosting diagnostics.');
+    return applicationStore ??= openStore(process.env.ARCHWOVEN_DB ?? 'data/archwoven.db');
+  },
+  set store(value: Store) { applicationStore = value; },
   // Routing: fake first (canned, zero network); local mode goes to Ollama
   // behind the egress guard — a private job can never reach a hosted provider,
   // not even by accident in a repair or failure path.
