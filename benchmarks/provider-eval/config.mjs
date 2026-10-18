@@ -7,4 +7,7 @@ export function assertLegacyEvalServer(config) {
   if (config.hostedModel !== 'claude-opus-5-5') {
     throw new Error('The legacy evaluation runner supports only claude-opus-5-5; use a model-aware staged runner for comparisons.');
   }
+  if (config.evaluationBudgetEnabled !== true) {
+    throw new Error('Evaluation requires an explicitly initialized ARCHWOVEN_EVAL_BUDGET_DB on the server. The runner threshold alone is not a spending cap.');
+  }
 }

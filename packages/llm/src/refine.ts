@@ -2,7 +2,7 @@ import { newUsageLedger, startAttempt, captureUsage } from './usage';
 import { z } from 'zod';
 import { EditOpSchema, applyEditOps, isSourceEvidenceRefusal, sameModelContent, type EditOp, type SystemModel, type ViewType } from '@archwoven/model';
 import {
-  CONTEXT_TOKEN_LIMIT, MAX_REPAIRS, MODEL, configuredHostedModel, STRUCTURED_OUTPUTS_BETA, fakeMode, countFailureMessage, hostedClient, usageFrom, wireSchema,
+  CONTEXT_TOKEN_LIMIT, MAX_REPAIRS, MODEL, configuredHostedModel, STRUCTURED_OUTPUTS_BETA, fakeMode, countFailureMessage, hostedClient, usageFrom, wireSchema, providerRequestStopped,
   type Effort, type StructuredClient,
 } from './client';
 import type { RawUsage } from './client';
@@ -96,7 +96,7 @@ export async function generateRefinement(
       }, { signal: opts.signal });
     } catch (e) {
       lastErrors = [`request failed: ${e instanceof Error ? e.message : String(e)}`];
-      if (opts.signal?.aborted) break;
+      if (providerRequestStopped(e, billed) || opts.signal?.aborted) break;
       continue;
     }
     captureUsage(billed, response.usage);

@@ -568,6 +568,8 @@ it('discloses when auto-arranging pinned nodes also affects another graph view',
 
 describe('component detail views', () => {
   const ok = (r: { ok: true; model: SystemModel } | { ok: false; errors: string[] }) => { if (!r.ok) throw new Error(r.errors.join('; ')); return r.model; };
+  /** Edit responses deliver their body late, as on a busy CI runner, so assertions cannot race the save. */
+  const late = (response: Response) => { const json = response.json.bind(response); response.json = () => new Promise(r => setTimeout(r, 20)).then(json); return response; };
   /** Fake server backed by the real model edit functions. */
   function detailServer(initial: SystemModel = structuredClone(validFullModelExtended)) {
     let stored = initial;
@@ -579,13 +581,13 @@ describe('component detail views', () => {
       if (input === '/api/models/m1/edit') {
         const body = JSON.parse(String(init?.body));
         actions.push(body.action);
-        if (stale) { stored = stale; stale = null; revisions.set(stored.revision, stored); return Response.json({ reason: 'stale-revision', message: 'The diagram changed elsewhere. Review the latest version and try again.', model: stored }, { status: 409 }); }
+        if (stale) { stored = stale; stale = null; revisions.set(stored.revision, stored); return late(Response.json({ reason: 'stale-revision', message: 'The diagram changed elsewhere. Review the latest version and try again.', model: stored }, { status: 409 })); }
         const a = body.action;
         const r = a.type === 'detail' ? openDetailView(stored, a.target) : a.type === 'close-detail' ? closeDetailView(stored, a.viewId)
           : applyEditOps(stored, [{ op: 'update', target: a.target, patch: { label: a.label }, baseRevision: stored.revision, summary: 'rename' }]);
         if (!r.ok) return Response.json({ errors: r.errors }, { status: 400 });
         stored = r.model; revisions.set(stored.revision, stored);
-        return Response.json({ model: stored, revision: stored.revision });
+        return late(Response.json({ model: stored, revision: stored.revision }));
       }
       if (input === '/api/models/m1/undo') {
         const body = JSON.parse(String(init?.body));
@@ -601,7 +603,14 @@ describe('component detail views', () => {
   const tabs = () => [...container.querySelectorAll('.aw-view-tabs > button[aria-pressed], .aw-view-tabs > .aw-detail-tab > button[aria-pressed]')].map(b => b.textContent);
   const button = (text: string) => [...container.querySelectorAll('button')].find(b => b.textContent?.trim() === text);
   const labelled = (label: string) => container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
-  const press = async (b: HTMLButtonElement | null | undefined) => { expect(b).toBeTruthy(); await act(async () => b!.click()); };
+  // A click does not await its async handler: wait until any save it started has finished.
+  const saving = () => container.querySelector('.aw-refine-status')?.textContent === 'Saving change…';
+  const press = async (b: HTMLButtonElement | null | undefined) => {
+    expect(b).toBeTruthy();
+    await act(async () => b!.click());
+    for (let i = 0; i < 100 && saving(); i++) await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
+    expect(saving()).toBe(false);
+  };
   beforeEach(() => window.history.replaceState(null, '', '/workspace#model=m1'));
 
   it('opens a saved detail tab from the inspector and switches to it without inference', async () => {
@@ -707,7 +716,7 @@ describe('component detail views', () => {
     await mount();
     await click('Inspect API');
     await fill('input[aria-label="Element name"]', 'Edge Gateway');
-    await click('Save name');
+    await press(button('Save name'));
     expect(tabs().at(-1)).toBe('Edge Gateway · detail');
     expect(labelled('Close Edge Gateway detail')).toBeTruthy();
     expect(container.querySelector('.aw-detail-caption')?.textContent).toMatch(/^Edge Gateway and its direct connections/);

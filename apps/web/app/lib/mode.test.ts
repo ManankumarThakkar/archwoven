@@ -27,6 +27,16 @@ describe('hosted model configuration', () => {
   });
 });
 
+describe('evaluation configuration stays local and explicit', () => {
+  afterEach(() => vi.unstubAllEnvs());
+  it.each([{ VERCEL: '1' }, { ARCHWOVEN_MODE: 'local' }, { ARCHWOVEN_FAKE: '1' }, { ARCHWOVEN_EVAL_BUDGET_DB: '' }])('rejects an unsafe evaluation environment %j', patch => {
+    vi.stubEnv('ARCHWOVEN_MODE', 'hosted'); vi.stubEnv('ARCHWOVEN_FAKE', '0'); vi.stubEnv('VERCEL', '');
+    vi.stubEnv('ARCHWOVEN_EVAL_BUDGET_DB', '/tmp/evaluation-budget.db');
+    for (const [key, value] of Object.entries(patch)) vi.stubEnv(key, value);
+    expect(() => assertSafeRuntime()).toThrow(/evaluation/i);
+  });
+});
+
 describe('deployMode', () => {
   const saved = process.env.ARCHWOVEN_MODE;
   afterEach(() => {

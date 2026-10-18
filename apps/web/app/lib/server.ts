@@ -9,6 +9,7 @@ import {
 } from '@archwoven/llm';
 import { deployMode, fakeMode } from './mode';
 import { hostingProbeRequested } from '../../lib/hosting-probe';
+import { evaluationClient } from './evaluation-budget';
 import { ingestRepo, ingestLocal, gitRevParse, type IngestResult } from '@archwoven/ingest';
 import { extractSpringBoot, extractFastApi, type Fragment } from '@archwoven/extract';
 import type { SystemModel, ViewType } from '@archwoven/model';
@@ -53,15 +54,15 @@ export const serverDeps: {
   generateModel: (prompt, view, opts) =>
     fakeMode() ? generateModel(prompt, view, { ...opts, allowClarification: opts?.allowClarification ?? false })
       : deployMode() === 'local' ? generateModelLocal(prompt, view, { fetchImpl: egressFetch, signal: opts?.signal, allowClarification: opts?.allowClarification ?? false })
-        : generateModel(prompt, view, { ...opts, allowClarification: opts?.allowClarification ?? false }),
+        : generateModel(prompt, view, { ...opts, client: evaluationClient(), allowClarification: opts?.allowClarification ?? false }),
   generateRefinement: (instruction, model, view, opts) =>
     fakeMode() ? generateRefinement(instruction, model, view)
       : deployMode() === 'local' ? generateRefinementLocal(instruction, model, view, { fetchImpl: egressFetch, signal: opts?.signal })
-        : generateRefinement(instruction, model, view, opts),
+        : generateRefinement(instruction, model, view, { ...opts, client: evaluationClient() }),
   expandComponent: (model, target, hint, opts) =>
     fakeMode() ? expandComponent(model, target, hint)
       : deployMode() === 'local' ? expandComponentLocal(model, target, hint, { fetchImpl: egressFetch, signal: opts?.signal })
-        : expandComponent(model, target, hint, opts),
+        : expandComponent(model, target, hint, { ...opts, client: evaluationClient() }),
   // URLs reaching this seam are already parseRepoUrl-validated (github.com only);
   // repo content is untrusted data, never executed — extraction is static analysis only.
   ingestRepo: (parsed, opts) => ingestRepo(parsed, { fetcher: (url, init) => egressFetch(url, init), extractSpringBoot, extractFastApi }, opts),
@@ -70,7 +71,7 @@ export const serverDeps: {
   assembleRepoModel: (fragment, meta, opts) =>
     fakeMode() ? assembleRepoModel(fragment, meta, opts)
       : deployMode() === 'local' ? assembleRepoModelLocal(fragment, meta, { fetchImpl: egressFetch, signal: opts?.signal })
-        : assembleRepoModel(fragment, meta, opts),
+        : assembleRepoModel(fragment, meta, { ...opts, client: evaluationClient() }),
 };
 
 export const PROMPT_TOKEN_LIMIT = 25_000;

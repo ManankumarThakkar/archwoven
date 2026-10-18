@@ -9,7 +9,9 @@
  * Each description or repository case uses its own session and simulated
  * network address (X-Forwarded-For), so quotas and burst limits do not shape
  * the results; refinements reuse the session that created their diagram. New
- * cases stop starting once metered spend reaches the budget. Writes
+ * cases stop starting once metered spend reaches the --budget threshold. The
+ * server must also reserve every paid attempt against its separate persistent
+ * ARCHWOVEN_EVAL_BUDGET_DB cap. Writes
  * <outDir>/results.json (per case and summary) and the saved models.
  */
 import { DatabaseSync } from 'node:sqlite';
