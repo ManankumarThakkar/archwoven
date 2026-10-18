@@ -268,6 +268,9 @@ it('separates rejected model output from infrastructure failures', () => {
   expect(failedStatus('request failed: Connection error.', { ...answered, usageComplete: false }).status).toBe('failed');
   expect(failedStatus('codeload fetch failed: 404', null).status).toBe('failed');
   expect(failedStatus(BUDGET_REFUSAL, answered).status).toBe('budget-blocked');
+  // A refusal after rejected attempts still names what the provider said.
+  const rejected = { outcome: 'failed', usageComplete: false, attempts: [{ kind: 'initial', usageComplete: false, error: 'no response: Connection error.' }, { kind: 'retry', usageComplete: false, error: '400 invalid_request_error: speed: not supported' }] };
+  expect(failedStatus(BUDGET_REFUSAL, rejected)).toEqual({ status: 'budget-blocked', reason: `${BUDGET_REFUSAL} Provider: 400 invalid_request_error: speed: not supported` });
 });
 
 it('summarizes a model with nothing run without inventing results', () => {

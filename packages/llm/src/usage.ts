@@ -9,6 +9,19 @@ export function startAttempt(ledger: UsageLedger, preparedRepairs: number): void
   const repairsSent = ledger.attempts.filter(part => part.kind === 'repair').length;
   ledger.attempts.push({ kind: !ledger.attempts.length ? 'initial' : preparedRepairs > repairsSent ? 'repair' : 'retry', inputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 0, usageComplete: false });
 }
+/** Keep why the current attempt failed, so a later retry or refusal cannot hide the cause. */
+export function recordAttemptError(ledger: UsageLedger, error: unknown, label?: string): void {
+  const part = ledger.attempts.at(-1);
+  if (!part) return;
+  const e = error as { status?: unknown; message?: unknown; error?: { error?: { type?: unknown; message?: unknown } } };
+  const message = String(e?.message ?? error);
+  const text = label ? `${label}: ${message}`
+    : e?.error?.error && typeof e.error.error.message === 'string' ? `${e.status} ${e.error.error.type}: ${e.error.error.message}`
+    // The SDK's message already starts with the status when the body was not JSON.
+    : typeof e?.status === 'number' ? (message.startsWith(String(e.status)) ? message : `${e.status} ${message}`)
+    : `no response: ${message}`;
+  part.error = text.slice(0, 300);
+}
 export const reportedTokens = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 const tokens = (value: unknown): number => reportedTokens(value) ? value : 0;
 

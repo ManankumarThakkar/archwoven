@@ -1,4 +1,4 @@
-import { newUsageLedger, startAttempt, captureUsage, type UsageLedger } from './usage';
+import { newUsageLedger, startAttempt, captureUsage, recordAttemptError, type UsageLedger } from './usage';
 import { guardEgress, SecretEgressError } from './secrets';
 import type { TaskUsage } from '@archwoven/model';
 export type { TaskUsage } from '@archwoven/model';
@@ -90,6 +90,7 @@ export class ProviderRequestNotSentError extends Error {}
 export class ProviderAccountingError extends Error {}
 export function providerRequestStopped(error: unknown, ledger: UsageLedger): boolean {
   if (error instanceof ProviderRequestNotSentError || error instanceof SecretEgressError) { ledger.attempts.pop(); return true; }
+  recordAttemptError(ledger, error, error instanceof ProviderAccountingError ? 'accounting' : undefined);
   return error instanceof ProviderAccountingError;
 }
 

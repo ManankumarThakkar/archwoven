@@ -10,6 +10,8 @@ export interface TokenUsage {
 export interface AttemptUsage extends TokenUsage {
   kind: 'initial' | 'repair' | 'retry';
   usageComplete: boolean;
+  /** Why a sent attempt failed: the provider's status and message, never request content. */
+  error?: string;
 }
 /** Provider-reported counters, independent of diagram JSON and user credits. */
 export interface TaskUsage extends TokenUsage {

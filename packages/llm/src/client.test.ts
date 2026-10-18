@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { generateModel, makeAnthropic, MAX_REPAIRS, MAX_TOKENS, STABLE_SYSTEM, faithfulSchema } from './client';
+import { generateModel, makeAnthropic, MAX_REPAIRS, MAX_TOKENS, ProviderAccountingError, ProviderRequestNotSentError, STABLE_SYSTEM, faithfulSchema } from './client';
 
 /** The JSON schema the hosted system prompt shows the model. */
 const hostedContract = () => JSON.parse(STABLE_SYSTEM.split('<model-json-schema>\n')[1]!.split('\n</model-json-schema>')[0]!);
@@ -275,6 +275,38 @@ describe('reported task usage', () => {
     expect(out.ok).toBe(true);
     expect(out.usage).toMatchObject({ provider: 'anthropic', repairs: 1, transportRetries: 1, usageComplete: false, inputTokens: 2400 });
     expect(out.usage.attempts.map(part => part.kind)).toEqual(['initial', 'retry', 'repair']);
+    expect(out.usage.attempts.map(part => part.error)).toEqual(['no response: transport unavailable', undefined, undefined]);
+  });
+  it("keeps each failed attempt's provider error, so a later refusal cannot hide the cause", async () => {
+    const rejected = Object.assign(new Error('400 {"type":"error"}'), { status: 400, error: { type: 'error', error: { type: 'invalid_request_error', message: 'speed: not supported for this model' } } });
+    let attempt = 0;
+    const client: StructuredClient = {
+      messages: { countTokens: async () => ({ input_tokens: 10 }) },
+      beta: { messages: { create: async () => {
+        if (attempt++ < 2) throw rejected;
+        throw new ProviderRequestNotSentError('Evaluation budget cannot cover another attempt.');
+      } } },
+    };
+    const out = await generateModel('shop', 'architecture', { client });
+    expect(out.ok).toBe(false);
+    // The refused third attempt was never sent, so it is not an attempt at all.
+    expect(out.usage.attempts.map(part => part.error)).toEqual(Array(2).fill('400 invalid_request_error: speed: not supported for this model'));
+  });
+  it('labels proxy pages and accounting failures honestly, within 300 characters', async () => {
+    const proxy = Object.assign(new Error(`502 <html>${'x'.repeat(400)}</html>`), { status: 502 });
+    let attempt = 0;
+    const client: StructuredClient = {
+      messages: { countTokens: async () => ({ input_tokens: 10 }) },
+      beta: { messages: { create: async () => {
+        if (attempt++ === 0) throw proxy;
+        throw new ProviderAccountingError('Evaluation accounting failed after sending.');
+      } } },
+    };
+    const out = await generateModel('shop', 'architecture', { client });
+    const [first, second] = out.usage.attempts.map(part => part.error ?? '');
+    expect(first?.startsWith('502 <html>')).toBe(true);
+    expect(first).toHaveLength(300);
+    expect(second).toBe('accounting: Evaluation accounting failed after sending.');
   });
   it('does not count a prepared repair that cancellation prevents from being sent', async () => {
     const controller = new AbortController();

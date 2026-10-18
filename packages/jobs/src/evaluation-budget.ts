@@ -7,13 +7,14 @@ const MAX_NANOS = 1_000_000_000_000; // $1,000; all arithmetic stays exact in JS
 const validAmount = (value: number, zero = false) => {
   if (!Number.isSafeInteger(value) || value < (zero ? 0 : 1) || value > MAX_NANOS) throw new Error('Invalid evaluation budget amount.');
 };
-export function parseBudgetUsd(value: string): number {
-  if (!/^\d+(?:\.\d{1,9})?$/.test(value)) throw new Error('Budget must be a positive decimal USD amount with at most nine decimal places.');
+export function parseUsd(value: string, { zero = false } = {}): number {
+  if (!/^\d+(?:\.\d{1,9})?$/.test(value)) throw new Error('Amounts must be decimal USD with at most nine decimal places.');
   const [whole, fraction = ''] = value.split('.');
   const nanos = BigInt(whole!) * 1_000_000_000n + BigInt(fraction.padEnd(9, '0'));
-  if (nanos < 1n || nanos > BigInt(MAX_NANOS)) throw new Error('Evaluation budget must be greater than zero and at most $1,000.');
+  if (nanos < (zero ? 0n : 1n) || nanos > BigInt(MAX_NANOS)) throw new Error(`Amounts must be ${zero ? 'at least zero' : 'greater than zero'} and at most $1,000.`);
   return Number(nanos);
 }
+export const parseBudgetUsd = (value: string) => parseUsd(value);
 
 /** Explicit initialization only. An existing or interrupted ledger is never reset. */
 export function initializeEvaluationBudget(file: string, capNanos: number): void {
@@ -86,6 +87,31 @@ export function openEvaluationBudget(file: string) {
         db.prepare('UPDATE attempts SET charged=?,state=? WHERE id=?').run(charged, charged === null ? 'unknown' : 'settled', id);
         db.exec('COMMIT');
         return true;
+      } catch (error) { db.exec('ROLLBACK'); throw error; }
+    },
+    /** Attempts whose usage was never reported; each keeps its whole hold. */
+    unknownAttempts() {
+      return (db.prepare("SELECT id,model,basis,reserved FROM attempts WHERE state='unknown' ORDER BY rowid").all() as { id: string; model: string; basis: string; reserved: number }[])
+        .map(row => ({ id: row.id, model: row.model, basis: row.basis, reservedNanos: Number(row.reserved) }));
+    },
+    /** Settle one attempt whose usage was never reported, from evidence outside
+     * the ledger such as the provider's usage console. Explicit and audited;
+     * attempts still in flight cannot be resolved. */
+    resolveUnknown(id: string, charged: number, evidence: string) {
+      validAmount(charged, true);
+      const note = evidence.trim();
+      if (!note || note.length > 500) throw new Error('Resolving unknown usage needs evidence of at most 500 characters.');
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        // A frozen ledger holds an attempt whose usage exceeded the reviewed limits; it may have cost more than any hold.
+        if (db.prepare('SELECT frozen FROM budget WHERE id=1').get()?.frozen === 1) throw new Error('The ledger is frozen for inspection; unknown usage cannot be resolved.');
+        const row = db.prepare('SELECT state,reserved FROM attempts WHERE id=?').get(id);
+        if (row?.state !== 'unknown') throw new Error('Evaluation reservations can resolve only unknown usage.');
+        if (charged > Number(row.reserved)) throw new Error('A resolved charge cannot be more than its hold. Inspect the ledger.');
+        db.exec('CREATE TABLE IF NOT EXISTS resolutions (attempt_id TEXT PRIMARY KEY, charged INTEGER NOT NULL, evidence TEXT NOT NULL, resolved_at TEXT NOT NULL)');
+        db.prepare("INSERT INTO resolutions(attempt_id,charged,evidence,resolved_at) VALUES (?,?,?,datetime('now'))").run(id, charged, note);
+        db.prepare("UPDATE attempts SET charged=?,state='settled' WHERE id=?").run(charged, id);
+        db.exec('COMMIT');
       } catch (error) { db.exec('ROLLBACK'); throw error; }
     },
     close() { db.close(); },

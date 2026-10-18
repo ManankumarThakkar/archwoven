@@ -3,7 +3,8 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { Worker } from 'node:worker_threads';
-import { evaluationLedgerId, initializeEvaluationBudget, openEvaluationBudget, parseBudgetUsd } from './evaluation-budget';
+import { DatabaseSync } from 'node:sqlite';
+import { evaluationLedgerId, initializeEvaluationBudget, openEvaluationBudget, parseBudgetUsd, parseUsd } from './evaluation-budget';
 import { relative } from 'node:path';
 
 const directories: string[] = [];
@@ -123,5 +124,53 @@ describe('evaluation ledger identity', () => {
   });
   it('refuses a ledger that does not exist', () => {
     expect(() => evaluationLedgerId(join(tmpdir(), 'aw-missing-ledger.db'))).toThrow(/not initialized/);
+  });
+});
+
+describe('resolving unknown usage', () => {
+  const unknown = (store: ReturnType<typeof openEvaluationBudget>, amount = 600) => { const id = store.reserve(amount, identity); store.settle(id, null); return id; };
+  it('settles an unknown attempt from outside evidence, frees its hold and keeps an audit record', () => {
+    const { file, store } = budget(1000);
+    const id = unknown(store);
+    expect(() => store.reserve(600, identity)).toThrow(/cannot cover/);
+    expect(store.unknownAttempts()).toEqual([{ id, model: 'reviewed-model', basis: 'reviewed-pricing', reservedNanos: 600 }]);
+    store.resolveUnknown(id, 0, 'Provider console shows no usage for this model on 2026-10-18.');
+    expect(store.snapshot()).toMatchObject({ settledNanos: 0, heldNanos: 0, unknownAttempts: 0 });
+    expect(store.unknownAttempts()).toEqual([]);
+    expect(() => store.reserve(600, identity)).not.toThrow();
+    const audit = new DatabaseSync(file, { readOnly: true });
+    try { expect(audit.prepare('SELECT attempt_id, charged, evidence FROM resolutions').all()).toEqual([{ attempt_id: id, charged: 0, evidence: 'Provider console shows no usage for this model on 2026-10-18.' }]); }
+    finally { audit.close(); }
+  });
+  it('records a known charge and never more than the hold', () => {
+    const { store } = budget(1000);
+    const id = unknown(store);
+    expect(() => store.resolveUnknown(id, 601, 'Console')).toThrow(/more than its hold/);
+    store.resolveUnknown(id, 250, 'Console shows $0.00000025');
+    expect(store.snapshot()).toMatchObject({ settledNanos: 250, heldNanos: 0 });
+  });
+  it('refuses attempts that are in flight, settled or missing, and resolutions without evidence', () => {
+    const { store } = budget(2000);
+    const held = store.reserve(600, identity);
+    const settled = store.reserve(600, identity); store.settle(settled, 10);
+    const id = unknown(store);
+    expect(() => store.resolveUnknown(held, 0, 'Console')).toThrow(/only unknown usage/);
+    expect(() => store.resolveUnknown(settled, 0, 'Console')).toThrow(/only unknown usage/);
+    expect(() => store.resolveUnknown('missing', 0, 'Console')).toThrow(/only unknown usage/);
+    expect(() => store.resolveUnknown(id, 0, '  ')).toThrow(/evidence/);
+    expect(() => store.resolveUnknown(id, 0, 'Console')).not.toThrow();
+    expect(() => store.resolveUnknown(id, 0, 'Console')).toThrow(/only unknown usage/);
+  });
+  it('refuses while the ledger is frozen, because a frozen attempt may have cost more than its hold', () => {
+    const { store } = budget(1000);
+    const id = unknown(store); store.freeze();
+    expect(() => store.resolveUnknown(id, 0, 'Console')).toThrow(/frozen/);
+    expect(store.snapshot().unknownAttempts).toBe(1);
+  });
+  it('parses zero only where a zero amount is allowed', () => {
+    expect(parseUsd('0.00', { zero: true })).toBe(0);
+    expect(parseUsd('0.000000250', { zero: true })).toBe(250);
+    expect(() => parseUsd('0.00')).toThrow(/greater than zero/);
+    expect(() => parseUsd('-1', { zero: true })).toThrow();
   });
 });
