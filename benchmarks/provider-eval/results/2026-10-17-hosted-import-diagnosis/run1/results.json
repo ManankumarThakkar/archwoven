@@ -1,0 +1,95 @@
+{
+  "summary": {
+    "ranAt": "2026-10-18T00:20:17.200Z",
+    "base": "http://127.0.0.1:3054",
+    "budget": 0.5,
+    "spentUsd": 0.1473,
+    "generations": {
+      "ran": 0,
+      "succeeded": "—",
+      "providerCalls": 0,
+      "firstPassValid": "—",
+      "repairedToValid": "—",
+      "failedCalls": 0,
+      "latencyP50": "—",
+      "latencyP90": "—",
+      "latencyMax": "—",
+      "costUsd": 0,
+      "cacheReadTokens": 0,
+      "cacheWriteTokens": 0,
+      "uncachedInputTokens": 0,
+      "cacheSavingsUsd": 0
+    },
+    "byView": {},
+    "clarifications": [],
+    "validModels": "1/1 (100%)",
+    "suiteA": {},
+    "refinements": {
+      "ran": 0,
+      "succeeded": "—",
+      "providerCalls": 0,
+      "firstPassValid": "—",
+      "repairedToValid": "—",
+      "failedCalls": 0,
+      "latencyP50": "—",
+      "latencyP90": "—",
+      "latencyMax": "—",
+      "costUsd": 0,
+      "cacheReadTokens": 0,
+      "cacheWriteTokens": 0,
+      "uncachedInputTokens": 0,
+      "cacheSavingsUsd": 0
+    },
+    "repositories": {
+      "ran": 1,
+      "succeeded": "1/1 (100%)",
+      "providerCalls": 1,
+      "firstPassValid": "1/1 (100%)",
+      "repairedToValid": "0/1 (0%)",
+      "failedCalls": 0,
+      "latencyP50": "43.3 s",
+      "latencyP90": "43.3 s",
+      "latencyMax": "43.3 s",
+      "costUsd": 0.1473,
+      "cacheReadTokens": 0,
+      "cacheWriteTokens": 3626,
+      "uncachedInputTokens": 3459,
+      "cacheSavingsUsd": -0.0036
+    },
+    "diagramVsTruth": {}
+  },
+  "results": [
+    {
+      "id": "repo-spring-realworld",
+      "kind": "repository",
+      "status": "succeeded",
+      "latencyMs": 43313,
+      "gaps": 2,
+      "usage": {
+        "calls": [
+          {
+            "view": "architecture",
+            "outcome": "ok",
+            "repairs": 0,
+            "costUsd": 0.147326
+          }
+        ],
+        "inputTokens": 3459,
+        "cacheWriteTokens": 3626,
+        "cacheReadTokens": 0,
+        "outputTokens": 5768,
+        "costUsd": 0.147326,
+        "repairs": 0
+      },
+      "model": {
+        "nodes": 22,
+        "edges": 1,
+        "views": [
+          "architecture"
+        ],
+        "openQuestions": 5,
+        "valid": true
+      }
+    }
+  ]
+}

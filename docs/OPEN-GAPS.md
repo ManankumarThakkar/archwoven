@@ -2,7 +2,7 @@
 
 A single, living list of known gaps that are not yet fixed, so none is lost between tasks. Each entry links to where it was found. When a gap is fixed, delete its row in the same PR; when one is found, add it here in the PR that found it.
 
-Last reviewed: 2026-10-17, after PR #45 (main `174bf15`) and the hosted import re-run. Current evidence and its limits are recorded in [RELEASE-ACCEPTANCE.md](RELEASE-ACCEPTANCE.md). Release tasks refer to `RELEASE-PROGRESS.md`.
+Last reviewed: 2026-10-17, after PR #46 (main `ddd4b8a`) and the import repair diagnosis. Current evidence and its limits are recorded in [RELEASE-ACCEPTANCE.md](RELEASE-ACCEPTANCE.md). Release tasks refer to `RELEASE-PROGRESS.md`.
 
 ## Scheduled into a release task
 
@@ -18,7 +18,7 @@ Last reviewed: 2026-10-17, after PR #45 (main `174bf15`) and the hosted import r
 
 | Gap | User impact | Found in | Notes |
 |---|---|---|---|
-| One of four hosted imports (spring-realworld) still needed a repair round after the task 19b fixes; its cause was not diagnosed. Imports were 3/4 valid on the first attempt (baseline 0/4), and descriptions 7/7 | That import costs a repair round: 92.8 s and $0.32 | Task 19b import re-run | Diagnose with a recorded repair message in the next provider evaluation |
+| Hosted imports occasionally need one repair round: 5 of 6 import runs since the task 19b fixes were valid on the first attempt; the one repair (spring-realworld) did not recur in two re-runs | An occasional import costs a repair round (up to about 90 s and $0.32) | Task 19b import re-runs | Not reproducible within the approved budget; run evaluations with `benchmarks/provider-eval/capture-repairs.mjs` so the next occurrence records its cause |
 | Node and edge ground truth exists only for the two repositories used while fixing the extractors; held-out truth covers endpoints only | Diagram and extraction accuracy on unseen repositories is unmeasured beyond endpoints | Tasks 15 and 19 | Needs hand-authored truth for new held-out repositories |
 | Third-party SDK clients reached through helper functions (SMTP via `emails`/`smtplib`, Sentry) are not extracted | External services such as email delivery are missing from FastAPI diagrams | Task 15 ground truth (full-stack template) | Needs call-graph inference; candidate for a later extractor pass |
 | FastAPI dependencies built by factory calls (`Depends(get_repository(UsersRepository))`) are not resolved | Repository/service links behind parameterised dependency factories are missing | Task 15 held-out reading (fastapi-realworld) | Same call-graph limitation; disclosed only implicitly by the missing edges |
