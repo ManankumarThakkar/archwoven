@@ -55,8 +55,9 @@ export const isBudgetRefusal = text => BUDGET_REFUSAL.test(String(text ?? ''));
 /** A task that ended without a diagram. When the provider answered every attempt
  * in full, its output was not accepted: a model-quality result, not an outage. */
 export function failedStatus(error, task) {
-  const reason = String(error);
-  if (isBudgetRefusal(reason)) return { status: 'budget-blocked', reason };
+  const provider = task?.attempts?.findLast(a => a.error)?.error;
+  const reason = provider ? `${error} Provider: ${provider}` : String(error);
+  if (isBudgetRefusal(error)) return { status: 'budget-blocked', reason };
   const answered = task?.outcome === 'failed' && task.usageComplete && task.attempts?.length > 0 && task.attempts.every(a => a.usageComplete);
   return { status: answered ? 'rejected' : 'failed', reason };
 }
