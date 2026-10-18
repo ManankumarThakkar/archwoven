@@ -73,6 +73,35 @@ with `ARCHWOVEN_MODE=local`, `ARCHWOVEN_FAKE=0` and the installed Ollama
 Further live checks are recorded here as they complete. A derived geometry fixture,
 where used, is labelled separately from real model generation.
 
+## Cross-browser and accessibility (task 20h)
+
+`apps/web/e2e/browser-acceptance.mjs` drives a fake-model production build in Playwright 1.63
+Chromium and WebKit (Safari's engine) and attempts Firefox. Each export is downloaded and
+checked as a file. axe-core 4.10.3 scans at WCAG 2.1 A/AA. Keyboard checks use Tab in
+Chromium and Option+Tab in WebKit: by macOS default, Tab moves only between text fields
+there, and Option+Tab moves through every control.
+
+| Check | Chromium | WebKit |
+|---|---|---|
+| axe, empty workspace, 1440 px | 0 violations | 0 violations |
+| axe, workspace with a diagram, 1440 px and 390 px | 0 violations | 0 violations |
+| Description field, Generate and every refine/export control reachable by keyboard | Passed | Passed |
+| Visible focus indicator on Generate | Passed | Passed |
+| SVG download is a complete SVG file | Passed (7,428 bytes) | Passed |
+| PNG download is a valid PNG | Passed (1172 × 1476) | Passed |
+| JSON download is the saved model | Passed | Passed |
+| Page errors during downloads | None | None |
+
+The WebKit downloads exercise the deferred object-URL release that had been unverified
+outside Chrome. Limits:
+- Playwright's Firefox 155 build would not start on this macOS 27.0.1 machine ("Could not
+  find profile folder"). This was not caused by the command sandbox, a quarantine flag or an
+  architecture mismatch. Firefox remains unverified.
+- Playwright WebKit is the engine, not the Safari application. Real Safari needs `safaridriver --enable`.
+- The "JSON (no evidence)" button appears only when a diagram has evidence. Fake diagrams have
+  none, so that download was not exercised here.
+- Automated checks do not replace screen-reader or physical-touch testing.
+
 ## Cleanup and remaining acceptance
 
 The README now links current release status and gives native production/local setup
@@ -82,7 +111,7 @@ where their old commands or ignored reference inputs could mislead a fresh check
 No saved diagrams, keys, local clones or user-generated files were deleted.
 
 Outstanding gates include the named Suite A verdicts, real screen-reader/physical-touch
-acceptance, browser combinations not recorded above, successful container inference,
+acceptance, Firefox and the Safari application (WebKit passed above), successful container inference,
 and owner name/domain clearance. Hosted import first-pass validity after the latest
 prompt fixes still needs a bounded provider evaluation. Hosting and its cost controls
 remain a separate decision; this pass does not change shipped retention or deployment
