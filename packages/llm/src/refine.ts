@@ -1,6 +1,6 @@
 import { newUsageLedger, startAttempt, captureUsage } from './usage';
 import { z } from 'zod';
-import { EditOpSchema, applyEditOps, isSourceEvidenceRefusal, sameModelContent, type EditOp, type SystemModel, type ViewType } from '@archwoven/model';
+import { EditOpSchema, HOSTED_REQUESTS, applyEditOps, isSourceEvidenceRefusal, sameModelContent, type EditOp, type SystemModel, type ViewType } from '@archwoven/model';
 import {
   CONTEXT_TOKEN_LIMIT, MAX_REPAIRS, MODEL, configuredHostedModel, STRUCTURED_OUTPUTS_BETA, fakeMode, countFailureMessage, hostedClient, usageFrom, wireSchema, providerRequestStopped,
   type Effort, type StructuredClient,
@@ -34,7 +34,7 @@ export const NO_CHANGE_ERROR = 'These EditOps change nothing. Implement the inst
 export const REFINEMENT_SYSTEM = refinementSystem(true);
 export const LOCAL_REFINEMENT_SYSTEM = refinementSystem(false);
 
-const opsSchema = wireSchema(z.toJSONSchema(z.array(EditOpSchema), { reused: 'inline', target: 'draft-2020-12' }));
+export const REFINEMENT_OUTPUT_SCHEMA = wireSchema(z.toJSONSchema(z.array(EditOpSchema), { reused: 'inline', target: 'draft-2020-12' }));
 
 const textOf = (content: { type: string; text?: string }[]) =>
   content.filter((b) => b.type === 'text').map((b) => b.text ?? '').join('');
@@ -50,7 +50,7 @@ export async function generateRefinement(
   view: ViewType,
   opts: { client?: StructuredClient; effort?: Effort; signal?: AbortSignal } = {},
 ): Promise<RefineOutcome> {
-  const effort: Effort = opts.effort ?? 'low';
+  const effort: Effort = opts.effort ?? HOSTED_REQUESTS.refine.effort;
   const modelId = !opts.client && fakeMode() ? MODEL : configuredHostedModel();
   if (opts.signal?.aborted) return { ok: false, errors: ['Refinement cancelled.'], usage: usageFrom({}, effort, 0, 0, modelId) };
   if (!opts.client && fakeMode()) {
@@ -88,11 +88,11 @@ export async function generateRefinement(
     try {
       response = await client.beta.messages.create({
         model: modelId,
-        max_tokens: 4000,
+        max_tokens: HOSTED_REQUESTS.refine.maxTokens,
         betas: [STRUCTURED_OUTPUTS_BETA],
         system,
         messages,
-        output_config: { format: { type: 'json_schema', schema: opsSchema }, effort },
+        output_config: { format: { type: 'json_schema', schema: REFINEMENT_OUTPUT_SCHEMA }, effort },
       }, { signal: opts.signal });
     } catch (e) {
       lastErrors = [`request failed: ${e instanceof Error ? e.message : String(e)}`];

@@ -1,0 +1,13 @@
+{
+  "about": "Screening stage: 8 of the reviewed provider-eval cases, chosen to cover every diagram type, a vague description that should ask for clarification, a refinement and two pinned repository imports with ground truth. It compares models cheaply before a larger run; it is not a statistical sample. Ground truth for these two repositories was used while improving the extractors, so it is not held out.",
+  "cases": [
+    { "id": "checkout", "clarification": "not-expected" },
+    { "id": "vague-blog", "clarification": "expected" },
+    { "id": "upload-seq", "clarification": "not-expected" },
+    { "id": "courses-er", "clarification": "not-expected" },
+    { "id": "notify-component", "clarification": "not-expected" },
+    { "id": "refine-add-notify" },
+    { "id": "repo-petclinic" },
+    { "id": "repo-fastapi-template" }
+  ]
+}

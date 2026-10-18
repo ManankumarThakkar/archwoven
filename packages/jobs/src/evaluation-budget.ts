@@ -1,5 +1,5 @@
-import { randomUUID } from 'node:crypto';
-import { closeSync, existsSync, openSync } from 'node:fs';
+import { createHash, randomUUID } from 'node:crypto';
+import { closeSync, existsSync, openSync, realpathSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 
 // This tool is for small, explicitly approved evaluations, not a billing system.
@@ -28,6 +28,13 @@ export function initializeEvaluationBudget(file: string, capNanos: number): void
     `);
     db.prepare('INSERT INTO budget(id,version,cap) VALUES (1,1,?)').run(capNanos);
   } finally { db.close(); }
+}
+
+/** Path-free name for a ledger file, so an evaluation runner can confirm that
+ * it reads the same ledger the server reserves against. */
+export function evaluationLedgerId(file: string): string {
+  if (!existsSync(file)) throw new Error('Evaluation budget is not initialized. Initialize a new ledger explicitly before starting the server.');
+  return `l-${createHash('sha256').update(realpathSync(file)).digest('hex').slice(0, 12)}`;
 }
 
 export function openEvaluationBudget(file: string) {

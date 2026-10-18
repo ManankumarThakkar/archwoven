@@ -12,7 +12,7 @@ import {
   validFullModelExtended,
   type SystemModel,
   type ViewType,
-  DEFAULT_HOSTED_MODEL, resolveHostedModelId, type HostedModelId,
+  DEFAULT_HOSTED_MODEL, HOSTED_REQUESTS, resolveHostedModelId, type HostedModelId,
 } from '@archwoven/model';
 
 export const MODEL = DEFAULT_HOSTED_MODEL;
@@ -345,7 +345,7 @@ export async function generateModel(
       // the grammar (STABLE_SYSTEM).
       response = await client.beta.messages.create({
         model: modelId,
-        max_tokens: MAX_TOKENS,
+        max_tokens: HOSTED_REQUESTS.generate.maxTokens,
         system,
         messages,
       }, { signal: opts.signal });

@@ -1,11 +1,12 @@
-import { HOSTED_MODELS, resolveHostedModelId } from '@archwoven/model';
+import { createHash } from 'node:crypto';
+import { EVALUATION_CONTEXT_CEILING, HOSTED_MODELS, evaluationHoldNanos, resolveHostedModelId } from '@archwoven/model';
 import { openEvaluationBudget, type EvaluationBudget } from '@archwoven/jobs';
 import { makeAnthropic, resolveApiKey, MAX_TOKENS, STRUCTURED_OUTPUTS_BETA, ProviderAccountingError, ProviderRequestNotSentError, type RawUsage, type StructuredClient } from '@archwoven/llm';
 
 /** Reviewed context ceiling, not a count_tokens estimate. Standard global direct
  * API, no tools, 5-minute caches. Re-review this contract when adding models or
  * paid features. https://platform.claude.com/docs/en/models/overview */
-const CONTEXT_CEILING = 1_000_000;
+const CONTEXT_CEILING = EVALUATION_CONTEXT_CEILING;
 const refusal = () => new ProviderRequestNotSentError('This evaluation request uses options outside the reviewed spending limits. Nothing was sent.');
 const object = (value: unknown): Record<string, unknown> => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw refusal();
@@ -27,6 +28,10 @@ function text(value: unknown) {
   }
 }
 
+/** Content fingerprint of the hosted prompts and output schemas. */
+export const promptVersion = (parts: Record<string, unknown>) =>
+  `p-${createHash('sha256').update(JSON.stringify(parts)).digest('hex').slice(0, 12)}`;
+
 export function evaluationReservation(raw: unknown) {
   const request = object(raw); keys(request, ['model', 'max_tokens', 'system', 'messages', 'betas', 'output_config']);
   if (typeof request.model !== 'string' || !Object.hasOwn(HOSTED_MODELS, request.model)) throw refusal();
@@ -47,12 +52,8 @@ export function evaluationReservation(raw: unknown) {
     if (format.type !== 'json_schema') throw refusal();
     object(format.schema);
   }
-  const profile = HOSTED_MODELS[model];
-  const multiplier = model === 'claude-haiku-5-5' ? 5 : 1; // reserve the higher long-context tier
   const maxTokens = request.max_tokens as number;
-  const nanos = CONTEXT_CEILING * (Math.max(profile.prices.input, profile.prices.cacheWrite, profile.prices.cacheRead) * 1000) * multiplier
-    + maxTokens * (profile.prices.output * 1000) * multiplier;
-  return { model, maxTokens, nanos, basis: profile.costBasis };
+  return { model, maxTokens, nanos: evaluationHoldNanos(model, maxTokens), basis: HOSTED_MODELS[model].costBasis };
 }
 
 function charge(quote: ReturnType<typeof evaluationReservation>, usage: RawUsage): number | null | 'out-of-contract' {

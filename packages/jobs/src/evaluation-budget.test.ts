@@ -3,7 +3,8 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { Worker } from 'node:worker_threads';
-import { initializeEvaluationBudget, openEvaluationBudget, parseBudgetUsd } from './evaluation-budget';
+import { evaluationLedgerId, initializeEvaluationBudget, openEvaluationBudget, parseBudgetUsd } from './evaluation-budget';
+import { relative } from 'node:path';
 
 const directories: string[] = [];
 const stores: ReturnType<typeof openEvaluationBudget>[] = [];
@@ -110,5 +111,17 @@ describe('evaluation spending reservations', () => {
     expect(parseBudgetUsd('6')).toBe(6_000_000_000);
     expect(parseBudgetUsd('0.000000001')).toBe(1);
     for (const value of ['', '0', '-1', '1e2', 'NaN', '0.0000000001', '9007199254740991']) expect(() => parseBudgetUsd(value)).toThrow();
+  });
+});
+
+describe('evaluation ledger identity', () => {
+  it('names the same ledger file the same way however its path is spelled, without revealing the path', () => {
+    const { file } = budget(); const other = budget().file;
+    expect(evaluationLedgerId(relative(process.cwd(), file))).toBe(evaluationLedgerId(file));
+    expect(evaluationLedgerId(file)).toMatch(/^l-[0-9a-f]{12}$/);
+    expect(evaluationLedgerId(other)).not.toBe(evaluationLedgerId(file));
+  });
+  it('refuses a ledger that does not exist', () => {
+    expect(() => evaluationLedgerId(join(tmpdir(), 'aw-missing-ledger.db'))).toThrow(/not initialized/);
   });
 });

@@ -1,9 +1,9 @@
 import { newUsageLedger, startAttempt, captureUsage } from './usage';
 import type { Fragment } from '@archwoven/extract';
 import { buildSourceModel, SOURCE_PRESENTATION_SYSTEM } from './source-presentation';
-import { validateModel, validFullModelExtended, type Evidence } from '@archwoven/model';
+import { HOSTED_REQUESTS, validateModel, validFullModelExtended, type Evidence } from '@archwoven/model';
 import {
-  MODEL, configuredHostedModel, MAX_REPAIRS, MAX_TOKENS, CONTEXT_TOKEN_LIMIT, NATIVE_MODEL_JSON_CONTRACT,
+  MODEL, configuredHostedModel, MAX_REPAIRS, CONTEXT_TOKEN_LIMIT, NATIVE_MODEL_JSON_CONTRACT,
   countFailureMessage, hostedClient, fakeMode, decodeWireModel, unfenced, usageFrom, providerRequestStopped,
   type StructuredClient, type Effort, type GenerateOutcome,
 } from './client';
@@ -134,7 +134,7 @@ export async function assembleRepoModel(
       // limit as generateModel; validateModel + repair loop enforce the shape.
       response = await client.beta.messages.create({
         model: modelId,
-        max_tokens: generic ? 2048 : MAX_TOKENS,
+        max_tokens: generic ? HOSTED_REQUESTS.repoSourceMap.maxTokens : HOSTED_REQUESTS.repo.maxTokens,
         system,
         messages,
       }, { signal: opts.signal });
