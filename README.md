@@ -188,9 +188,21 @@ node benchmarks/repair-rounds/harness.selftest.mjs
 - **`benchmarks/ordinary-model-floor`** checks what an ordinary model must get right. A case passes only when three gates pass: required nodes and relationships (`check`), schema and graph validity (`verify`), and a named person's visual review (`record-visual`). `report` exits 0 for pass, 1 for a failure and 2 for incomplete.
 - **`benchmarks/repair-rounds`** mutates valid models in eight ways and measures whether validation names the fault and whether a rules-only repairer can fix it. Its `verify` writes a fingerprinted receipt pinned to a clean commit.
 - **`benchmarks/provider-eval`** drives a running server through 20 descriptions, 6 refinements and 4 pinned imports. It records validity, repairs, latency, cost and cache savings, and scores imports against ground truth: `node benchmarks/provider-eval/run.mjs <url> <server.db> <outDir> --budget <usd>`. It makes real, billed provider calls.
-  The legacy runner accepts only real hosted Opus output. Its budget stops new tasks after recorded spending reaches the threshold; it does not reserve a worst-case amount before each attempt and can exceed that threshold. Do not use it as a hard spending cap or for cross-model comparisons.
+  The legacy runner accepts only real hosted Opus output and requires the server's evaluation reservation ledger. `--budget` is an additional task-stop threshold; the separate ledger's cap is authoritative. This runner is not for cross-model comparisons.
 - **`apps/web/e2e/ground-truth.mjs`** scores extraction against the hand-checked ground truth in `probes/ground-truth/`.
 - **`apps/web/e2e/browser-acceptance.mjs`** runs downloads, axe-core and keyboard checks in Chromium, WebKit and Firefox. Playwright is not a project dependency; point the script at a separate install.
+
+For a paid evaluation, explicitly initialize a separate ledger with the amount you have approved, then keep that same file across server restarts and model changes:
+
+```bash
+pnpm eval:budget init /absolute/path/evaluation-budget.db <approved-usd>
+ARCHWOVEN_MODE=hosted ARCHWOVEN_FAKE=0 ARCHWOVEN_EVAL_BUDGET_DB=/absolute/path/evaluation-budget.db pnpm dev
+pnpm eval:budget status /absolute/path/evaluation-budget.db
+```
+
+The local evaluation guard reserves before every paid attempt, including repairs and retries. It uses integer accounting and a conservative bound: the full reviewed model context at the highest supported input rate plus the requested maximum output. For an 8,192-token output this holds about $5.16 for Opus, $2.58 for Sonnet or $0.65 for Haiku. Reported usage settles the hold; missing usage, transport failures and crashes retain it. Admission can stop below the cap when another worst-case hold cannot fit. There is no automatic expiry or refund for uncertain charges. Inspect the ledger before approving another run; initializing a different file starts a separate budget and does not carry prior charges.
+
+This opt-in guard supports the existing text-only API requests, five-minute caches and reviewed models. It explicitly requests global routing, standard speed and standard service tier; unreviewed paid features fail closed. A provider workspace that restricts global routing may refuse the request. It is local evaluation tooling, unavailable on Vercel; public hosted money limits still require shared storage. Ordinary development is unchanged when the variable is unset.
 - **`apps/web/e2e/responsive-workspace.mjs`** checks canvas space, inspector placement, overflow and selection across 390–1440 px using a recorded model, without provider calls. Run `node apps/web/e2e/responsive-workspace.mjs <url> <output-dir> <browser-tools-dir> [chromium,webkit]`; the tools directory needs Playwright and axe-core as above.
 - **`apps/web/e2e/task-usage.mjs`** exercises metering → SQLite → quota API → browser → reload for model prices, cache tiers, incomplete reports and unknown prices. Start a disposable localhost server with `ARCHWOVEN_FAKE=0` and `ARCHWOVEN_DB` in a temporary directory, then run `node apps/web/e2e/task-usage.mjs <url> <temporary-server.db> <output-dir> <browser-tools-dir> [chromium,webkit]`. It seeds content-free usage fixtures through the real metering code and removes its own records afterward. It makes no inference calls and does not measure model quality.
 

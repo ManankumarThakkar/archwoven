@@ -51,9 +51,9 @@ export const STRUCTURED_OUTPUTS_BETA = 'structured-outputs-2025-12-15';
 export const hostedClient = (injected?: StructuredClient): StructuredClient =>
   guardEgress(injected ?? (makeAnthropic(resolveApiKey()) as unknown as StructuredClient));
 
-/** A refused-for-secrets request explains itself; any other counting failure keeps its technical cause. */
+/** Local preflight refusals explain themselves; other counting failures keep their cause. */
 export const countFailureMessage = (e: unknown): string =>
-  e instanceof SecretEgressError ? e.message : `context token count failed: ${e instanceof Error ? e.message : String(e)}`;
+  e instanceof SecretEgressError || e instanceof ProviderRequestNotSentError ? e.message : `context token count failed: ${e instanceof Error ? e.message : String(e)}`;
 
 export type Effort = 'low' | 'medium' | 'high';
 
@@ -82,6 +82,15 @@ export interface StructuredClient {
       }>;
     };
   };
+}
+
+/** Terminal adapter refusals distinguish a send that never happened from an
+ * ambiguous post-dispatch accounting failure. Neither is a transport retry. */
+export class ProviderRequestNotSentError extends Error {}
+export class ProviderAccountingError extends Error {}
+export function providerRequestStopped(error: unknown, ledger: UsageLedger): boolean {
+  if (error instanceof ProviderRequestNotSentError || error instanceof SecretEgressError) { ledger.attempts.pop(); return true; }
+  return error instanceof ProviderAccountingError;
 }
 
 /**
@@ -342,7 +351,7 @@ export async function generateModel(
       }, { signal: opts.signal });
     } catch (e) {
       lastErrors = [`request failed: ${e instanceof Error ? e.message : String(e)}`];
-      if (opts.signal?.aborted) break;
+      if (providerRequestStopped(e, billed) || opts.signal?.aborted) break;
       continue; // transient/transport failure — retry within budget
     }
     captureUsage(billed, response.usage);

@@ -28,6 +28,10 @@ export const fakeMode = () => process.env.ARCHWOVEN_FAKE === '1';
  * node-only ingest chain (node:child_process) that edge cannot bundle.
  */
 export function assertSafeRuntime(): void {
+  if (process.env.ARCHWOVEN_EVAL_BUDGET_DB !== undefined &&
+      (!process.env.ARCHWOVEN_EVAL_BUDGET_DB.trim() || process.env.VERCEL || deployMode() === 'local' || fakeMode())) {
+    throw new Error('Evaluation budgets require a local hosted-mode server with sample data disabled.');
+  }
   if (deployMode() === 'hosted' && !fakeMode()) resolveHostedModelId(process.env.ARCHWOVEN_HOSTED_MODEL);
   const prod = process.env.NODE_ENV === 'production';
   if (!prod) return;

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { existsSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { initializeEvaluationBudget } from '@archwoven/jobs';
 
 const sweeper = vi.hoisted(() => ({ start: vi.fn(() => () => {}) }));
 vi.mock('./lib/retention', () => ({ startRetentionSweeper: sweeper.start }));
@@ -42,5 +43,22 @@ describe('boot hook retention', () => {
     await register();
     expect(existsSync(database)).toBe(false);
     expect(sweeper.start).not.toHaveBeenCalled();
+  });
+  it('fails boot before creating application storage if the evaluation ledger is missing', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'aw-eval-boot-'));
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs'); vi.stubEnv('ARCHWOVEN_MODE', 'hosted'); vi.stubEnv('ARCHWOVEN_FAKE', '0');
+    vi.stubEnv('ARCHWOVEN_EVAL_BUDGET_DB', join(directory, 'missing.db'));
+    vi.stubEnv('ARCHWOVEN_DB', join(directory, 'app.db'));
+    const { register } = await import('./instrumentation');
+    await expect(register()).rejects.toThrow(/initialized/);
+    expect(existsSync(join(directory, 'app.db'))).toBe(false);
+  });
+  it('checks the existing evaluation ledger without resetting its cap', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'aw-eval-boot-'));
+    const file = join(directory, 'budget.db'); initializeEvaluationBudget(file, 100);
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs'); vi.stubEnv('ARCHWOVEN_MODE', 'hosted'); vi.stubEnv('ARCHWOVEN_FAKE', '0');
+    vi.stubEnv('ARCHWOVEN_EVAL_BUDGET_DB', file); vi.stubEnv('ARCHWOVEN_DB', join(directory, 'app.db'));
+    const { register } = await import('./instrumentation');
+    await expect(register()).resolves.toBeUndefined();
   });
 });

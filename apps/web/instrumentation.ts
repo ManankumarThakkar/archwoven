@@ -17,8 +17,14 @@ export async function register(): Promise<void> {
   // NEXT_RUNTIME is compile-time replaced — the edge build DCEs this import;
   // node:sqlite must never reach the edge bundle (see 5ff0568).
   if (process.env.NEXT_RUNTIME === 'nodejs') {
-    const { openStore } = await import('@archwoven/jobs');
+    const { openStore, openEvaluationBudget } = await import('@archwoven/jobs');
     const path = process.env.ARCHWOVEN_DB ?? 'data/archwoven.db';
+    if (process.env.ARCHWOVEN_EVAL_BUDGET_DB !== undefined) {
+      const { resolve } = await import('node:path');
+      if (resolve(process.env.ARCHWOVEN_EVAL_BUDGET_DB) === resolve(path)) throw new Error('Use a separate evaluation budget database.');
+      const budget = openEvaluationBudget(process.env.ARCHWOVEN_EVAL_BUDGET_DB);
+      try { budget.snapshot(); } finally { budget.close(); }
+    }
     const store = openStore(path);
     const swept = store.sweepOrphans();
     store.close();

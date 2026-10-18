@@ -4,7 +4,7 @@ import { buildSourceModel, SOURCE_PRESENTATION_SYSTEM } from './source-presentat
 import { validateModel, validFullModelExtended, type Evidence } from '@archwoven/model';
 import {
   MODEL, configuredHostedModel, MAX_REPAIRS, MAX_TOKENS, CONTEXT_TOKEN_LIMIT, NATIVE_MODEL_JSON_CONTRACT,
-  countFailureMessage, hostedClient, fakeMode, decodeWireModel, unfenced, usageFrom,
+  countFailureMessage, hostedClient, fakeMode, decodeWireModel, unfenced, usageFrom, providerRequestStopped,
   type StructuredClient, type Effort, type GenerateOutcome,
 } from './client';
 
@@ -140,7 +140,7 @@ export async function assembleRepoModel(
       }, { signal: opts.signal });
     } catch (e) {
       lastErrors = [`request failed: ${e instanceof Error ? e.message : String(e)}`];
-      if (opts.signal?.aborted) break;
+      if (providerRequestStopped(e, billed) || opts.signal?.aborted) break;
       continue;
     }
     captureUsage(billed, response.usage);
