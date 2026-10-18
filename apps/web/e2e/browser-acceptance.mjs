@@ -6,7 +6,7 @@
  * workspace at desktop and phone widths, and a keyboard-only pass (Option+Tab in WebKit,
  * following the macOS default where Tab moves only between text fields).
  *
- *   node apps/web/e2e/browser-acceptance.mjs <baseUrl> <outDir> <dir containing node_modules/{playwright-core,axe-core}>
+ *   node apps/web/e2e/browser-acceptance.mjs <baseUrl> <outDir> <dir containing node_modules/{playwright-core,axe-core}> [chromium,webkit,firefox]
  *
  * Neither package is a project dependency: install playwright-core and axe-core in a
  * scratch directory and point the third argument at it.
@@ -15,7 +15,7 @@ import { createRequire } from 'node:module';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const [base, out, tools] = process.argv.slice(2);
+const [base, out, tools, engines = 'chromium,webkit,firefox'] = process.argv.slice(2);
 const require = createRequire(join(tools, 'package.json'));
 const pw = require('playwright-core');
 const axeSource = readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
@@ -46,7 +46,8 @@ async function axe(page) {
   return r.violations.map((v) => ({ id: v.id, impact: v.impact, nodes: v.nodes.length, targets: v.nodes.slice(0, 3).map((n) => n.target.join(' ')) }));
 }
 
-for (const [name, type] of [['chromium', pw.chromium], ['webkit', pw.webkit], ['firefox', pw.firefox]]) {
+for (const name of engines.split(',')) {
+  const type = pw[name];
   let browser;
   try { browser = await type.launch(); } catch (err) {
     const lines = err.message.split('\n');

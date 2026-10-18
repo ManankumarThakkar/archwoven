@@ -7,6 +7,16 @@ import { Inspector } from './InspectorPanel';
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true, React });
 
 describe('Inspector heading', () => {
+  it.each([undefined, ['An unproven connection']])('keeps an identifiable inspector pane before a selection (gaps: %j)', gaps => {
+    const host = document.createElement('div');
+    const root = createRoot(host);
+    act(() => root.render(<Inspector payload={null} gaps={gaps} />));
+    const pane = host.querySelector('aside[aria-label="Inspector"]');
+    expect(pane).not.toBeNull();
+    expect(pane?.textContent).toContain('Select a node or edge');
+    act(() => root.unmount());
+  });
+
   it('labels provenance with the same words as the canvas badges', () => {
     const host = document.createElement('div');
     const root = createRoot(host);
