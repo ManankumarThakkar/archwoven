@@ -1,6 +1,8 @@
 import { deployMode, fakeMode } from '../../lib/mode';
-import { resolveHostedModelId } from '@archwoven/model';
-import { openEvaluationBudget } from '@archwoven/jobs';
+import { HOSTED_REQUESTS, resolveHostedModelId } from '@archwoven/model';
+import { evaluationLedgerId, openEvaluationBudget } from '@archwoven/jobs';
+import { HOSTED_PROMPT_PARTS } from '@archwoven/llm';
+import { promptVersion } from '../../lib/evaluation-budget';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,5 +21,7 @@ export function GET() {
     mode, fake: fakeMode(), llmReady,
     hostedModel: mode === 'hosted' && !fakeMode() ? resolveHostedModelId(process.env.ARCHWOVEN_HOSTED_MODEL) : null,
     evaluationBudgetEnabled: file !== undefined, evaluationBudgetCapNanos,
+    // What an evaluation run is measuring; never shown when not evaluating.
+    ...(file !== undefined ? { evaluation: { ledger: evaluationLedgerId(file), promptVersion: promptVersion(HOSTED_PROMPT_PARTS), requests: HOSTED_REQUESTS } } : {}),
   }, { headers: { 'Cache-Control': 'private, no-store' } });
 }

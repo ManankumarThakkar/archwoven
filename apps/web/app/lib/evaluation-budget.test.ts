@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { initializeEvaluationBudget, openEvaluationBudget } from '@archwoven/jobs';
 import { generateModel, generateRefinement, expandComponent, assembleRepoModel, ProviderRequestNotSentError, type StructuredClient } from '@archwoven/llm';
 import { validFullModelExtended } from '@archwoven/model';
-import { withEvaluationBudget, evaluationReservation } from './evaluation-budget';
+import { withEvaluationBudget, evaluationReservation, promptVersion } from './evaluation-budget';
 
 const directories: string[] = [];
 const stores: ReturnType<typeof openEvaluationBudget>[] = [];
@@ -168,5 +168,15 @@ describe('all hosted operations stop known pre-dispatch refusals', () => {
     expect(outcome.usage).toMatchObject({ usageComplete: true, repairs: 0, transportRetries: 0 });
     expect(outcome.usage.attempts).toHaveLength(1);
     expect(store.snapshot()).toMatchObject({ settledNanos: 6_000_000, heldNanos: 0 });
+  });
+});
+
+describe('prompt version', () => {
+  it('changes with any prompt or schema text and stays stable otherwise', () => {
+    const parts = { generate: 'system', refineSchema: { type: 'array' } };
+    expect(promptVersion(parts)).toBe(promptVersion(structuredClone(parts)));
+    expect(promptVersion(parts)).toMatch(/^p-[0-9a-f]{12}$/);
+    expect(promptVersion({ ...parts, generate: 'system.' })).not.toBe(promptVersion(parts));
+    expect(promptVersion({ ...parts, refineSchema: { type: 'object' } })).not.toBe(promptVersion(parts));
   });
 });

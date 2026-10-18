@@ -18,6 +18,30 @@ export const HOSTED_MODELS = {
 } as const;
 
 export type HostedModelId = keyof typeof HOSTED_MODELS;
+
+/** Reviewed hosted request shapes per action. `effort: null` means the request
+ * sends no effort and the provider default applies; `outputSchema` means a JSON
+ * schema constrains the output. Call sites read their output ceiling here. */
+export const HOSTED_REQUESTS = {
+  generate: { maxTokens: 8192, effort: null, outputSchema: false },
+  repo: { maxTokens: 8192, effort: null, outputSchema: false },
+  repoSourceMap: { maxTokens: 2048, effort: null, outputSchema: false },
+  refine: { maxTokens: 4000, effort: 'low', outputSchema: true },
+  expand: { maxTokens: 4000, effort: 'low', outputSchema: true },
+} as const;
+export type HostedAction = keyof typeof HOSTED_REQUESTS;
+
+/** Largest context an evaluation attempt may report. Holds assume all of it is billed. */
+export const EVALUATION_CONTEXT_CEILING = 1_000_000;
+/** Worst-case cost of one hosted attempt in nano-USD, as the evaluation ledger
+ * reserves it: the full context at the highest input rate plus the output
+ * ceiling, at Haiku's higher long-context tier. */
+export function evaluationHoldNanos(model: HostedModelId, maxTokens: number): number {
+  const { prices } = HOSTED_MODELS[model];
+  const multiplier = model === 'claude-haiku-5-5' ? 5 : 1;
+  return EVALUATION_CONTEXT_CEILING * (Math.max(prices.input, prices.cacheWrite, prices.cacheRead) * 1000) * multiplier
+    + maxTokens * (prices.output * 1000) * multiplier;
+}
 export type HostedCostBasis = (typeof HOSTED_MODELS)[HostedModelId]['costBasis'];
 export const DEFAULT_HOSTED_MODEL: HostedModelId = 'claude-opus-5-5';
 

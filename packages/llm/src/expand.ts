@@ -1,6 +1,6 @@
 import { newUsageLedger, startAttempt, captureUsage } from './usage';
 import { z } from 'zod';
-import { applyExpansion, expandBlocker, ExpansionSchema, type Expansion, type SystemModel } from '@archwoven/model';
+import { HOSTED_REQUESTS, applyExpansion, expandBlocker, ExpansionSchema, type Expansion, type SystemModel } from '@archwoven/model';
 import {
   CONTEXT_TOKEN_LIMIT, MAX_REPAIRS, MODEL, configuredHostedModel, STRUCTURED_OUTPUTS_BETA, fakeMode, countFailureMessage, hostedClient, usageFrom, wireSchema, providerRequestStopped,
   type Effort, type RawUsage, type StructuredClient,
@@ -27,7 +27,7 @@ ${JSON.stringify(schema)}
 
 export const EXPANSION_SYSTEM = expansionSystem(z.toJSONSchema(ExpansionSchema));
 export const NATIVE_EXPANSION_SCHEMA = z.toJSONSchema(ExpansionSchema);
-const wireExpansionSchema = wireSchema(NATIVE_EXPANSION_SCHEMA);
+export const EXPANSION_OUTPUT_SCHEMA = wireSchema(NATIVE_EXPANSION_SCHEMA);
 
 /** Minimal context: the focus, its neighbours and its links — never the rest of the model. */
 export function expansionUserMessage(model: SystemModel, focus: string, hint: string): string {
@@ -73,7 +73,7 @@ export async function expandComponent(
   hint: string,
   opts: { client?: StructuredClient; effort?: Effort; signal?: AbortSignal } = {},
 ): Promise<ExpandOutcome> {
-  const effort: Effort = opts.effort ?? 'low';
+  const effort: Effort = opts.effort ?? HOSTED_REQUESTS.expand.effort;
   const modelId = !opts.client && fakeMode() ? MODEL : configuredHostedModel();
   const zero = usageFrom({}, effort, 0, 0, modelId);
   const blocked = expandBlocker(model, focus);
@@ -106,8 +106,8 @@ export async function expandComponent(
     let response: Awaited<ReturnType<StructuredClient['beta']['messages']['create']>>;
     try {
       response = await client.beta.messages.create({
-        model: modelId, max_tokens: 4000, betas: [STRUCTURED_OUTPUTS_BETA], system, messages,
-        output_config: { format: { type: 'json_schema', schema: wireExpansionSchema }, effort },
+        model: modelId, max_tokens: HOSTED_REQUESTS.expand.maxTokens, betas: [STRUCTURED_OUTPUTS_BETA], system, messages,
+        output_config: { format: { type: 'json_schema', schema: EXPANSION_OUTPUT_SCHEMA }, effort },
       }, { signal: opts.signal });
     } catch (e) {
       lastErrors = [`request failed: ${e instanceof Error ? e.message : String(e)}`];
