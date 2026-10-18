@@ -22,3 +22,19 @@ describe('local-mode API guard', () => {
     expect(res.headers.get('x-middleware-next')).toBe('1');
   });
 });
+
+describe('isolated hosting diagnostics', () => {
+  it.each(['/api/generate', '/api/repo', '/api/refine', '/api/config', '/api/jobs/any', '/api/models/any/expand'])('blocks %s before application code', async (path) => {
+    vi.stubEnv('ARCHWOVEN_HOSTING_PROBE', '1');
+    const response = middleware(new NextRequest(`https://preview.example${path}`));
+    expect(response.status).toBe(503);
+    expect(response.headers.get('cache-control')).toContain('no-store');
+    expect(await response.json()).toMatchObject({ error: 'hosting-probe-only' });
+  });
+
+  it('allows only the diagnostic endpoint to handle its own authentication', () => {
+    vi.stubEnv('ARCHWOVEN_HOSTING_PROBE', '1');
+    const response = middleware(new NextRequest('https://preview.example/api/hosting-probe'));
+    expect(response.headers.get('x-middleware-next')).toBe('1');
+  });
+});

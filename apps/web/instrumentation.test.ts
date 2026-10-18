@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { mkdtempSync } from 'node:fs';
+import { existsSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -25,6 +25,22 @@ describe('boot hook retention', () => {
 
   it('never expires diagrams on local deployments', async () => {
     await boot('local');
+    expect(sweeper.start).not.toHaveBeenCalled();
+  });
+
+  it('does not create SQLite or start retention in isolated preview diagnostics', async () => {
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
+    vi.stubEnv('ARCHWOVEN_MODE', 'hosted');
+    vi.stubEnv('ARCHWOVEN_FAKE', '0');
+    vi.stubEnv('VERCEL', '1');
+    vi.stubEnv('VERCEL_ENV', 'preview');
+    vi.stubEnv('ARCHWOVEN_HOSTING_PROBE', '1');
+    vi.stubEnv('ARCHWOVEN_HOSTING_PROBE_TOKEN', 'x'.repeat(48));
+    const database = join(mkdtempSync(join(tmpdir(), 'aw-probe-')), 'absent', 'db.sqlite');
+    vi.stubEnv('ARCHWOVEN_DB', database);
+    const { register } = await import('./instrumentation');
+    await register();
+    expect(existsSync(database)).toBe(false);
     expect(sweeper.start).not.toHaveBeenCalled();
   });
 });
