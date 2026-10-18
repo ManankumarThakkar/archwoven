@@ -1,0 +1,503 @@
+{
+  "schemaVersion": "1",
+  "revision": 1,
+  "title": "FastAPI RealWorld Example App",
+  "requirements": [],
+  "openQuestions": [
+    {
+      "id": "oq.api-prefix",
+      "text": "Computed prefix settings.api_prefix resolved to its declared default \"/api\"; an environment override would change these paths."
+    },
+    {
+      "id": "oq.db-access",
+      "text": "Which routers read or write PostgreSQL is not shown in the fragment; no runtime edges to the datastore were extracted."
+    },
+    {
+      "id": "gap.ingest.1",
+      "text": "Skipped 1 binary file: .github/assets/logo.png."
+    },
+    {
+      "id": "gap.ingest.2",
+      "text": "Skipped 1 vendored, generated or lock file or folder: poetry.lock."
+    },
+    {
+      "id": "gap.ingest.3",
+      "text": "computed prefix settings.api_prefix resolved to its declared default \"/api\" — an environment override would change these paths"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "gateway.application",
+      "kind": "gateway",
+      "label": "application",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "nsidnev/fastapi-realworld-example-app",
+          "commit": "029eb7781c60d5f563ee8990a0cbfb79b244538c",
+          "path": "app/main.py",
+          "lines": [
+            18,
+            18
+          ]
+        }
+      ]
+    },
+    {
+      "id": "router.api",
+      "kind": "service",
+      "label": "api-router",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "nsidnev/fastapi-realworld-example-app",
+          "commit": "029eb7781c60d5f563ee8990a0cbfb79b244538c",
+          "path": "app/api/routes/api.py",
+          "lines": [
+            6,
+            6
+          ]
+        }
+      ]
+    },
+    {
+      "id": "router.articles",
+      "kind": "service",
+      "label": "articles-api-router",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "nsidnev/fastapi-realworld-example-app",
+          "commit": "029eb7781c60d5f563ee8990a0cbfb79b244538c",
+          "path": "app/api/routes/articles/api.py",
+          "lines": [
+            5,
+            5
+          ]
+        }
+      ]
+    },
+    {
+      "id": "router.articles.common",
+      "kind": "service",
+      "label": "articles_common-router",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "nsidnev/fastapi-realworld-example-app",
+          "commit": "029eb7781c60d5f563ee8990a0cbfb79b244538c",
+          "path": "app/api/routes/articles/articles_common.py",
+          "lines": [
+            19,
+            19
+          ]
+        },
+        {
+          "repo": "nsidnev/fastapi-realworld-example-app",
+          "commit": "029eb7781c60d5f563ee8990a0cbfb79b244538c",
+          "path": "app/api/routes/articles/articles_common.py",
+          "lines": [
+            22,
+            104
+          ],
+          "note": "GET /api/articles/feed, POST/DELETE /api/articles/{slug}/favorite"
+        }
+      ]
+    },
+    {
+      "id": "router.articles.resource",
+      "kind": "service",
+      "label": "articles_resource-router",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "nsidnev/fastapi-realworld-example-app",
+          "commit": "029eb7781c60d5f563ee8990a0cbfb79b244538c",
+          "path": "app/api/routes/articles/articles_resource.py",
+          "lines": [
+            27,
+            27
+          ]
+        },
+        {
+          "repo": "nsidnev/fastapi-realworld-example-app",
+          "commit": "029eb7781c60d5f563ee8990a0cbfb79b244538c",
+          "path": "app/api/routes/articles/articles_resource.py",
+          "lines": [
+            30,
+            120
+          ],
+          "note": "GET/POST /api/articles, GET/PUT/DELETE /api/articles/{slug}"
+        }
+      ]
+    },
+    {
+      "id": "router.authentication",
+      "kind": "service",
+      "label": "authentication-router",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "nsidnev/fastapi-realworld-example-app",
+          "commit": "029eb7781c60d5f563ee8990a0cbfb79b244538c",
+          "path": "app/api/routes/authentication.py",
+          "lines": [
+            19,
+            19
+          ]
+        },
+        {
+          "repo": "nsidnev/fastapi-realworld-example-app",
+          "commit": "029eb7781c60d5f563ee8990a0cbfb79b244538c",
+          "path": "app/api/routes/authentication.py",
+          "lines": [
+            22,
+            93
+          ],
+          "note": "POST /api/users/login, POST /api/users"
+        }
+      ]
+    },
+    {
+      "id": "router.comments",
+      "kind": "service",
+      "label": "comments-router",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "nsidnev/fastapi-realworld-example-app",
+          "commit": "029eb7781c60d5f563ee8990a0cbfb79b244538c",
+          "path": "app/api/routes/comments.py",
+          "lines": [
+            23,
+            23
+          ]
+        },
+        {
+          "repo": "nsidnev/fastapi-realworld-example-app",
+          "commit": "029eb7781c60d5f563ee8990a0cbfb79b244538c",
+          "path": "app/api/routes/comments.py",
+          "lines": [
+            26,
+            71
+          ],
+          "note": "GET/POST /api/articles/{slug}/comments, DELETE by comment_id"
+        }
+      ]
+    },
+    {
+      "id": "router.profiles",
+      "kind": "service",
+      "label": "profiles-router",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "nsidnev/fastapi-realworld-example-app",
+          "commit": "029eb7781c60d5f563ee8990a0cbfb79b244538c",
+          "path": "app/api/routes/profiles.py",
+          "lines": [
+            13,
+            13
+          ]
+        },
+        {
+          "repo": "nsidnev/fastapi-realworld-example-app",
+          "commit": "029eb7781c60d5f563ee8990a0cbfb79b244538c",
+          "path": "app/api/routes/profiles.py",
+          "lines": [
+            16,
+            84
+          ],
+          "note": "GET /api/profiles/{username}, POST/DELETE follow"
+        }
+      ]
+    },
+    {
+      "id": "router.tags",
+      "kind": "service",
+      "label": "tags-router",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "nsidnev/fastapi-realworld-example-app",
+          "commit": "029eb7781c60d5f563ee8990a0cbfb79b244538c",
+          "path": "app/api/routes/tags.py",
+          "lines": [
+            7,
+            7
+          ]
+        },
+        {
+          "repo": "nsidnev/fastapi-realworld-example-app",
+          "commit": "029eb7781c60d5f563ee8990a0cbfb79b244538c",
+          "path": "app/api/routes/tags.py",
+          "lines": [
+            10,
+            15
+          ],
+          "note": "GET /api/tags"
+        }
+      ]
+    },
+    {
+      "id": "router.users",
+      "kind": "service",
+      "label": "users-router",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "nsidnev/fastapi-realworld-example-app",
+          "commit": "029eb7781c60d5f563ee8990a0cbfb79b244538c",
+          "path": "app/api/routes/users.py",
+          "lines": [
+            15,
+            15
+          ]
+        },
+        {
+          "repo": "nsidnev/fastapi-realworld-example-app",
+          "commit": "029eb7781c60d5f563ee8990a0cbfb79b244538c",
+          "path": "app/api/routes/users.py",
+          "lines": [
+            18,
+            73
+          ],
+          "note": "GET/PUT /api/user"
+        }
+      ]
+    },
+    {
+      "id": "datastore.postgresql",
+      "kind": "datastore",
+      "label": "PostgreSQL",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "nsidnev/fastapi-realworld-example-app",
+          "commit": "029eb7781c60d5f563ee8990a0cbfb79b244538c",
+          "path": "app/core/settings/app.py",
+          "lines": [
+            21,
+            21
+          ]
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge.application.api",
+      "from": "gateway.application",
+      "to": "router.api",
+      "type": "sync",
+      "label": "includes router",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "nsidnev/fastapi-realworld-example-app",
+          "commit": "029eb7781c60d5f563ee8990a0cbfb79b244538c",
+          "path": "app/main.py",
+          "lines": [
+            40,
+            40
+          ]
+        }
+      ]
+    },
+    {
+      "id": "edge.api.authentication",
+      "from": "router.api",
+      "to": "router.authentication",
+      "type": "sync",
+      "label": "includes router",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "nsidnev/fastapi-realworld-example-app",
+          "commit": "029eb7781c60d5f563ee8990a0cbfb79b244538c",
+          "path": "app/api/routes/api.py",
+          "lines": [
+            7,
+            7
+          ]
+        }
+      ]
+    },
+    {
+      "id": "edge.api.users",
+      "from": "router.api",
+      "to": "router.users",
+      "type": "sync",
+      "label": "includes router",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "nsidnev/fastapi-realworld-example-app",
+          "commit": "029eb7781c60d5f563ee8990a0cbfb79b244538c",
+          "path": "app/api/routes/api.py",
+          "lines": [
+            8,
+            8
+          ]
+        }
+      ]
+    },
+    {
+      "id": "edge.api.profiles",
+      "from": "router.api",
+      "to": "router.profiles",
+      "type": "sync",
+      "label": "includes router",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "nsidnev/fastapi-realworld-example-app",
+          "commit": "029eb7781c60d5f563ee8990a0cbfb79b244538c",
+          "path": "app/api/routes/api.py",
+          "lines": [
+            9,
+            9
+          ]
+        }
+      ]
+    },
+    {
+      "id": "edge.api.articles",
+      "from": "router.api",
+      "to": "router.articles",
+      "type": "sync",
+      "label": "includes router",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "nsidnev/fastapi-realworld-example-app",
+          "commit": "029eb7781c60d5f563ee8990a0cbfb79b244538c",
+          "path": "app/api/routes/api.py",
+          "lines": [
+            10,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "id": "edge.api.comments",
+      "from": "router.api",
+      "to": "router.comments",
+      "type": "sync",
+      "label": "includes router",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "nsidnev/fastapi-realworld-example-app",
+          "commit": "029eb7781c60d5f563ee8990a0cbfb79b244538c",
+          "path": "app/api/routes/api.py",
+          "lines": [
+            11,
+            15
+          ]
+        }
+      ]
+    },
+    {
+      "id": "edge.api.tags",
+      "from": "router.api",
+      "to": "router.tags",
+      "type": "sync",
+      "label": "includes router",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "nsidnev/fastapi-realworld-example-app",
+          "commit": "029eb7781c60d5f563ee8990a0cbfb79b244538c",
+          "path": "app/api/routes/api.py",
+          "lines": [
+            16,
+            16
+          ]
+        }
+      ]
+    },
+    {
+      "id": "edge.articles.common",
+      "from": "router.articles",
+      "to": "router.articles.common",
+      "type": "sync",
+      "label": "includes router",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "nsidnev/fastapi-realworld-example-app",
+          "commit": "029eb7781c60d5f563ee8990a0cbfb79b244538c",
+          "path": "app/api/routes/articles/api.py",
+          "lines": [
+            7,
+            7
+          ]
+        }
+      ]
+    },
+    {
+      "id": "edge.articles.resource",
+      "from": "router.articles",
+      "to": "router.articles.resource",
+      "type": "sync",
+      "label": "includes router",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "nsidnev/fastapi-realworld-example-app",
+          "commit": "029eb7781c60d5f563ee8990a0cbfb79b244538c",
+          "path": "app/api/routes/articles/api.py",
+          "lines": [
+            8,
+            8
+          ]
+        }
+      ]
+    }
+  ],
+  "views": [
+    {
+      "id": "view.architecture",
+      "type": "architecture",
+      "orientation": "LR",
+      "nodes": [
+        "gateway.application",
+        "router.api",
+        "router.articles",
+        "router.articles.common",
+        "router.articles.resource",
+        "router.authentication",
+        "router.comments",
+        "router.profiles",
+        "router.tags",
+        "router.users",
+        "datastore.postgresql"
+      ],
+      "edges": [
+        "edge.application.api",
+        "edge.api.authentication",
+        "edge.api.users",
+        "edge.api.profiles",
+        "edge.api.articles",
+        "edge.api.comments",
+        "edge.api.tags",
+        "edge.articles.common",
+        "edge.articles.resource"
+      ],
+      "mainPath": [
+        "gateway.application",
+        "router.api",
+        "router.articles",
+        "router.articles.resource"
+      ]
+    }
+  ],
+  "boundaries": [],
+  "guidedViews": [],
+  "privacy": {
+    "classification": "public",
+    "boundary": "external-allowed"
+  }
+}

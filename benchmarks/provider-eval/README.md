@@ -63,3 +63,18 @@ Both steps were measured on a subset of the same cases (approved cap $1.50; $0.9
 - **The 7 cases:** the three Suite A prompts, one more architecture case, and one sequence, one ER and one component case. All 7 diagrams validate and the Suite A gates passed 3/3 in both subset runs.
 - **The import and the refinement** ran only in the evidence-only subset. The FastAPI template import kept its baseline accuracy (10/12 nodes, 12/16 edges, 100 % source-supported precision) but still needed one repair; that run predates the fence fix, so import first-pass validity after both fixes is unmeasured. The refinement needed one repair (baseline 5/6 first-pass); refinements use the API grammar and are unaffected by either change.
 - **Sample size:** seven cases show the failure mode is gone; they do not give a first-pass rate for every prompt.
+
+### Imports after the fix: 2026-10-17
+
+The four pinned imports from the task 19 baseline were re-run on `main` at `43dbc19` (hosted `claude-opus-5-5`, approved cap $1, $0.67 metered). Results are in `results/2026-10-17-hosted-imports-after-19b/`.
+
+| import | task 19 baseline | after the task 19b fixes |
+|---|---|---|
+| FastAPI full-stack template | repaired · 68.7 s · $0.25 | first attempt · 28.2 s · $0.10 |
+| spring-petclinic | repaired · 98.6 s · $0.34 | first attempt · 46.3 s · $0.14 |
+| fastapi-realworld | repaired · 74.6 s · $0.26 | first attempt · 35.1 s · $0.10 |
+| spring-realworld | repaired · 83.8 s · $0.25 | repaired · 92.8 s · $0.32 |
+| total | 0 / 4 first attempt · $1.09 | 3 / 4 first attempt · $0.67 |
+
+- **Validity and accuracy:** all four diagrams validate. Diagram-level accuracy is unchanged: the template has 10/12 nodes and 12/16 edges, petclinic 19/19 and 10/10, both at 100 % source-supported precision with nothing extra claimed.
+- **The remaining repair:** spring-realworld still needed one repair round. Its cause was not diagnosed, because a diagnostic run would have exceeded the approved cap.
