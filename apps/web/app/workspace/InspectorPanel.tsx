@@ -10,7 +10,7 @@ export function Inspector({ payload, gaps, passport, busy=false, onRename, detai
   if (!payload) {
     if (gaps && gaps.length > 0) {
       return (
-        <aside style={{ padding: 16, width: 300, borderLeft: '1px solid #1f2937', color: '#e5e7eb' }}>
+        <aside className="aw-inspector-panel" aria-label="Inspector" style={{ padding: 16, width: 300, borderLeft: '1px solid #1f2937', color: '#e5e7eb' }}>
           <div style={{ fontSize: 12, color: '#fbbf24', marginBottom: 6 }}>Gaps ({gaps.length}) — what this diagram could not prove</div>
           <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, color: '#fbbf24' }}>
             {gaps.map((g, i) => <li key={i}>{g}</li>)}
@@ -19,10 +19,10 @@ export function Inspector({ payload, gaps, passport, busy=false, onRename, detai
         </aside>
       );
     }
-    return <div style={{ padding: 16, color: '#8b98b8' }}>Select a node or edge to inspect its provenance.</div>;
+    return <aside className="aw-inspector-panel" aria-label="Inspector" style={{ padding: 16, width: 300, borderLeft: '1px solid #1f2937', color: '#8b98b8' }}>Select a node or edge to inspect its provenance.</aside>;
   }
   return (
-    <aside style={{ padding: 16, width: 300, borderLeft: '1px solid #1f2937', display: 'flex', flexDirection: 'column', gap: 10, color: '#e5e7eb' }}>
+    <aside className="aw-inspector-panel" aria-label="Inspector" style={{ padding: 16, width: 300, borderLeft: '1px solid #1f2937', display: 'flex', flexDirection: 'column', gap: 10, color: '#e5e7eb' }}>
       {/* Badge below the title, so names get the full panel width and break only between words. */}
       <div className="aw-inspector-heading" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
         <strong style={{ fontSize: '1.05rem', overflowWrap: 'break-word', maxWidth: '100%' }}>{payload.label}</strong>
@@ -54,7 +54,7 @@ export function Inspector({ payload, gaps, passport, busy=false, onRename, detai
       <div>
         <div style={{ fontSize: 12, color: '#8b98b8', marginBottom: 4 }}>Evidence</div>
         {payload.evidence.length === 0
-          ? <div style={{ fontSize: 12, color: '#64748b' }}>No source evidence — {payload.provenance}.</div>
+          ? <div style={{ fontSize: 12, color: '#8b98b8' }}>No source evidence — {payload.provenance}.</div>
           : <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12 }}>
               {payload.evidence.map((e, i) => (
                 <li key={i}>{e.href ? <a href={e.href} target="_blank" rel="noreferrer" style={{ color: '#93c5fd' }}>{e.label}</a> : e.label}</li>

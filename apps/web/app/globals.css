@@ -15,8 +15,9 @@ textarea::placeholder, input::placeholder { color: #8290aa; opacity: 1; }
 .aw-header-caption { color: #8796af; font-size: 12px; padding-left: 14px; border-left: 1px solid #334155; }
 .aw-header-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-left: auto; min-width: 0; max-width: 100%; }
 .aw-header-status > span { overflow-wrap: anywhere; line-height: 1.6; }
-.workspace-shell { min-width: 0; }
+.workspace-shell { display: flex; min-width: 0; }
 .workspace-shell > aside { flex-shrink: 0; overflow-wrap: anywhere; }
+.aw-inspector-panel { overflow-y: auto; }
 .aw-create-panel { display: flex; flex-direction: column; gap: 14px; padding: 26px 24px; width: 380px; min-width: 0; overflow-y: auto; border-right: 1px solid #253044; background: linear-gradient(160deg, #111c2c, #0b1322 70%); }
 .aw-eyebrow { font: 600 10px/1.6 ui-monospace, SFMono-Regular, monospace; letter-spacing: 1.5px; color: #83b6b4; }
 .aw-panel-intro { padding: 0 0 12px; }
@@ -66,6 +67,7 @@ textarea::placeholder, input::placeholder { color: #8290aa; opacity: 1; }
 .aw-canvas-notes-beside-minimap { right: 228px; max-width: calc(100% - 292px); }
 @container (max-width: 640px) {
   .aw-canvas .react-flow__minimap { display: none; }
+  .aw-canvas .aw-outline-rail { display: none; }
   .aw-canvas-notes-beside-minimap { right: 12px; max-width: calc(100% - 76px); }
 }
 .aw-canvas-partial { margin: 0; font-size: 12px; color: #cbd5e1; background: #111a2eee; padding: 4px 10px; border-radius: 6px; }
@@ -96,12 +98,21 @@ textarea::placeholder, input::placeholder { color: #8290aa; opacity: 1; }
   .aw-flow-token { display: none !important; }
 }
 
+/* Leave at least 520 px for the canvas before enabling the 380 + 300 px sidebars. */
+@media (width > 900px) and (width <= 1200px) {
+  .aw-workspace { height: auto; min-height: 100dvh; }
+  .workspace-shell { display: grid; grid-template-columns: 300px minmax(0, 1fr); }
+  .workspace-shell > .aw-create-panel { width: 300px; }
+  .workspace-shell > .aw-inspector-panel { grid-column: 1 / -1; width: 100% !important; border-left: none !important; border-top: 1px solid #253044; }
+  .aw-diagram-main > div:has(> .aw-canvas) { flex: auto !important; height: 65vh; min-height: 480px !important; }
+}
+
 /* Tablet / narrow: stack the workspace columns instead of a fixed three-pane row. */
 @media (max-width: 900px) {
   .aw-workspace { height: auto; min-height: 100dvh; }
   .aw-header { padding: 14px 18px; }
   .aw-header-status { margin-left: 0; }
-  .workspace-shell { flex-direction: column !important; }
+  .workspace-shell { flex-direction: column; }
   .workspace-shell > aside { width: 100% !important; border-right: none !important; border-left: none !important; border-bottom: 1px solid #1f2937; }
   .workspace-shell main { min-height: 60vh; }
   .aw-create-panel { overflow: visible; padding: 24px; }

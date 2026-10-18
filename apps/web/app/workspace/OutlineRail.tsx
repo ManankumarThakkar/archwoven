@@ -5,7 +5,7 @@ import type { SystemModel } from '@archwoven/model';
 
 /** Outline rail (archify node-outline.js port): current-view nodes in schema order.
  *  Click focuses (same path as a node click); ArrowUp/Down move focus within the rail.
- *  Collapses via CSS at the existing 900px breakpoint. */
+ *  Hidden on phone layouts and when the actual canvas is too narrow. */
 export function OutlineRail({ model, viewNodes, activeId, onFocusNode }: {
   model: SystemModel;
   viewNodes: string[];

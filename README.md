@@ -186,6 +186,7 @@ node benchmarks/repair-rounds/harness.selftest.mjs
 - **`benchmarks/provider-eval`** drives a running server through 20 descriptions, 6 refinements and 4 pinned imports. It records validity, repairs, latency, cost and cache savings, and scores imports against ground truth: `node benchmarks/provider-eval/run.mjs <url> <server.db> <outDir> --budget <usd>`. It makes real, billed provider calls.
 - **`apps/web/e2e/ground-truth.mjs`** scores extraction against the hand-checked ground truth in `probes/ground-truth/`.
 - **`apps/web/e2e/browser-acceptance.mjs`** runs downloads, axe-core and keyboard checks in Chromium, WebKit and Firefox. Playwright is not a project dependency; point the script at a separate install.
+- **`apps/web/e2e/responsive-workspace.mjs`** checks canvas space, inspector placement, overflow and selection across 390–1440 px using a recorded model, without provider calls. Run `node apps/web/e2e/responsive-workspace.mjs <url> <output-dir> <browser-tools-dir> [chromium,webkit]`; the tools directory needs Playwright and axe-core as above.
 
 The benchmark case and receipt format is adapted from the MIT-licensed archify benchmark; no archify code is included.
 

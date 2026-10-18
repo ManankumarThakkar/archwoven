@@ -565,7 +565,7 @@ export default function WorkspacePage() {
         Demo mode: generation and refinement return fixed sample data, not diagrams based on your input. Disable ARCHWOVEN_FAKE and configure a generation provider to create real diagrams.
       </div>}
       {cancelError && state.kind === 'running' && <div role="alert" style={{ padding: '10px 16px', color: '#fda4af' }}>{cancelError}</div>}
-      <div className="workspace-shell" style={{ display: 'flex', flex: 1, minHeight: 0 }}>
+      <div className="workspace-shell" style={{ flex: 1, minHeight: 0 }}>
         <ControlPanel
           locked={refining || !!clarification}
           running={state.kind === 'running' || restoring}
