@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { validFullModel, type SystemModel } from '@archwoven/model';
-import { graphScene } from './graph-geometry';
+import { graphScene, warningSummary } from './graph-geometry';
 import type { LayoutResult, PlacedNode } from './layout';
 
 const node = (id: string, x: number, y: number): PlacedNode => ({ id, x, y, width: 160, height: 54 });
@@ -18,9 +18,9 @@ describe('truthful boundary scenes shared by canvas and export', () => {
     const { model, placed, result } = scene([node('a', 0, 0), node('b', 600, 0), node('c', 300, 0)], [boundary], ['Routing warning.']);
     expect(result.boundaries).toEqual([]);
     expect(result.warnings[0]).toBe('Routing warning.');
-    expect(result.warnings.join(' ')).toMatch(/Core services.*group\.ab/);
-    expect(result.warnings.join(' ')).toMatch(/enclosure omitted.*overlap.*Label c.*\(c\)/);
-    expect(result.warnings.join(' ')).toMatch(/Members in this view:.*Label a.*\(a\).*Label b.*\(b\)/);
+    expect(result.warnings[1]).toBe('Group "Core services" is not drawn as a box because it would also cover Label c. Members shown: Label a, Label b.');
+    expect(result.warnings.join(' ')).not.toMatch(/\((a|b|c|group\.ab)\)/);
+    expect(result.omittedGroups).toEqual(['Core services']);
     expect(model.boundaries).toEqual([boundary]);
     expect(placed.nodes.map(n => [n.x, n.y])).toEqual([[0, 0], [600, 0], [300, 0]]);
     expect(placed.warnings).toEqual(['Routing warning.']);
@@ -33,7 +33,7 @@ describe('truthful boundary scenes shared by canvas and export', () => {
   ])('also suppresses partial intersection with the %s', (_part, x, y) => {
     const { result } = scene([node('a', 0, 0), node('c', x, y)], [{ ...boundary, wraps: ['a'] }]);
     expect(result.boundaries).toEqual([]);
-    expect(result.warnings.join(' ')).toContain('Label c (c)');
+    expect(result.warnings.join(' ')).toContain('would also cover Label c.');
   });
 
   it('retains an ordinary enclosure when nonmembers merely touch its edge', () => {
@@ -67,5 +67,22 @@ describe('truthful boundary scenes shared by canvas and export', () => {
     expect(result.boundaries).toMatchObject([{ x: -724, y: -544, width: 508, height: 122 }]);
     expect(negative.bounds).toEqual({ x: -740, y: -552, width: 540, height: 146 });
     expect(negative.warnings).toEqual([]);
+  });
+});
+
+describe('layout warning summary', () => {
+  it('names omitted groups in one line and keeps other warnings as they are', () => {
+    expect(warningSummary({ warnings: ['Routing warning.', 'Group "A" is not drawn as a box because it would also cover X. Members shown: Y.'], omittedGroups: ['A'] }))
+      .toEqual(['1 group is not drawn as a box, to avoid covering other components: A.', 'Routing warning.']);
+    const detail = (label: string) => `Group "${label}" is not drawn as a box because it would also cover X. Members shown: Y.`;
+    expect(warningSummary({ warnings: [detail('Core'), detail('Edge')], omittedGroups: ['Core', 'Edge'] }))
+      .toEqual(['2 groups are not drawn as boxes, to avoid covering other components: Core, Edge.']);
+    expect(warningSummary({ warnings: [], omittedGroups: [] })).toEqual([]);
+  });
+
+  it('lists at most three covered components in a detail message', () => {
+    const many = [node('a', 0, 0), node('b', 900, 0), ...['c', 'd', 'e', 'f', 'g'].map((id, i) => node(id, 150 + i * 150, 0))];
+    const { result } = scene(many, [boundary]);
+    expect(result.warnings[0]).toBe('Group "Core services" is not drawn as a box because it would also cover Label c, Label d, Label e and 2 more. Members shown: Label a, Label b.');
   });
 });

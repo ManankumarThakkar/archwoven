@@ -1,4 +1,4 @@
-import type { Evidence, Field, Cardinality, NodeKind, SystemModel } from '@archwoven/model';
+import type { Evidence, Field, Cardinality, NodeKind, Provenance, SystemModel } from '@archwoven/model';
 
 export interface EvidenceLink {
   label: string;
@@ -9,7 +9,7 @@ export interface InspectorPayload {
   id: string;
   kind: 'node' | 'edge';
   label: string;
-  provenance: string;
+  provenance: Provenance;
   role?: string;
   nodeKind?: NodeKind;
   endpoints?: { from: string; to: string };

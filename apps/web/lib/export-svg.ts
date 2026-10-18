@@ -4,7 +4,7 @@ import { sequenceSvg } from './sequence';
 import { entitySvg, erMarkers, erLabel, ER_MARKER_DEFS } from './entity';
 import { escapeXml, wrapText } from './svg-text';
 import { captionSvg, GRAPH_MARKER_DEFS, graphArrow, routedEdgeSvg, systemNodeSvg } from './graph-svg';
-import { graphScene } from './graph-geometry';
+import { graphScene, warningSummary } from './graph-geometry';
 
 /** Standalone, escaped SVG from the same node/edge scene as the workspace. */
 export async function buildSvg(model: SystemModel, viewId: string): Promise<string> {
@@ -17,7 +17,7 @@ export async function buildSvg(model: SystemModel, viewId: string): Promise<stri
     paths.push(routedEdgeSvg(route, edge, view?.type === 'er' ? erMarkers(edge) : { end: graphArrow(edge) }));
     captions.push(captionSvg(route, view?.type === 'er' ? erLabel(edge) : edge.label ?? ''));
   }
-  const { boundaries, bounds: graphBounds, warnings } = graphScene(model, placed);
+  const scene = graphScene(model, placed), { boundaries, bounds: graphBounds, warnings } = scene;
   let bounds = graphBounds, header = '', detailDescription = '';
   const focus = view && isDetailView(view) ? model.nodes.find(n => n.id === view.focus) : undefined;
   if (focus) {
@@ -46,11 +46,12 @@ export async function buildSvg(model: SystemModel, viewId: string): Promise<stri
       hasDetail: internalsOf(model, node.id).length > 0,
     });
   }).join('');
-  // Paint warnings as well as describing them, so raster exports retain the disclosure.
+  // Paint a short summary so raster exports retain the disclosure; the full detail goes in <desc>.
   let footer = '';
-  if (warnings.length) {
+  const summary = warningSummary(scene);
+  if (summary.length) {
     const warningWidth = Math.max(320, Math.min(bounds.width, 960));
-    const lines = warnings.flatMap(warning => wrapText(warning, warningWidth - 32, 11));
+    const lines = summary.flatMap(warning => wrapText(warning, warningWidth - 32, 11));
     const x = bounds.x + 16, y = bounds.y + bounds.height + 24;
     footer = `<g data-layout-warnings="true"><text x="${x}" y="${y}" font-size="11" fill="#fbbf24">${lines.map((line, i) => `<tspan x="${x}" dy="${i ? 16 : 0}">${escapeXml(line)}</tspan>`).join('')}</text></g>`;
     bounds = { ...bounds, width: Math.max(bounds.width, warningWidth), height: bounds.height + 40 + lines.length * 16 };

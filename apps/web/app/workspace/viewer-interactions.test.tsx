@@ -9,7 +9,7 @@ import { NodeFinder } from './NodeFinder';
 import * as manualRouting from '../../lib/manual-layout';
 import * as graphLayout from '../../lib/layout';
 
-const camera = vi.hoisted(() => ({ requests: [] as { bounds?: { x: number; y: number; width: number; height: number }; options: { nodes?: { id: string }[]; duration?: number }; ids: string[] }[], ids: [] as string[] }));
+const camera = vi.hoisted(() => ({ requests: [] as { bounds?: { x: number; y: number; width: number; height: number }; viewport?: { x: number; y: number; zoom: number }; options: { nodes?: { id: string }[]; duration?: number }; ids: string[] }[], ids: [] as string[] }));
 const flow = vi.hoisted(() => ({ events: null as unknown as {onNodesChange:(changes:NodeChange[])=>void;onNodeDragStart:(event:unknown,node:Node)=>void;onNodeDragStop:(event:unknown,node:Node)=>Promise<void>;nodesDraggable:boolean;deleteKeyCode?:string|null} }));
 
 // Layout and React Flow own geometry, which is unavailable in a DOM simulator.
@@ -35,6 +35,9 @@ vi.mock('@xyflow/react', async (importOriginal) => ({
       camera.requests.push({ bounds, options, ids: [...camera.ids] }); return Promise.resolve(true);
     }, fitView: (options: { nodes?: { id: string }[]; duration?: number }) => {
       camera.requests.push({ options, ids: [...camera.ids] });
+      return Promise.resolve(true);
+    }, setViewport: (viewport: { x: number; y: number; zoom: number }, options: { duration?: number }) => {
+      camera.requests.push({ viewport, options, ids: [...camera.ids] });
       return Promise.resolve(true);
     } }); }, []);
     return <div data-flow-theme={colorMode}>
@@ -88,6 +91,53 @@ async function renderCanvas() {
   }
   await act(async () => root.render(<Workspace />));
 }
+
+describe('readable camera on a measured canvas', () => {
+  const wide: SystemModel = {
+    ...model,
+    nodes: Array.from({ length: 20 }, (_, i) => ({ id: `n${i}`, kind: 'service' as const, label: `Service ${i}`, provenance: 'user-specified' as const, evidence: [] })),
+    edges: [],
+    views: [{ id: 'v', type: 'architecture', nodes: Array.from({ length: 20 }, (_, i) => `n${i}`), edges: [] }],
+  };
+  beforeEach(() => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains('aw-flow-area') ? { x: 0, y: 0, left: 0, top: 0, right: 1000, bottom: 600, width: 1000, height: 600, toJSON() {} } as DOMRect : { x: 0, y: 0, left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0, toJSON() {} } as DOMRect;
+    });
+  });
+  const notice = () => host.querySelector('.aw-canvas-partial');
+  const show = async (current: SystemModel) => { await act(async () => root.render(<Canvas model={current} modelId="m" viewId="v" onSelect={() => {}} onDeselect={() => {}} />)); };
+
+  it('shows the start of a wide diagram at a readable zoom and says so', async () => {
+    await show(wide);
+    const fit = camera.requests.at(-1)!;
+    expect(fit.viewport?.zoom).toBe(0.65);
+    expect(notice()?.textContent).toContain('Showing the start at a readable size.');
+  });
+
+  it('keeps the notes clear of the minimap while it is shown', async () => {
+    await show(wide);
+    expect(host.querySelector('.aw-canvas-notes')?.classList.contains('aw-canvas-notes-beside-minimap')).toBe(true);
+  });
+
+  it('Show all fits the whole diagram and removes the notice', async () => {
+    await show(wide);
+    await act(async () => { (notice()!.querySelector('button') as HTMLButtonElement).click(); });
+    expect(camera.requests.at(-1)!.viewport!.zoom).toBeLessThan(0.65);
+    expect(notice()).toBeNull();
+  });
+
+  it('removes the notice once the user moves the camera', async () => {
+    await show(wide);
+    await act(async () => (flow.events as unknown as { onMoveStart: (event: unknown) => void }).onMoveStart({ type: 'wheel' }));
+    expect(notice()).toBeNull();
+  });
+
+  it('fits a small diagram whole, with no notice', async () => {
+    await show(model);
+    expect(camera.requests.at(-1)!.viewport!.zoom).toBeGreaterThanOrEqual(0.65);
+    expect(notice()).toBeNull();
+  });
+});
 
 describe('camera after the canvas is resized', () => {
   const observers: { callback: ResizeObserverCallback; target?: Element }[] = [];
@@ -199,10 +249,11 @@ describe('truthful boundary canvas placement', () => {
   it('discloses an initially omitted enclosure with its members and nonmember while keeping every node', async () => {
     await show(grouped(false));
     expect(hull()).toBeNull();
-    expect(warning()).toContain('Core services');
-    expect(warning()).toContain('enclosure omitted');
-    expect(warning()).toContain('Queue (b)');
-    expect(warning()).toMatch(/Members in this view:.*API \(a\).*Storage \(c\)/);
+    expect(warning()).toContain('1 group is not drawn as a box, to avoid covering other components: Core services.');
+    expect(warning()).toContain('Group "Core services" is not drawn as a box because it would also cover Queue. Members shown: API, Storage.');
+    const details = host.querySelector('[role="status"] details');
+    expect(details?.querySelector('summary')?.textContent).toBe('Details');
+    expect(details?.hasAttribute('open')).toBe(false);
     for (const id of ['a', 'b', 'c']) expect(host.querySelector(`[data-node="${id}"]`)).toBeTruthy();
   });
 
@@ -214,9 +265,9 @@ describe('truthful boundary canvas placement', () => {
       flow.events.onNodeDragStart(null, { id: 'c', position: { x: 400, y: 0 } } as Node);
       flow.events.onNodesChange([{ type: 'position', id: 'c', position: { x: 360, y: 0 }, dragging: true }]);
     });
-    expect(hull()).toBeNull(); expect(warning()).toContain('enclosure omitted');
+    expect(hull()).toBeNull(); expect(warning()).toContain('not drawn as a box');
     await act(async () => flow.events.onNodesChange([{ type: 'position', id: 'c', position: { x: 400, y: 0 }, dragging: true }]));
-    expect(hull()).toBeTruthy(); expect(warning()).not.toContain('enclosure omitted');
+    expect(hull()).toBeTruthy(); expect(warning()).not.toContain('not drawn as a box');
     expect(save).not.toHaveBeenCalled();
     await act(async () => { await flow.events.onNodeDragStop(null, { id: 'c', position: { x: 400, y: 0 } } as Node); });
     expect(hull()).toBeTruthy(); expect(save).toHaveBeenCalledOnce();
@@ -226,9 +277,9 @@ describe('truthful boundary canvas placement', () => {
     const save = vi.fn(async () => true);
     await show(grouped(), save);
     await act(async () => flow.events.onNodesChange([{ type: 'position', id: 'c', position: { x: 360, y: 0 }, dragging: false }]));
-    expect(hull()).toBeNull(); expect(warning()).toContain('enclosure omitted');
+    expect(hull()).toBeNull(); expect(warning()).toContain('not drawn as a box');
     await act(async () => flow.events.onNodesChange([{ type: 'position', id: 'c', position: { x: 400, y: 0 }, dragging: false }]));
-    expect(hull()).toBeTruthy(); expect(warning()).not.toContain('enclosure omitted');
+    expect(hull()).toBeTruthy(); expect(warning()).not.toContain('not drawn as a box');
     expect(save).toHaveBeenCalledTimes(2);
     expect(host.querySelector('[data-node="c"]')!.getAttribute('data-position')).toBe('{"x":400,"y":0}');
   });
@@ -246,7 +297,7 @@ describe('truthful boundary canvas placement', () => {
       } else flow.events.onNodesChange([{ type: 'position', id, position, dragging: false }]);
     });
     expect(!!hull()).toBe(!truthful);
-    expect(warning().includes('enclosure omitted')).toBe(truthful);
+    expect(warning().includes('not drawn as a box')).toBe(truthful);
     if (input === 'drag') await act(async () => { void flow.events.onNodeDragStop(null, moved); });
     expect(flow.events.nodesDraggable).toBe(false);
     await act(async () => finish(false));
@@ -711,7 +762,7 @@ describe('sequence workspace viewer', () => {
     expect(host.querySelector('ol')?.textContent).toContain('API → Queue: Enqueue work');
     expect(host.querySelector('ol')?.textContent).toContain('return');
     expect(host.querySelector('[data-participant="b"]')?.textContent).toContain('inferred');
-    expect(host.querySelector('button[aria-label="Inspect Storage"]')?.textContent).toContain('code');
+    expect(host.querySelector('button[aria-label="Inspect Storage"]')?.textContent).toContain('from source');
   });
   it('supports participant inspection, permalink restoration and fit/zoom controls', async () => {
     history.replaceState(null, '', '/workspace#model=sequence-model&view=sequence&focus=b&route=a~b&lens=service');

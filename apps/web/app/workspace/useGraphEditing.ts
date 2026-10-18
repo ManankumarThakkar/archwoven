@@ -17,6 +17,7 @@ export type GraphPlacement = {
         height: number;
     };
     warnings?: string[];
+    omittedGroups?: string[];
 };
 export function useGraphEditing({ model, viewId, placed, setPlaced, layout, busy, onMove }: {
     model: SystemModel;
@@ -34,7 +35,7 @@ export function useGraphEditing({ model, viewId, placed, setPlaced, layout, busy
         if (!layout.current || !view)
             return;
         const draft = { ...model, layout: { ...model.layout, ...next } }, routed = (lightweight ? dragLayout : manualLayout)(draft, view, layout.current), scene = graphScene(draft, routed), routesById = new Map(routed.edges.map(route => [route.id, route]));
-        setPlaced(current => ({ ...current, bounds: scene.bounds, warnings: scene.warnings, nodes: [
+        setPlaced(current => ({ ...current, bounds: scene.bounds, warnings: scene.warnings, omittedGroups: scene.omittedGroups, nodes: [
                 ...scene.boundaries.map(box => ({
                     id: `bnd:${box.id}`, type: 'boundary', position: { x: box.x, y: box.y },
                     data: { label: box.label, lines: box.lines }, style: { width: box.width, height: box.height },
