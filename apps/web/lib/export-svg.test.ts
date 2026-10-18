@@ -128,11 +128,12 @@ describe('truthful boundary exports', () => {
     const before = structuredClone(model), svg = await buildSvg(model, view.id);
     expect(svg).not.toContain('stroke="#64748b" stroke-dasharray="6 4"');
     const description = svg.match(/<desc>([\s\S]*?)<\/desc>/)?.[1] ?? '';
-    expect(description).toMatch(/Core &lt;platform&gt; &amp; services.*b\.core.*enclosure omitted/);
-    expect(description).toContain('Members in this view:');
+    expect(description).toContain('Group &quot;Core &lt;platform&gt; &amp; services&quot; is not drawn as a box because it would also cover Order Service. Members shown: Customer, API Gateway.');
+    expect(description).toContain('Members shown:');
+    expect(description).not.toContain('b.core');
     const footer = svg.match(/<g data-layout-warnings="true">[\s\S]*?<\/g>/)?.[0] ?? '';
-    expect(footer).toContain('enclosure omitted');
-    expect(footer).toContain('Members in this view:');
+    expect(footer).toContain('1 group is not drawn as a box, to avoid covering other components: Core &lt;platform&gt; &amp; services.');
+    expect(footer).not.toContain('Members shown:');
     expect(svg).not.toContain('<platform>');
     const ys = [...footer.matchAll(/<text[^>]* y="([^"]+)"/g)].map(m => Number(m[1]));
     expect(Math.min(...ys)).toBeGreaterThan(-400);

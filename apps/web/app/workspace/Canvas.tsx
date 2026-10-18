@@ -19,7 +19,8 @@ import { EntityNode } from './EntityNode';
 import { SystemNode } from './SystemNode';
 import { RoutedEdge } from './RoutedEdge';
 import { GRAPH_MARKER_DEFS, graphArrow } from '../../lib/graph-svg';
-import { graphScene } from '../../lib/graph-geometry';
+import { graphScene, warningSummary, isGroupDetail } from '../../lib/graph-geometry';
+import { planCamera, type Box } from '../../lib/camera';
 import { erMarkers, erLabel, ER_MARKER_DEFS } from '../../lib/entity';
 
 const MOTION_KEY = 'archwoven-motion';
@@ -43,6 +44,14 @@ const writeHash = (patch: Record<string, string | null>) => {
   // keep #lens=service,queue readable (URLSearchParams would %2C the commas)
   const s = new URLSearchParams(h).toString().replace(/(^|&)lens=([^&]*)/, (_, prefix: string, value: string) => `${prefix}lens=${value.replace(/%2C/g, ',')}`);
   history.replaceState(null, '', s ? `#${s}` : window.location.pathname + window.location.search);
+};
+
+/** Below this zoom, node labels drop under about 8.5 px and stop being readable. */
+const MIN_READABLE_ZOOM = 0.65;
+const focusBounds = (nodes: Node[], ids: string[]): Box => {
+  const boxes = nodes.filter(node => ids.includes(node.id)).map(node => ({ x: node.position.x, y: node.position.y, width: Number(node.style?.width ?? node.width ?? 0), height: Number(node.style?.height ?? node.height ?? 0) }));
+  const x = Math.min(...boxes.map(b => b.x)), y = Math.min(...boxes.map(b => b.y));
+  return { x: x - 40, y: y - 40, width: Math.max(...boxes.map(b => b.x + b.width)) - x + 80, height: Math.max(...boxes.map(b => b.y + b.height)) - y + 80 };
 };
 
 type CanvasProps = { model: SystemModel; modelId: string; viewId: string; permalinkVersion?: number; onSelect: (id: string) => void; onDeselect: () => void; busy?:boolean; onMove?:(positions:Record<string,Point>)=>Promise<boolean> };
@@ -77,6 +86,8 @@ function GraphCanvas({ model, modelId, viewId, permalinkVersion = 0, onSelect, o
   const preserveCameraRef=useRef<string|null>(null);
   const userCameraRef = useRef(false);
   const flowAreaRef = useRef<HTMLDivElement>(null);
+  /** True while an automatic fit shows only the start of a diagram too large to read whole. */
+  const [partialView, setPartialView] = useState(false);
   const layoutKey = JSON.stringify([modelId, model.revision, viewId]);
   const editing=useGraphEditing({model,viewId,placed,setPlaced,layout:currentLayout,busy,onMove:onMove?async positions=>{
     const nextKey=JSON.stringify([modelId,model.revision+1,viewId]);preserveCameraRef.current=nextKey;
@@ -135,9 +146,9 @@ function GraphCanvas({ model, modelId, viewId, permalinkVersion = 0, onSelect, o
         const route = r.edges.find(route => route.id === id);
         return [{ id, source: e.from, target: e.to, type: route ? 'routed' : undefined, data: route ? { route } : undefined, label: view?.type === 'er' ? erLabel(e) : e.label ?? '', markerStart: markers.start, markerEnd: markers.end, ariaLabel: view?.type === 'er' ? `${e.from} to ${e.to}: ${erLabel(e)}` : undefined, animated: e.type === 'async' && motion === 'motion', style: { stroke: PROVENANCE_STYLE[e.provenance].border, strokeDasharray: e.type === 'async' ? '6 4' : undefined } }];
       });
-      const { boundaries, bounds, warnings } = graphScene(model, r);
+      const { boundaries, bounds, warnings, omittedGroups } = graphScene(model, r);
       const hulls: Node[] = boundaries.map(b => ({ id: `bnd:${b.id}`, type: 'boundary', position: { x: b.x, y: b.y }, data: { label: b.label, lines: b.lines }, style: { width: b.width, height: b.height }, draggable: false, selectable: false, zIndex: -1 }));
-      setPlaced({ key: layoutKey, nodes: [...hulls, ...nodes], edges, bounds, warnings });
+      setPlaced({ key: layoutKey, nodes: [...hulls, ...nodes], edges, bounds, warnings, omittedGroups });
     }).catch(() => { if (alive) setLayoutError('This view could not be laid out. Try another view or refine the diagram.'); });
     return () => { alive = false; };
   }, [model, viewId, motion, layoutKey]);
@@ -203,6 +214,16 @@ function GraphCanvas({ model, modelId, viewId, permalinkVersion = 0, onSelect, o
   const setLensKinds = (k: NodeKind[]) => { setLens(k); writeHash({ lens: serializeLens(k) }); };
   const chapter = chapterIdx >= 0 ? model.guidedViews[chapterIdx] ?? null : null;
 
+  const canvasSize = () => { const r = flowAreaRef.current?.getBoundingClientRect(); return { width: r?.width ?? 0, height: r?.height ?? 0 }; };
+  /** Width the outline rail covers on the canvas's right edge, plus a small gap; 0 when it is hidden. */
+  const outlineReserve = () => {
+    const area = flowAreaRef.current?.getBoundingClientRect(), rail = flowAreaRef.current?.parentElement?.querySelector<HTMLElement>('.aw-outline-rail');
+    if (!area || !rail || getComputedStyle(rail).display === 'none') return 0;
+    const box = rail.getBoundingClientRect();
+    if (!box.width || box.left < area.left) return 0; // not laid out yet, or not on the canvas's right side
+    return Math.max(0, area.right - box.left + 8);
+  };
+
   // Fit after the replacement layout reaches React Flow, never against the old
   // view's nodes. React Flow queues fitView until node measurement completes.
   // `auto` fits once per layout and chapter, `resize` refits instantly after the canvas
@@ -216,6 +237,16 @@ function GraphCanvas({ model, modelId, viewId, permalinkVersion = 0, onSelect, o
     fittedCameraRef.current = cameraKey;
     userCameraRef.current = false;
     const options = { duration: mode === 'resize' || motion === 'still' ? 0 : 600, minZoom: 0.05, maxZoom: 2, padding: 0.15 };
+    const plan = planCamera(ids.length ? focusBounds(placed.nodes, ids) : placed.bounds, canvasSize(), {
+      padding: 24, reserveRight: outlineReserve(), maxZoom: 2, minReadable: mode === 'whole' ? 0 : MIN_READABLE_ZOOM,
+    });
+    if (plan) {
+      setPartialView(plan.partial);
+      void rfRef.current.setViewport({ x: plan.x, y: plan.y, zoom: plan.zoom }, { duration: options.duration });
+      return;
+    }
+    // No measurable canvas yet: let React Flow fit once it has measured the nodes.
+    setPartialView(false);
     if (ids.length) void rfRef.current.fitView({ ...options, nodes: ids.map(id => ({ id })), padding: 0.25 });
     else void rfRef.current.fitBounds(placed.bounds, options);
   }, [placed, layoutKey, chapter, motion]);
@@ -367,11 +398,18 @@ function GraphCanvas({ model, modelId, viewId, permalinkVersion = 0, onSelect, o
   const viewNodes = view?.nodes ?? [];
 
   if (layoutError) return <div className="aw-canvas" role="alert" style={{ padding: 24 }}>{layoutError}</div>;
+  const showMinimap = viewNodes.length > 12 || partialView;
 
   return (
-    <div className="aw-canvas" style={{ width: '100%', height: '100%', position: 'relative' }}>
+    <div className="aw-canvas" style={{ width: '100%', height: '100%', position: 'relative', containerType: 'inline-size' }}>
       <svg aria-hidden="true" width="0" height="0" style={{ position: 'absolute' }}><defs dangerouslySetInnerHTML={{ __html: GRAPH_MARKER_DEFS + ER_MARKER_DEFS }} /></svg>
-      {!!placed.warnings?.length&&<div role="status" aria-label="Layout warnings" tabIndex={0} style={{position:'absolute',bottom:8,left:64,right:12,maxWidth:'calc(100% - 76px)',maxHeight:'35%',overflow:'auto',overflowWrap:'anywhere',boxSizing:'border-box',zIndex:6,fontSize:12,color:'#fbbf24',background:'#111a2eee',padding:6,borderRadius:6}}>{placed.warnings.join(' ')}</div>}
+      {(partialView || !!placed.warnings?.length) && <div className={showMinimap ? 'aw-canvas-notes aw-canvas-notes-beside-minimap' : 'aw-canvas-notes'}>
+        {partialView && <p className="aw-canvas-partial" role="status">Showing the start at a readable size. <button type="button" onClick={() => fitCamera('whole')}>Show all</button></p>}
+        {!!placed.warnings?.length&&<div role="status" aria-label="Layout warnings" tabIndex={0} className="aw-canvas-warnings">
+          {warningSummary({ warnings: placed.warnings, omittedGroups: placed.omittedGroups ?? [] }).map(line => <p key={line}>{line}</p>)}
+          {placed.warnings.some(isGroupDetail) && <details><summary>Details</summary><ul>{placed.warnings.filter(isGroupDetail).map(line => <li key={line}>{line}</li>)}</ul></details>}
+        </div>}
+      </div>}
       <div className="aw-canvas-toolbar" style={{ position: 'absolute', top: 36, left: 8, zIndex: 5, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
         <select aria-label="route from" value={probeFrom} onChange={(e) => setProbeFrom(e.target.value)} style={selectCls} disabled={!!probe}>
           <option value="">from…</option>{viewNodes.map((id) => <option key={id} value={id}>{model.nodes.find((n) => n.id === id)?.label ?? id}</option>)}
@@ -444,7 +482,7 @@ function GraphCanvas({ model, modelId, viewId, permalinkVersion = 0, onSelect, o
         nodesConnectable={false}
         edgesReconnectable={false}
         onInit={(inst) => { rfRef.current = inst as ReactFlowInstance<Node, Edge>; fitCamera(); }}
-        onMoveStart={(event) => { if (event) userCameraRef.current = true; }}
+        onMoveStart={(event) => { if (event) { userCameraRef.current = true; setPartialView(false); } }}
         onNodeClick={(_, n) => { if (n.type === 'boundary') return; focusNode(n.id); }}
         onPaneClick={() => { setFocusId(null); setRelationId(null); writeHash({ focus: null, relation: null }); onDeselect(); }}
         onEdgeClick={(_, e) => { setRelationId(e.id); onSelect(e.id); writeHash({ relation: e.id }); }}
@@ -452,7 +490,7 @@ function GraphCanvas({ model, modelId, viewId, permalinkVersion = 0, onSelect, o
       >
         <Background gap={16} color="#1a2333" />
         <Controls showFitView={false}><ControlButton aria-label="Fit View" title="Fit View" onClick={() => fitCamera('whole')}>⛶</ControlButton></Controls>
-        {viewNodes.length > 12 && <MiniMap pannable zoomable />}
+        {showMinimap && <MiniMap pannable zoomable />}
       </ReactFlow></div>
       <OutlineRail model={model} viewNodes={viewNodes} activeId={focusId} onFocusNode={focusNode} />
       {finderOpen && <NodeFinder model={model} viewNodes={viewNodes} onPick={focusNode} onClose={() => setFinderOpen(false)} />}

@@ -4,6 +4,7 @@ import { MAX_DETAIL_VIEWS } from '@archwoven/model';
 import type { InspectorPayload } from './inspector';
 import type { Passport } from './passport';
 import { RenameForm } from './RenameForm';
+import { PROVENANCE_STYLE } from '../../lib/provenance';
 
 export function Inspector({ payload, gaps, passport, busy=false, onRename, detail }: { payload: InspectorPayload | null; gaps?: string[]; passport?: Passport | null; busy?:boolean; onRename?:(id:string,label:string)=>void; detail?: { onOpen: () => void; limitReached: boolean } | null }) {
   if (!payload) {
@@ -22,9 +23,10 @@ export function Inspector({ payload, gaps, passport, busy=false, onRename, detai
   }
   return (
     <aside style={{ padding: 16, width: 300, borderLeft: '1px solid #1f2937', display: 'flex', flexDirection: 'column', gap: 10, color: '#e5e7eb' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <strong style={{ fontSize: '1.05rem' }}>{payload.label}</strong>
-        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, background: '#111a2e', color: '#5eead4', textTransform: 'uppercase' }}>{payload.provenance}</span>
+      {/* Badge below the title, so names get the full panel width and break only between words. */}
+      <div className="aw-inspector-heading" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
+        <strong style={{ fontSize: '1.05rem', overflowWrap: 'break-word', maxWidth: '100%' }}>{payload.label}</strong>
+        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, background: '#111a2e', color: '#5eead4', textTransform: 'uppercase' }}>{PROVENANCE_STYLE[payload.provenance].badge}</span>
       </div>
       {payload.kind === 'edge' && payload.endpoints && (
         <div style={{ fontSize: 13, color: '#93c5fd' }}>{payload.endpoints.from} → {payload.endpoints.to} · {payload.type}</div>
