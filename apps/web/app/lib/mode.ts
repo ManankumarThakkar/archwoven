@@ -1,4 +1,5 @@
 import type { Privacy } from '@archwoven/model';
+import { resolveHostedModelId } from '@archwoven/model';
 
 /** Single source of deployment truth: ARCHWOVEN_MODE=local is the private vertical. */
 export const deployMode = (): 'hosted' | 'local' =>
@@ -27,6 +28,7 @@ export const fakeMode = () => process.env.ARCHWOVEN_FAKE === '1';
  * node-only ingest chain (node:child_process) that edge cannot bundle.
  */
 export function assertSafeRuntime(): void {
+  if (deployMode() === 'hosted' && !fakeMode()) resolveHostedModelId(process.env.ARCHWOVEN_HOSTED_MODEL);
   const prod = process.env.NODE_ENV === 'production';
   if (!prod) return;
   const acked = process.env.ARCHWOVEN_DEMO_ACK === '1';

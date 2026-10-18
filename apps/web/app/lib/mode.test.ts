@@ -1,5 +1,31 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { deployMode, privacyForMode } from './mode';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { assertSafeRuntime, deployMode, privacyForMode } from './mode';
+
+describe('hosted model configuration', () => {
+  afterEach(() => vi.unstubAllEnvs());
+  it('rejects unsupported hosted configuration at startup', () => {
+    vi.stubEnv('ARCHWOVEN_MODE', 'hosted');
+    vi.stubEnv('ARCHWOVEN_FAKE', '0');
+    vi.stubEnv('ARCHWOVEN_HOSTED_MODEL', 'unknown');
+    expect(() => assertSafeRuntime()).toThrow(/Unsupported ARCHWOVEN_HOSTED_MODEL/);
+  });
+  it('ignores hosted selection in local mode', () => {
+    vi.stubEnv('ARCHWOVEN_MODE', 'local');
+    vi.stubEnv('ARCHWOVEN_HOSTED_MODEL', 'unknown');
+    vi.stubEnv('NODE_ENV', 'development');
+    expect(() => assertSafeRuntime()).not.toThrow();
+  });
+  it('reports the selected hosted model without exposing configuration secrets', async () => {
+    vi.stubEnv('ARCHWOVEN_MODE', 'hosted');
+    vi.stubEnv('ARCHWOVEN_FAKE', '0');
+    vi.stubEnv('ARCHWOVEN_HOSTED_MODEL', 'claude-sonnet-5-5');
+    vi.stubEnv('ANTHROPIC_API_KEY', 'do-not-expose-this-value');
+    const { GET } = await import('../api/config/route');
+    const body = await GET().json();
+    expect(body).toMatchObject({ hostedModel: 'claude-sonnet-5-5', llmReady: true });
+    expect(JSON.stringify(body)).not.toContain('do-not-expose-this-value');
+  });
+});
 
 describe('deployMode', () => {
   const saved = process.env.ARCHWOVEN_MODE;

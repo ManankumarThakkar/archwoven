@@ -19,6 +19,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateModel } from '../../packages/model/dist/index.js';
 import { scoreDiagram } from './score.mjs';
+import { assertLegacyEvalServer } from './config.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '../..');
@@ -27,6 +28,10 @@ const flag = (name, dflt) => { const i = argv.indexOf(name); return i >= 0 ? arg
 const [base, dbPath, outDir] = argv.filter((a, i) => !a.startsWith('--') && !argv[i - 1]?.startsWith('--'));
 if (!base || !dbPath || !outDir) { console.error('usage: run.mjs <baseUrl> <server.db> <outDir> [--budget 7.5] [--only id,id]'); process.exit(2); }
 const budget = Number(flag('--budget', '7.5'));
+if (!Number.isFinite(budget) || budget <= 0) throw new Error('--budget must be a positive finite dollar amount');
+const configResponse = await fetch(`${base}/api/config`, { signal: AbortSignal.timeout(10_000), redirect: 'error' });
+if (!configResponse.ok) throw new Error('Could not verify evaluation server configuration');
+assertLegacyEvalServer(await configResponse.json());
 const only = flag('--only')?.split(',');
 const cases = JSON.parse(readFileSync(join(here, 'cases.json'), 'utf8'));
 const PRICES = { input: 4, cacheWrite: 5, cacheRead: 0.2 }; // USD per million tokens, as packages/jobs/src/quota.ts

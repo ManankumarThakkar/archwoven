@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { TaskReport, TaskUsage, TokenUsage, ViewType } from '@archwoven/model';
+import { HOSTED_MODELS, hostedModelProfile } from '@archwoven/model';
 import type { Store, Tier } from './store';
 
 /** Fixed limits: change them through a reviewed config change, not per call. */
@@ -9,7 +10,7 @@ export const TIERS: Record<Tier, { pool: number }> = {
 };
 export const WEIGHTS = { generate: 1, repo: 2, refine: 0.25, view: 0 } as const;
 /** USD per MTok: cached reads at $0.20 — pricing wrong here trips the stop-loss 20× early. */
-export const PRICES = { input: 4, output: 20, cacheWrite: 5, cacheRead: 0.2 };
+export const PRICES = HOSTED_MODELS['claude-opus-5-5'].prices;
 export const STOP_LOSS_USD = 15;
 export const BURST = { session: 5, ip: 20 };
 /** Secondary bucket: daily credits shared by every anonymous session on one network address
@@ -31,13 +32,28 @@ export interface Usage extends TokenUsage {
 
 export const localMode = () => process.env.ARCHWOVEN_MODE === 'local';
 
-/** Standard direct-API Opus 5.5 rates verified 2026-10-17. No batch, fast
+/** Reviewed standard direct-API rates. No batch, fast
  * mode, geographic premium or local-compute cost is inferred from token counts. */
 export function costOf(u: Usage): number | null {
   if (u.provider === 'ollama' || u.provider === 'demo') return 0;
-  if (u.provider !== 'anthropic' || !/^claude-opus-5-5(?:-[0-9]{8})?$/.test(u.model ?? '')) return null;
-  if (![u.inputTokens, u.outputTokens, u.cacheWriteTokens, u.cacheReadTokens].every(value => Number.isSafeInteger(value) && value >= 0)) return null;
-  return (u.inputTokens * PRICES.input + u.cacheWriteTokens * PRICES.cacheWrite + u.cacheReadTokens * PRICES.cacheRead + u.outputTokens * PRICES.output) / 1e6;
+  const profile = u.provider === 'anthropic' ? hostedModelProfile(u.model) : undefined;
+  if (!profile) return null;
+  const keys = ['inputTokens', 'outputTokens', 'cacheWriteTokens', 'cacheReadTokens'] as const;
+  const valid = (part: TokenUsage) => keys.every(key => Number.isSafeInteger(part[key]) && part[key] >= 0)
+    && Number.isSafeInteger(part.inputTokens + part.cacheWriteTokens + part.cacheReadTokens);
+  if (!valid(u)) return null;
+  const price = (part: TokenUsage, multiplier = 1) => multiplier * (part.inputTokens * profile.prices.input
+    + part.cacheWriteTokens * profile.prices.cacheWrite + part.cacheReadTokens * profile.prices.cacheRead
+    + part.outputTokens * profile.prices.output) / 1e6;
+  if (u.model !== 'claude-haiku-5-5') return price(u);
+  const tier = (part: TokenUsage) => part.inputTokens + part.cacheWriteTokens + part.cacheReadTokens > 100_000 ? 5 : 1;
+  if (u.attempts?.length) {
+    if (!u.attempts.every(valid) || !keys.every(key => u.attempts!.reduce((sum, part) => sum + part[key], 0) === u[key])) return null;
+    return u.attempts.reduce((sum, part) => sum + price(part, tier(part)), 0);
+  }
+  // An aggregate above the boundary could be one long call or several short
+  // calls. Without attempt evidence its tier cannot be reconstructed honestly.
+  return tier(u) === 1 ? price(u) : null;
 }
 
 const nextUtcMidnight = () => {
@@ -120,7 +136,7 @@ export function recordUsage(
     inputTokens: req.usage.inputTokens, outputTokens: req.usage.outputTokens, cacheWriteTokens: req.usage.cacheWriteTokens, cacheReadTokens: req.usage.cacheReadTokens,
     latencyMs: req.usage.latencyMs ?? 0, repairs: req.usage.repairs ?? req.retries ?? 0, transportRetries: req.usage.transportRetries ?? 0,
     usageComplete: req.usage.usageComplete ?? false, attempts: req.usage.attempts ?? [],
-    estimatedCostUsd: cost, costBasis: provider === 'ollama' ? 'local-inference' : provider === 'demo' ? 'demo' : cost === null ? 'unavailable' : 'anthropic-opus-5-5-2026-10-17',
+    estimatedCostUsd: cost, costBasis: provider === 'ollama' ? 'local-inference' : provider === 'demo' ? 'demo' : cost === null ? 'unavailable' : hostedModelProfile(req.usage.model)!.costBasis,
     outcome: req.outcome ?? 'ok',
   };
   store.logCall({ sessionId: req.sessionId, tier: req.tier, view: req.view ?? req.action, inputTokens: task.inputTokens, outputTokens: task.outputTokens, cacheWriteTokens: task.cacheWriteTokens, cacheReadTokens: task.cacheReadTokens, costUsd: cost, retries: task.repairs, outcome: task.outcome, task });

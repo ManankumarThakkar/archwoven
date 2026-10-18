@@ -5,6 +5,37 @@ import { costOf, recordUsage } from './quota';
 const hosted = { provider: 'anthropic' as const, model: 'claude-opus-5-5', inputTokens: 1000, cacheWriteTokens: 2000, cacheReadTokens: 3000, outputTokens: 500, repairs: 1, transportRetries: 0, latencyMs: 1200, usageComplete: true, attempts: [] };
 
 describe('provider-aware task metering', () => {
+  it.each([
+    ['claude-sonnet-5-5', 0.0123],
+    ['claude-haiku-5-5', 0.00063],
+  ])('prices %s from its own rates rather than Opus rates', (model, expected) => {
+    expect(costOf({ ...hosted, model })).toBeCloseTo(expected, 10);
+  });
+  it('applies the Haiku long-context threshold separately to each provider attempt', () => {
+    const part = { kind: 'initial' as const, inputTokens: 60_000, outputTokens: 1000, cacheWriteTokens: 0, cacheReadTokens: 0, usageComplete: true };
+    expect(costOf({ ...hosted, model: 'claude-haiku-5-5', inputTokens: 120_000, outputTokens: 2000, cacheWriteTokens: 0, cacheReadTokens: 0, attempts: [part, { ...part, kind: 'repair' }] })).toBeCloseTo(0.013, 10);
+    expect(costOf({ ...hosted, model: 'claude-haiku-5-5', inputTokens: 120_000, outputTokens: 2000, cacheWriteTokens: 0, cacheReadTokens: 0, attempts: [{ ...part, inputTokens: 120_000, outputTokens: 2000 }] })).toBeCloseTo(0.065, 10);
+  });
+  it('includes cached input in the tier boundary and does not guess tiers from ambiguous totals', () => {
+    const usage = { ...hosted, model: 'claude-haiku-5-5', inputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 100_000, outputTokens: 1000, attempts: [] };
+    expect(costOf(usage)).toBeCloseTo(0.0015, 10);
+    expect(costOf({ ...usage, cacheReadTokens: 100_001 })).toBeNull();
+    const part = { kind: 'initial' as const, inputTokens: 1, outputTokens: 1000, cacheWriteTokens: 0, cacheReadTokens: 100_000, usageComplete: true };
+    expect(costOf({ ...usage, inputTokens: 1, attempts: [part] })).toBeCloseTo(0.0075005, 10);
+    expect(costOf({ ...usage, inputTokens: 2, attempts: [part] })).toBeNull();
+  });
+  it.each([-1, 0.5, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1])('does not price invalid token counters (%s)', inputTokens => {
+    expect(costOf({ ...hosted, model: 'claude-haiku-5-5', inputTokens })).toBeNull();
+  });
+  it('persists the selected model and its price basis without repricing previous tasks', () => {
+    const store = openStore(':memory:');
+    recordUsage(store, { sessionId: 'owner', tier: 'anonymous', action: 'generate', usage: hosted });
+    recordUsage(store, { sessionId: 'owner', tier: 'anonymous', action: 'generate', usage: { ...hosted, model: 'claude-sonnet-5-5' } });
+    expect(store.lastTask('owner')).toMatchObject({ model: 'claude-sonnet-5-5', estimatedCostUsd: 0.0123, costBasis: 'anthropic-sonnet-5-5-2026-10-18' });
+    expect(store.listCalls('owner')[0]).toMatchObject({ costUsd: 0.0246, task: { costBasis: 'anthropic-opus-5-5-2026-10-17' } });
+    expect(store.todayCost()).toBeCloseTo(0.0369, 10);
+    store.close();
+  });
   it('uses the supported hosted model rates for all token categories', () => {
     expect(costOf(hosted)).toBeCloseTo(0.0246, 10);
   });

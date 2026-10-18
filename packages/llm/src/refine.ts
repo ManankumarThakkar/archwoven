@@ -2,7 +2,7 @@ import { newUsageLedger, startAttempt, captureUsage } from './usage';
 import { z } from 'zod';
 import { EditOpSchema, applyEditOps, isSourceEvidenceRefusal, sameModelContent, type EditOp, type SystemModel, type ViewType } from '@archwoven/model';
 import {
-  CONTEXT_TOKEN_LIMIT, MAX_REPAIRS, MODEL, STRUCTURED_OUTPUTS_BETA, fakeMode, countFailureMessage, hostedClient, usageFrom, wireSchema,
+  CONTEXT_TOKEN_LIMIT, MAX_REPAIRS, MODEL, configuredHostedModel, STRUCTURED_OUTPUTS_BETA, fakeMode, countFailureMessage, hostedClient, usageFrom, wireSchema,
   type Effort, type StructuredClient,
 } from './client';
 import type { RawUsage } from './client';
@@ -51,10 +51,11 @@ export async function generateRefinement(
   opts: { client?: StructuredClient; effort?: Effort; signal?: AbortSignal } = {},
 ): Promise<RefineOutcome> {
   const effort: Effort = opts.effort ?? 'low';
-  if (opts.signal?.aborted) return { ok: false, errors: ['Refinement cancelled.'], usage: usageFrom({}, effort, 0, 0) };
+  const modelId = !opts.client && fakeMode() ? MODEL : configuredHostedModel();
+  if (opts.signal?.aborted) return { ok: false, errors: ['Refinement cancelled.'], usage: usageFrom({}, effort, 0, 0, modelId) };
   if (!opts.client && fakeMode()) {
     const ops: EditOp[] = [{ op: 'add', target: 'svc.cache', patch: { id: 'svc.cache', kind: 'service', label: 'Cache', provenance: 'proposed' }, baseRevision: model.revision, summary: '+Cache service' }];
-    return { ok: true, ops, usage: { ...usageFrom({}, effort, 0, 0), provider: 'demo' } };
+    return { ok: true, ops, usage: { ...usageFrom({}, effort, 0, 0, modelId), provider: 'demo' } };
   }
   const client: StructuredClient =
     hostedClient(opts.client);
@@ -67,12 +68,12 @@ export async function generateRefinement(
 
   // Per-request gate: exact token count before send; fail closed.
   try {
-    const counted = await client.messages.countTokens({ model: MODEL, system, messages }, { signal: opts.signal });
+    const counted = await client.messages.countTokens({ model: modelId, system, messages }, { signal: opts.signal });
     if (counted.input_tokens > CONTEXT_TOKEN_LIMIT) {
-      return { ok: false, errors: ['assembled context exceeds the 25k token limit — scope the instruction down'], usage: usageFrom({}, effort, Date.now() - t0, 0) };
+      return { ok: false, errors: ['assembled context exceeds the 25k token limit — scope the instruction down'], usage: usageFrom({}, effort, Date.now() - t0, 0, modelId) };
     }
   } catch (e) {
-    return { ok: false, errors: [countFailureMessage(e)], usage: usageFrom({}, effort, Date.now() - t0, 0) };
+    return { ok: false, errors: [countFailureMessage(e)], usage: usageFrom({}, effort, Date.now() - t0, 0, modelId) };
   }
 
   let lastErrors: string[] = [];
@@ -86,7 +87,7 @@ export async function generateRefinement(
     let response: Awaited<ReturnType<StructuredClient['beta']['messages']['create']>>;
     try {
       response = await client.beta.messages.create({
-        model: MODEL,
+        model: modelId,
         max_tokens: 4000,
         betas: [STRUCTURED_OUTPUTS_BETA],
         system,
@@ -132,7 +133,7 @@ export async function generateRefinement(
         lastErrors = [`baseRevision must be ${model.revision}`];
       } else {
         const applied = applyEditOps(model, checked.data);
-        if (applied.ok && !sameModelContent(applied.model, model)) return { ok: true, ops: checked.data, usage: usageFrom(billed, effort, Date.now() - t0, repairs) };
+        if (applied.ok && !sameModelContent(applied.model, model)) return { ok: true, ops: checked.data, usage: usageFrom(billed, effort, Date.now() - t0, repairs, modelId) };
         lastErrors = applied.ok ? [NO_CHANGE_ERROR] : applied.errors;
         if (!applied.ok) refusals.push(...applied.errors.filter(isSourceEvidenceRefusal));
       }
@@ -145,5 +146,5 @@ export async function generateRefinement(
   }
 
   // A protected requirement explains a failed request better than the provider's last workaround.
-  return { ok: false, errors: refusals.length ? [...new Set(refusals)] : lastErrors, usage: usageFrom(billed, effort, Date.now() - t0, repairs) };
+  return { ok: false, errors: refusals.length ? [...new Set(refusals)] : lastErrors, usage: usageFrom(billed, effort, Date.now() - t0, repairs, modelId) };
 }

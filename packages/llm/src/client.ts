@@ -12,9 +12,12 @@ import {
   validFullModelExtended,
   type SystemModel,
   type ViewType,
+  DEFAULT_HOSTED_MODEL, resolveHostedModelId, type HostedModelId,
 } from '@archwoven/model';
 
-export const MODEL = 'claude-opus-5-5';
+export const MODEL = DEFAULT_HOSTED_MODEL;
+/** Server configuration only; each task captures this once for all its attempts. */
+export const configuredHostedModel = (): HostedModelId => resolveHostedModelId(process.env.ARCHWOVEN_HOSTED_MODEL);
 export const MAX_REPAIRS = 2;
 /** Fixed: max_tokens ≤ 8k. If live truncation recurs, the fix is effort-low
  *  output or a spec config-review amendment — never silent drift in code. */
@@ -257,9 +260,9 @@ ${contract}`;
 export const STABLE_SYSTEM = modelSystem(NATIVE_MODEL_JSON_CONTRACT, 'public');
 export const LOCAL_MODEL_SYSTEM = modelSystem(NATIVE_MODEL_JSON_CONTRACT, 'private');
 
-export function usageFrom(usage: RawUsage | UsageLedger, effort: Effort, latencyMs: number, repairs: number): TaskUsage {
+export function usageFrom(usage: RawUsage | UsageLedger, effort: Effort, latencyMs: number, repairs: number, modelId: HostedModelId = MODEL): TaskUsage {
   return {
-    model: MODEL,
+    model: modelId,
     provider: 'anthropic',
     effort,
     attempts: 'attempts' in usage ? usage.attempts : [],
@@ -294,7 +297,8 @@ export async function generateModel(
   opts: GenerateOptions & { allowClarification?: boolean } = {},
 ): Promise<DescriptionOutcome> {
   const effort: Effort = opts.effort ?? 'medium';
-  if (opts.signal?.aborted) return { ok: false, errors: ['Generation cancelled.'], usage: usageFrom({}, effort, 0, 0) };
+  const modelId = !opts.client && fakeMode() ? MODEL : configuredHostedModel();
+  if (opts.signal?.aborted) return { ok: false, errors: ['Generation cancelled.'], usage: usageFrom({}, effort, 0, 0, modelId) };
   if (!opts.client && fakeMode()) return { ok: true, model: structuredClone(validFullModelExtended), usage: fakeUsage(effort) };
   const client: StructuredClient =
     hostedClient(opts.client);
@@ -306,12 +310,12 @@ export async function generateModel(
   // Per-request gate: exact token count before send. Fail closed — an
   // uncounted send is exactly the oversized context the gate exists to stop.
   try {
-    const counted = await client.messages.countTokens({ model: MODEL, system, messages }, { signal: opts.signal });
+    const counted = await client.messages.countTokens({ model: modelId, system, messages }, { signal: opts.signal });
     if (counted.input_tokens > CONTEXT_TOKEN_LIMIT) {
-      return { ok: false, errors: ['assembled context exceeds the 25k token limit — scope the description down to one system or flow'], usage: usageFrom({}, effort, Date.now() - t0, 0) };
+      return { ok: false, errors: ['assembled context exceeds the 25k token limit — scope the description down to one system or flow'], usage: usageFrom({}, effort, Date.now() - t0, 0, modelId) };
     }
   } catch (e) {
-    return { ok: false, errors: [countFailureMessage(e)], usage: usageFrom({}, effort, Date.now() - t0, 0) };
+    return { ok: false, errors: [countFailureMessage(e)], usage: usageFrom({}, effort, Date.now() - t0, 0, modelId) };
   }
 
   let lastErrors: string[] = [];
@@ -331,7 +335,7 @@ export async function generateModel(
       // by the repair loop + validateModel server-side; the prompt carries
       // the grammar (STABLE_SYSTEM).
       response = await client.beta.messages.create({
-        model: MODEL,
+        model: modelId,
         max_tokens: MAX_TOKENS,
         system,
         messages,
@@ -358,10 +362,10 @@ export async function generateModel(
     }
 
     const decision = opts.allowClarification ? ClarificationSchema.safeParse(parsed) : null;
-    if (decision?.success) return { ok: true, questions: decision.data.clarificationQuestions, usage: usageFrom(billed, effort, Date.now() - t0, repairs) };
+    if (decision?.success) return { ok: true, questions: decision.data.clarificationQuestions, usage: usageFrom(billed, effort, Date.now() - t0, repairs, modelId) };
     const result = validateModel(parsed);
     lastErrors = result.ok ? generatedViewErrors(result.model, view) : result.errors;
-    if (result.ok && !lastErrors.length) return { ok: true, model: result.model, usage: usageFrom(billed, effort, Date.now() - t0, repairs) };
+    if (result.ok && !lastErrors.length) return { ok: true, model: result.model, usage: usageFrom(billed, effort, Date.now() - t0, repairs, modelId) };
     if (attempt < MAX_REPAIRS) {
       repairs++;
       messages.push({ role: 'assistant', content: text });
@@ -372,5 +376,5 @@ export async function generateModel(
     }
   }
 
-  return { ok: false, errors: lastErrors, usage: usageFrom(billed, effort, Date.now() - t0, repairs) };
+  return { ok: false, errors: lastErrors, usage: usageFrom(billed, effort, Date.now() - t0, repairs, modelId) };
 }

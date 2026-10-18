@@ -1,4 +1,5 @@
 import type { ViewType } from './schema';
+import type { HostedCostBasis } from './hosted-models';
 
 export interface TokenUsage {
   inputTokens: number;
@@ -28,5 +29,5 @@ export interface TaskReport extends TaskUsage {
   modelId: string | null;
   outcome: 'ok' | 'repaired' | 'failed';
   estimatedCostUsd: number | null;
-  costBasis: 'anthropic-opus-5-5-2026-10-17' | 'local-inference' | 'demo' | 'unavailable';
+  costBasis: HostedCostBasis | 'local-inference' | 'demo' | 'unavailable';
 }

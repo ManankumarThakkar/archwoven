@@ -7,12 +7,14 @@ const plural = (value: number, single: string, many = `${single}s`) => `${value}
 export function TaskUsageSummary({ task }: { task: TaskReport }) {
   const total = task.inputTokens + task.cacheWriteTokens + task.cacheReadTokens + task.outputTokens;
   const prefix = task.usageComplete ? '' : '≥ ';
+  const dollars = task.estimatedCostUsd !== null && task.estimatedCostUsd > 0 && task.estimatedCostUsd < 0.0001
+    ? task.estimatedCostUsd.toFixed(8).replace(/0+$/, '') : task.estimatedCostUsd?.toFixed(4);
   const cost = task.costBasis === 'local-inference' ? 'Local inference'
     : task.costBasis === 'demo' ? 'Demo'
     : task.estimatedCostUsd === null ? 'Cost unavailable'
-    : `${prefix}$${task.estimatedCostUsd.toFixed(4)} API estimate`;
+    : `${prefix}$${dollars} API estimate`;
   return <details className="aw-task-usage">
-    <summary>Last task · {task.usageComplete ? `${count(total)} tokens` : 'Usage incomplete'} · {cost}</summary>
+    <summary>Last task · {task.usageComplete ? `${count(total)} ${total === 1 ? 'token' : 'tokens'}` : 'Usage incomplete'} · {cost}</summary>
     <div className="aw-task-usage-details">
       <p>{task.action === 'repo' ? 'Repository' : task.action === 'expand' ? 'Expansion' : task.action === 'refine' ? 'Refinement' : 'Generation'} · {task.outcome === 'failed' ? 'Failed or interrupted' : 'Completed'} · {(task.latencyMs / 1000).toFixed(1)}s</p>
       <p>{task.provider === 'ollama' ? 'Ollama' : task.provider === 'anthropic' ? 'Anthropic' : task.provider === 'demo' ? 'Demo' : 'Unknown provider'} · {task.model}</p>

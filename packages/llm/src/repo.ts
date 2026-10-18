@@ -3,7 +3,7 @@ import type { Fragment } from '@archwoven/extract';
 import { buildSourceModel, SOURCE_PRESENTATION_SYSTEM } from './source-presentation';
 import { validateModel, validFullModelExtended, type Evidence } from '@archwoven/model';
 import {
-  MODEL, MAX_REPAIRS, MAX_TOKENS, CONTEXT_TOKEN_LIMIT, NATIVE_MODEL_JSON_CONTRACT,
+  MODEL, configuredHostedModel, MAX_REPAIRS, MAX_TOKENS, CONTEXT_TOKEN_LIMIT, NATIVE_MODEL_JSON_CONTRACT,
   countFailureMessage, hostedClient, fakeMode, decodeWireModel, unfenced, usageFrom,
   type StructuredClient, type Effort, type GenerateOutcome,
 } from './client';
@@ -95,12 +95,13 @@ export async function assembleRepoModel(
   opts: { client?: StructuredClient; effort?: Effort; signal?: AbortSignal } = {},
 ): Promise<GenerateOutcome> {
   const effort: Effort = opts.effort ?? 'medium';
-  if (opts.signal?.aborted) return { ok: false, errors: ['cancelled'], usage: usageFrom({}, effort, 0, 0) };
+  const modelId = !opts.client && fakeMode() ? MODEL : configuredHostedModel();
+  if (opts.signal?.aborted) return { ok: false, errors: ['cancelled'], usage: usageFrom({}, effort, 0, 0, modelId) };
   const repoFull = `${meta.owner}/${meta.repo}`;
   if (!opts.client && fakeMode()) {
     const model = structuredClone(validFullModelExtended);
     pinEvidence(model, repoFull, meta.sha);
-    return { ok: true, model, usage: { ...usageFrom({}, effort, 0, 0), provider: 'demo' } };
+    return { ok: true, model, usage: { ...usageFrom({}, effort, 0, 0, modelId), provider: 'demo' } };
   }
   const client: StructuredClient = hostedClient(opts.client);
 
@@ -112,12 +113,12 @@ export async function assembleRepoModel(
 
   // Context gate, fail closed — same contract as generateModel.
   try {
-    const counted = await client.messages.countTokens({ model: MODEL, system, messages }, { signal: opts.signal });
+    const counted = await client.messages.countTokens({ model: modelId, system, messages }, { signal: opts.signal });
     if (counted.input_tokens > CONTEXT_TOKEN_LIMIT) {
-      return { ok: false, errors: ['repo fragment exceeds the 25k token limit — narrow the subdirectory or reduce endpoints'], usage: usageFrom({}, effort, Date.now() - t0, 0) };
+      return { ok: false, errors: ['repo fragment exceeds the 25k token limit — narrow the subdirectory or reduce endpoints'], usage: usageFrom({}, effort, Date.now() - t0, 0, modelId) };
     }
   } catch (e) {
-    return { ok: false, errors: [countFailureMessage(e)], usage: usageFrom({}, effort, Date.now() - t0, 0) };
+    return { ok: false, errors: [countFailureMessage(e)], usage: usageFrom({}, effort, Date.now() - t0, 0, modelId) };
   }
 
   let lastErrors: string[] = [];
@@ -125,14 +126,14 @@ export async function assembleRepoModel(
   const billed = newUsageLedger();
 
   for (let attempt = 0; attempt <= MAX_REPAIRS; attempt++) {
-    if (opts.signal?.aborted) return { ok: false, errors: ['cancelled'], usage: usageFrom(billed, effort, Date.now() - t0, repairs) };
+    if (opts.signal?.aborted) return { ok: false, errors: ['cancelled'], usage: usageFrom(billed, effort, Date.now() - t0, repairs, modelId) };
     startAttempt(billed, repairs);
     let response: Awaited<ReturnType<StructuredClient['beta']['messages']['create']>>;
     try {
       // structured outputs dropped on hosted generate too — same grammar-size
       // limit as generateModel; validateModel + repair loop enforce the shape.
       response = await client.beta.messages.create({
-        model: MODEL,
+        model: modelId,
         max_tokens: generic ? 2048 : MAX_TOKENS,
         system,
         messages,
@@ -164,7 +165,7 @@ export async function assembleRepoModel(
       if (!lastErrors.length) {
         preserveSourceGaps(fragment, result.model);
         pinEvidence(result.model, repoFull, meta.sha); // pinned server-side, never model-supplied
-        return { ok: true, model: result.model, usage: usageFrom(billed, effort, Date.now() - t0, repairs) };
+        return { ok: true, model: result.model, usage: usageFrom(billed, effort, Date.now() - t0, repairs, modelId) };
       }
     } else {
       lastErrors = result.errors;
@@ -176,5 +177,5 @@ export async function assembleRepoModel(
     }
   }
 
-  return { ok: false, errors: lastErrors, usage: usageFrom(billed, effort, Date.now() - t0, repairs) };
+  return { ok: false, errors: lastErrors, usage: usageFrom(billed, effort, Date.now() - t0, repairs, modelId) };
 }

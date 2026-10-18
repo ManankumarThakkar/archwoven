@@ -7,4 +7,5 @@ export * from './expand';
 export * from './reconcile';
 export * from './fixtures';
 export * from './disclosures';
+export * from './hosted-models';
 export type { TokenUsage, AttemptUsage, TaskUsage, TaskReport } from './task-usage';

@@ -2,7 +2,7 @@ import { newUsageLedger, startAttempt, captureUsage } from './usage';
 import { z } from 'zod';
 import { applyExpansion, expandBlocker, ExpansionSchema, type Expansion, type SystemModel } from '@archwoven/model';
 import {
-  CONTEXT_TOKEN_LIMIT, MAX_REPAIRS, MODEL, STRUCTURED_OUTPUTS_BETA, fakeMode, countFailureMessage, hostedClient, usageFrom, wireSchema,
+  CONTEXT_TOKEN_LIMIT, MAX_REPAIRS, MODEL, configuredHostedModel, STRUCTURED_OUTPUTS_BETA, fakeMode, countFailureMessage, hostedClient, usageFrom, wireSchema,
   type Effort, type RawUsage, type StructuredClient,
 } from './client';
 import { fenceEscape } from './repo';
@@ -74,7 +74,8 @@ export async function expandComponent(
   opts: { client?: StructuredClient; effort?: Effort; signal?: AbortSignal } = {},
 ): Promise<ExpandOutcome> {
   const effort: Effort = opts.effort ?? 'low';
-  const zero = usageFrom({}, effort, 0, 0);
+  const modelId = !opts.client && fakeMode() ? MODEL : configuredHostedModel();
+  const zero = usageFrom({}, effort, 0, 0, modelId);
   const blocked = expandBlocker(model, focus);
   if (blocked) return { ok: false, errors: [blocked], usage: zero };
   if (model.privacy.classification === 'private' || model.privacy.boundary === 'local-only')
@@ -90,10 +91,10 @@ export async function expandComponent(
   const system = [{ type: 'text', text: EXPANSION_SYSTEM, cache_control: { type: 'ephemeral' } }];
   const messages: { role: string; content: string }[] = [{ role: 'user', content: expansionUserMessage(model, focus, hint) }];
   try {
-    const counted = await client.messages.countTokens({ model: MODEL, system, messages }, { signal: opts.signal });
-    if (counted.input_tokens > CONTEXT_TOKEN_LIMIT) return { ok: false, errors: ['This component has too many connections to expand within the context limit.'], usage: usageFrom({}, effort, Date.now() - t0, 0) };
+    const counted = await client.messages.countTokens({ model: modelId, system, messages }, { signal: opts.signal });
+    if (counted.input_tokens > CONTEXT_TOKEN_LIMIT) return { ok: false, errors: ['This component has too many connections to expand within the context limit.'], usage: usageFrom({}, effort, Date.now() - t0, 0, modelId) };
   } catch (e) {
-    return { ok: false, errors: [countFailureMessage(e)], usage: usageFrom({}, effort, Date.now() - t0, 0) };
+    return { ok: false, errors: [countFailureMessage(e)], usage: usageFrom({}, effort, Date.now() - t0, 0, modelId) };
   }
 
   let lastErrors: string[] = [];
@@ -105,7 +106,7 @@ export async function expandComponent(
     let response: Awaited<ReturnType<StructuredClient['beta']['messages']['create']>>;
     try {
       response = await client.beta.messages.create({
-        model: MODEL, max_tokens: 4000, betas: [STRUCTURED_OUTPUTS_BETA], system, messages,
+        model: modelId, max_tokens: 4000, betas: [STRUCTURED_OUTPUTS_BETA], system, messages,
         output_config: { format: { type: 'json_schema', schema: wireExpansionSchema }, effort },
       }, { signal: opts.signal });
     } catch (e) {
@@ -119,7 +120,7 @@ export async function expandComponent(
     try { raw = JSON.parse(text); } catch (e) { lastErrors = [`expansion was not valid JSON: ${e instanceof Error ? e.message : String(e)}`]; raw = undefined; }
     if (raw !== undefined) {
       const applied = applyExpansion(model, focus, raw);
-      if (applied.ok) return { ok: true, model: applied.model, usage: usageFrom(billed, effort, Date.now() - t0, repairs) };
+      if (applied.ok) return { ok: true, model: applied.model, usage: usageFrom(billed, effort, Date.now() - t0, repairs, modelId) };
       lastErrors = applied.errors;
     }
     if (attempt < MAX_REPAIRS) {
@@ -127,5 +128,5 @@ export async function expandComponent(
       messages.push({ role: 'assistant', content: text }, { role: 'user', content: expansionRepair(lastErrors) });
     }
   }
-  return { ok: false, errors: lastErrors, usage: usageFrom(billed, effort, Date.now() - t0, repairs) };
+  return { ok: false, errors: lastErrors, usage: usageFrom(billed, effort, Date.now() - t0, repairs, modelId) };
 }
