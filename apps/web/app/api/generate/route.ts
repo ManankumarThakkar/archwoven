@@ -5,7 +5,7 @@ import type { TaskUsage } from '@archwoven/model';
 import {
   serverDeps, estimateTokens, PROMPT_TOKEN_LIMIT, readOrCreateSession, sessionCookie, tierOf,
   quotaMessage, clientIp, OVERSIZED_COPY,
-  llmNotConfigured, LLM_NOT_CONFIGURED_COPY,
+  llmNotConfigured, LLM_NOT_CONFIGURED_COPY, spenderOf
 } from '../../lib/server';
 import { withSlot } from '../../lib/llm-limiter';
 import { deployMode, privacyForMode } from '../../lib/mode';
@@ -110,7 +110,7 @@ export async function POST(req: Request) {
     try {
       serverDeps.store.updateJob(jobId, { status: 'running', stage: 'validating' });
       serverDeps.store.updateJob(jobId, { stage: 'generating' });
-      const out = await serverDeps.generateModel(prompt, view, { signal: entry.controller.signal, allowClarification: !context });
+      const out = await serverDeps.generateModel(prompt, view, { signal: entry.controller.signal, allowClarification: !context, spender: spenderOf(req.headers, sessionId) });
       pendingUsage = out.usage;
       if (!entry.settled) serverDeps.store.updateJob(jobId, { stage: 'validating-output' });
       if (!out.ok) return fail(out.errors.join('; '), out.usage, out.usage.repairs);

@@ -7,7 +7,7 @@ import { maskFragmentSecrets } from '@archwoven/llm';
 import {
   serverDeps, readOrCreateSession, sessionCookie, tierOf,
   quotaMessage, clientIp,
-  llmNotConfigured, LLM_NOT_CONFIGURED_COPY,
+  llmNotConfigured, LLM_NOT_CONFIGURED_COPY, spenderOf
 } from '../../lib/server';
 import { withSlot } from '../../lib/llm-limiter';
 import { deployMode, privacyForMode } from '../../lib/mode';
@@ -135,7 +135,7 @@ export async function POST(req: Request) {
 
       stage('designing');
       const evidenceRepo = cloneDir !== null ? { owner: 'local', repo: basename(cloneDir) } : { owner: parsed!.owner, repo: parsed!.repo };
-      const out = await serverDeps.assembleRepoModel(masked?.fragment ?? ingest.fragment, { ...evidenceRepo, sha: ingest.sha, framework: ingest.framework }, { signal: controller.signal });
+      const out = await serverDeps.assembleRepoModel(masked?.fragment ?? ingest.fragment, { ...evidenceRepo, sha: ingest.sha, framework: ingest.framework }, { signal: controller.signal, spender: spenderOf(req.headers, sessionId) });
       pendingUsage = out.usage;
       stage('validating-output');
       if (!out.ok) return fail(out.errors.join('; '), out.usage, out.usage.repairs);

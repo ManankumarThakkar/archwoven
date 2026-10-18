@@ -8,6 +8,15 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    # The spending ledger tests run their Lua scripts against a real Redis.
+    services:
+      redis:
+        image: redis:7
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 2s --health-timeout 2s --health-retries 15
+    env:
+      ARCHWOVEN_TEST_REDIS: 127.0.0.1:6379
     steps:
       - uses: actions/checkout@v4
       - name: Verify visual-review evidence package

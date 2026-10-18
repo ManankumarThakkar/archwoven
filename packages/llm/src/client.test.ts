@@ -292,6 +292,14 @@ describe('reported task usage', () => {
     // The refused third attempt was never sent, so it is not an attempt at all.
     expect(out.usage.attempts.map(part => part.error)).toEqual(Array(2).fill('400 invalid_request_error: speed: not supported for this model'));
   });
+  it('shows a refusal that was never sent as itself, not as a failed request', async () => {
+    const client: StructuredClient = {
+      messages: { countTokens: async () => ({ input_tokens: 10 }) },
+      beta: { messages: { create: async () => { throw new ProviderRequestNotSentError("You've reached today's AI limit for this browser."); } } },
+    };
+    const out = await generateModel('shop', 'architecture', { client });
+    expect(out).toMatchObject({ ok: false, errors: ["You've reached today's AI limit for this browser."] });
+  });
   it('labels proxy pages and accounting failures honestly, within 300 characters', async () => {
     const proxy = Object.assign(new Error(`502 <html>${'x'.repeat(400)}</html>`), { status: 502 });
     let attempt = 0;

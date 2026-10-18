@@ -3,8 +3,7 @@ import { z } from 'zod';
 import { EditOpSchema, HOSTED_REQUESTS, applyEditOps, isSourceEvidenceRefusal, sameModelContent, type EditOp, type SystemModel, type ViewType } from '@archwoven/model';
 import {
   CONTEXT_TOKEN_LIMIT, MAX_REPAIRS, MODEL, configuredHostedModel, STRUCTURED_OUTPUTS_BETA, fakeMode, countFailureMessage, hostedClient, usageFrom, wireSchema, providerRequestStopped,
-  type Effort, type StructuredClient,
-} from './client';
+  type Effort, type StructuredClient, attemptError } from './client';
 import type { RawUsage } from './client';
 
 export type RefineOutcome =
@@ -95,7 +94,7 @@ export async function generateRefinement(
         output_config: { format: { type: 'json_schema', schema: REFINEMENT_OUTPUT_SCHEMA }, effort },
       }, { signal: opts.signal });
     } catch (e) {
-      lastErrors = [`request failed: ${e instanceof Error ? e.message : String(e)}`];
+      lastErrors = [attemptError(e)];
       if (providerRequestStopped(e, billed) || opts.signal?.aborted) break;
       continue;
     }

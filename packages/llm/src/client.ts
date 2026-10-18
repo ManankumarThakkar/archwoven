@@ -88,6 +88,8 @@ export interface StructuredClient {
  * ambiguous post-dispatch accounting failure. Neither is a transport retry. */
 export class ProviderRequestNotSentError extends Error {}
 export class ProviderAccountingError extends Error {}
+/** What a failed attempt reports: a refusal that was never sent speaks for itself. */
+export const attemptError = (e: unknown) => e instanceof ProviderRequestNotSentError ? e.message : `request failed: ${e instanceof Error ? e.message : String(e)}`;
 export function providerRequestStopped(error: unknown, ledger: UsageLedger): boolean {
   if (error instanceof ProviderRequestNotSentError || error instanceof SecretEgressError) { ledger.attempts.pop(); return true; }
   recordAttemptError(ledger, error, error instanceof ProviderAccountingError ? 'accounting' : undefined);
@@ -351,7 +353,7 @@ export async function generateModel(
         messages,
       }, { signal: opts.signal });
     } catch (e) {
-      lastErrors = [`request failed: ${e instanceof Error ? e.message : String(e)}`];
+      lastErrors = [attemptError(e)];
       if (providerRequestStopped(e, billed) || opts.signal?.aborted) break;
       continue; // transient/transport failure — retry within budget
     }
