@@ -854,3 +854,15 @@ Artifacts outside version control are in the session scratchpad (`eval`, `eval2`
 **Gaps list.** The four rows are removed from `OPEN-GAPS.md`. One related gap is added: a pasted link to the same diagram that changes only `view`, `focus`, `lens`, `route` or `chapter` is not applied until reload.
 
 Firefox, real Safari, physical touch and screen readers are not covered here; they belong to task 20b. Artifacts are in the session scratchpad (`ui`, `pw`).
+
+## Task 19b follow-up — hosted import first-pass validity
+
+2026-10-17, America/Chicago. The four pinned repository imports from the task 19 baseline were re-run against `main` at `43dbc19`, with the owner-approved cap of $1. The run used an isolated production build on a free loopback port, hosted `claude-opus-5-5`, and real mode confirmed through `/api/config` (`fake: false`) before starting. Results: [benchmarks/provider-eval/README.md](../benchmarks/provider-eval/README.md).
+
+**Results:**
+- **First attempt:** 3 of 4 imports were valid on the first attempt; the baseline was 0 of 4.
+- **Latency and cost:** the median fell from 74.6 s to 35.1 s, and total cost from $1.09 to $0.67, which is the entire spend.
+- **Validity and accuracy:** all four diagrams validate. Diagram-level accuracy against ground truth is unchanged (template 10/12 nodes and 12/16 edges, petclinic 19/19 and 10/10, both at 100 % source-supported precision).
+- **The remaining repair:** spring-realworld still needed one repair round. It was not diagnosed, because a diagnostic would have exceeded the cap; the gap row in `OPEN-GAPS.md` replaces the "unmeasured" row.
+
+The server and worktree were removed afterwards. The committed results contain the repository URLs, model shapes, usage and diagrams only.

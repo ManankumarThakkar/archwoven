@@ -1,0 +1,461 @@
+{
+  "schemaVersion": "1",
+  "revision": 1,
+  "title": "full-stack-fastapi-template backend",
+  "requirements": [],
+  "openQuestions": [
+    {
+      "id": "oq.api.prefix",
+      "text": "computed prefix settings.API_V1_STR resolved to its declared default \"/api/v1\" — an environment override would change these paths"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "app.main",
+      "kind": "gateway",
+      "label": "app",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "fastapi/full-stack-fastapi-template",
+          "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+          "path": "backend/app/main.py",
+          "lines": [
+            21,
+            25
+          ]
+        }
+      ]
+    },
+    {
+      "id": "api.router",
+      "kind": "service",
+      "label": "api_router",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "fastapi/full-stack-fastapi-template",
+          "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+          "path": "backend/app/api/main.py",
+          "lines": [
+            6,
+            6
+          ]
+        }
+      ]
+    },
+    {
+      "id": "api.routes.items",
+      "kind": "service",
+      "label": "items-router",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "fastapi/full-stack-fastapi-template",
+          "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+          "path": "backend/app/api/routes/items.py",
+          "lines": [
+            10,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "id": "api.routes.login",
+      "kind": "service",
+      "label": "login-router",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "fastapi/full-stack-fastapi-template",
+          "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+          "path": "backend/app/api/routes/login.py",
+          "lines": [
+            20,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "id": "api.routes.private",
+      "kind": "service",
+      "label": "private-router",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "fastapi/full-stack-fastapi-template",
+          "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+          "path": "backend/app/api/routes/private.py",
+          "lines": [
+            13,
+            13
+          ]
+        }
+      ]
+    },
+    {
+      "id": "api.routes.users",
+      "kind": "service",
+      "label": "users-router",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "fastapi/full-stack-fastapi-template",
+          "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+          "path": "backend/app/api/routes/users.py",
+          "lines": [
+            29,
+            29
+          ]
+        }
+      ]
+    },
+    {
+      "id": "api.routes.utils",
+      "kind": "service",
+      "label": "utils-router",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "fastapi/full-stack-fastapi-template",
+          "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+          "path": "backend/app/api/routes/utils.py",
+          "lines": [
+            8,
+            8
+          ]
+        }
+      ]
+    },
+    {
+      "id": "entity.user",
+      "kind": "entity",
+      "label": "user",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "fastapi/full-stack-fastapi-template",
+          "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+          "path": "backend/app/models.py",
+          "lines": [
+            51,
+            55
+          ]
+        }
+      ]
+    },
+    {
+      "id": "entity.item",
+      "kind": "entity",
+      "label": "item",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "fastapi/full-stack-fastapi-template",
+          "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+          "path": "backend/app/models.py",
+          "lines": [
+            87,
+            93
+          ]
+        }
+      ]
+    },
+    {
+      "id": "datastore.postgresql",
+      "kind": "datastore",
+      "label": "PostgreSQL",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "fastapi/full-stack-fastapi-template",
+          "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+          "path": "backend/app/core/config.py",
+          "lines": [
+            31,
+            31
+          ]
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "e.item.user",
+      "from": "entity.item",
+      "to": "entity.user",
+      "type": "relation",
+      "label": "N:1",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "fastapi/full-stack-fastapi-template",
+          "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+          "path": "backend/app/models.py",
+          "lines": [
+            87,
+            93
+          ]
+        }
+      ]
+    },
+    {
+      "id": "e.router.login",
+      "from": "api.router",
+      "to": "api.routes.login",
+      "type": "sync",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "fastapi/full-stack-fastapi-template",
+          "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+          "path": "backend/app/api/main.py",
+          "lines": [
+            7,
+            7
+          ]
+        }
+      ]
+    },
+    {
+      "id": "e.router.users",
+      "from": "api.router",
+      "to": "api.routes.users",
+      "type": "sync",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "fastapi/full-stack-fastapi-template",
+          "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+          "path": "backend/app/api/main.py",
+          "lines": [
+            8,
+            8
+          ]
+        }
+      ]
+    },
+    {
+      "id": "e.router.utils",
+      "from": "api.router",
+      "to": "api.routes.utils",
+      "type": "sync",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "fastapi/full-stack-fastapi-template",
+          "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+          "path": "backend/app/api/main.py",
+          "lines": [
+            9,
+            9
+          ]
+        }
+      ]
+    },
+    {
+      "id": "e.router.items",
+      "from": "api.router",
+      "to": "api.routes.items",
+      "type": "sync",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "fastapi/full-stack-fastapi-template",
+          "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+          "path": "backend/app/api/main.py",
+          "lines": [
+            10,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "id": "e.router.private",
+      "from": "api.router",
+      "to": "api.routes.private",
+      "type": "sync",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "fastapi/full-stack-fastapi-template",
+          "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+          "path": "backend/app/api/main.py",
+          "lines": [
+            14,
+            14
+          ]
+        }
+      ]
+    },
+    {
+      "id": "e.app.router",
+      "from": "app.main",
+      "to": "api.router",
+      "type": "sync",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "fastapi/full-stack-fastapi-template",
+          "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+          "path": "backend/app/main.py",
+          "lines": [
+            35,
+            35
+          ]
+        }
+      ]
+    },
+    {
+      "id": "e.items.db",
+      "from": "api.routes.items",
+      "to": "datastore.postgresql",
+      "type": "data",
+      "label": "Depends",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "fastapi/full-stack-fastapi-template",
+          "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+          "path": "backend/app/api/routes/items.py",
+          "lines": [
+            13,
+            45
+          ]
+        }
+      ]
+    },
+    {
+      "id": "e.login.db",
+      "from": "api.routes.login",
+      "to": "datastore.postgresql",
+      "type": "data",
+      "label": "Depends",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "fastapi/full-stack-fastapi-template",
+          "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+          "path": "backend/app/api/routes/login.py",
+          "lines": [
+            23,
+            42
+          ]
+        }
+      ]
+    },
+    {
+      "id": "e.private.db",
+      "from": "api.routes.private",
+      "to": "datastore.postgresql",
+      "type": "data",
+      "label": "Depends",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "fastapi/full-stack-fastapi-template",
+          "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+          "path": "backend/app/api/routes/private.py",
+          "lines": [
+            23,
+            38
+          ]
+        }
+      ]
+    },
+    {
+      "id": "e.users.db",
+      "from": "api.routes.users",
+      "to": "datastore.postgresql",
+      "type": "data",
+      "label": "Depends",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "fastapi/full-stack-fastapi-template",
+          "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+          "path": "backend/app/api/routes/users.py",
+          "lines": [
+            32,
+            51
+          ]
+        }
+      ]
+    },
+    {
+      "id": "e.utils.db",
+      "from": "api.routes.utils",
+      "to": "datastore.postgresql",
+      "type": "data",
+      "label": "Depends",
+      "provenance": "source-supported",
+      "evidence": [
+        {
+          "repo": "fastapi/full-stack-fastapi-template",
+          "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+          "path": "backend/app/api/routes/utils.py",
+          "lines": [
+            11,
+            26
+          ]
+        }
+      ]
+    }
+  ],
+  "views": [
+    {
+      "id": "view.architecture",
+      "type": "architecture",
+      "orientation": "LR",
+      "nodes": [
+        "app.main",
+        "api.router",
+        "api.routes.items",
+        "api.routes.login",
+        "api.routes.private",
+        "api.routes.users",
+        "api.routes.utils",
+        "datastore.postgresql"
+      ],
+      "edges": [
+        "e.app.router",
+        "e.router.login",
+        "e.router.users",
+        "e.router.utils",
+        "e.router.items",
+        "e.router.private",
+        "e.items.db",
+        "e.login.db",
+        "e.private.db",
+        "e.users.db",
+        "e.utils.db"
+      ],
+      "mainPath": [
+        "app.main",
+        "api.router",
+        "api.routes.items",
+        "datastore.postgresql"
+      ]
+    },
+    {
+      "id": "view.er",
+      "type": "er",
+      "nodes": [
+        "entity.item",
+        "entity.user"
+      ],
+      "edges": [
+        "e.item.user"
+      ]
+    }
+  ],
+  "boundaries": [],
+  "guidedViews": [],
+  "privacy": {
+    "classification": "public",
+    "boundary": "external-allowed"
+  }
+}

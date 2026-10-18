@@ -1,0 +1,267 @@
+{
+  "summary": {
+    "ranAt": "2026-10-18T00:02:19.226Z",
+    "base": "http://127.0.0.1:3053",
+    "budget": 0.65,
+    "spentUsd": 0.6664,
+    "generations": {
+      "ran": 0,
+      "succeeded": "—",
+      "providerCalls": 0,
+      "firstPassValid": "—",
+      "repairedToValid": "—",
+      "failedCalls": 0,
+      "latencyP50": "—",
+      "latencyP90": "—",
+      "latencyMax": "—",
+      "costUsd": 0,
+      "cacheReadTokens": 0,
+      "cacheWriteTokens": 0,
+      "uncachedInputTokens": 0,
+      "cacheSavingsUsd": 0
+    },
+    "byView": {},
+    "clarifications": [],
+    "validModels": "4/4 (100%)",
+    "suiteA": {},
+    "refinements": {
+      "ran": 0,
+      "succeeded": "—",
+      "providerCalls": 0,
+      "firstPassValid": "—",
+      "repairedToValid": "—",
+      "failedCalls": 0,
+      "latencyP50": "—",
+      "latencyP90": "—",
+      "latencyMax": "—",
+      "costUsd": 0,
+      "cacheReadTokens": 0,
+      "cacheWriteTokens": 0,
+      "uncachedInputTokens": 0,
+      "cacheSavingsUsd": 0
+    },
+    "repositories": {
+      "ran": 4,
+      "succeeded": "4/4 (100%)",
+      "providerCalls": 4,
+      "firstPassValid": "3/4 (75%)",
+      "repairedToValid": "1/4 (25%)",
+      "failedCalls": 0,
+      "latencyP50": "35.1 s",
+      "latencyP90": "92.8 s",
+      "latencyMax": "92.8 s",
+      "costUsd": 0.6664,
+      "cacheReadTokens": 14504,
+      "cacheWriteTokens": 3626,
+      "uncachedInputTokens": 25368,
+      "cacheSavingsUsd": 0.0515
+    },
+    "diagramVsTruth": {
+      "repo-fastapi-template": {
+        "nodeRecall": "10/12",
+        "edgeRecall": "12/16",
+        "sourceSupportedNodePrecision": "10/10",
+        "sourceSupportedEdgePrecision": "12/12",
+        "missedNodes": [
+          "SMTP",
+          "Sentry"
+        ],
+        "missedEdges": [
+          "login-router → SMTP",
+          "users-router → SMTP",
+          "utils-router → SMTP",
+          "app → Sentry"
+        ],
+        "unsupportedNodes": [],
+        "unsupportedEdges": [],
+        "inferredOrProposed": {
+          "nodes": 0,
+          "edges": 0
+        }
+      },
+      "repo-petclinic": {
+        "nodeRecall": "19/19",
+        "edgeRecall": "10/10",
+        "sourceSupportedNodePrecision": "19/19",
+        "sourceSupportedEdgePrecision": "10/10",
+        "missedNodes": [],
+        "missedEdges": [],
+        "unsupportedNodes": [],
+        "unsupportedEdges": [],
+        "inferredOrProposed": {
+          "nodes": 0,
+          "edges": 0
+        }
+      }
+    }
+  },
+  "results": [
+    {
+      "id": "repo-fastapi-template",
+      "kind": "repository",
+      "status": "succeeded",
+      "latencyMs": 28162,
+      "gaps": 1,
+      "usage": {
+        "calls": [
+          {
+            "view": "architecture",
+            "outcome": "ok",
+            "repairs": 0,
+            "costUsd": 0.10385
+          }
+        ],
+        "inputTokens": 3410,
+        "cacheWriteTokens": 3626,
+        "cacheReadTokens": 0,
+        "outputTokens": 3604,
+        "costUsd": 0.10385,
+        "repairs": 0
+      },
+      "model": {
+        "nodes": 10,
+        "edges": 12,
+        "views": [
+          "architecture",
+          "er"
+        ],
+        "openQuestions": 1,
+        "valid": true
+      },
+      "diagram": {
+        "nodeRecall": "10/12",
+        "edgeRecall": "12/16",
+        "sourceSupportedNodePrecision": "10/10",
+        "sourceSupportedEdgePrecision": "12/12",
+        "missedNodes": [
+          "SMTP",
+          "Sentry"
+        ],
+        "missedEdges": [
+          "login-router → SMTP",
+          "users-router → SMTP",
+          "utils-router → SMTP",
+          "app → Sentry"
+        ],
+        "unsupportedNodes": [],
+        "unsupportedEdges": [],
+        "inferredOrProposed": {
+          "nodes": 0,
+          "edges": 0
+        }
+      }
+    },
+    {
+      "id": "repo-petclinic",
+      "kind": "repository",
+      "status": "succeeded",
+      "latencyMs": 46330,
+      "gaps": 3,
+      "usage": {
+        "calls": [
+          {
+            "view": "architecture",
+            "outcome": "ok",
+            "repairs": 0,
+            "costUsd": 0.1444492
+          }
+        ],
+        "inputTokens": 4566,
+        "cacheWriteTokens": 0,
+        "cacheReadTokens": 3626,
+        "outputTokens": 6273,
+        "costUsd": 0.1444492,
+        "repairs": 0
+      },
+      "model": {
+        "nodes": 19,
+        "edges": 10,
+        "views": [
+          "architecture",
+          "er"
+        ],
+        "openQuestions": 3,
+        "valid": true
+      },
+      "diagram": {
+        "nodeRecall": "19/19",
+        "edgeRecall": "10/10",
+        "sourceSupportedNodePrecision": "19/19",
+        "sourceSupportedEdgePrecision": "10/10",
+        "missedNodes": [],
+        "missedEdges": [],
+        "unsupportedNodes": [],
+        "unsupportedEdges": [],
+        "inferredOrProposed": {
+          "nodes": 0,
+          "edges": 0
+        }
+      }
+    },
+    {
+      "id": "repo-fastapi-realworld",
+      "kind": "repository",
+      "status": "succeeded",
+      "latencyMs": 35081,
+      "gaps": 3,
+      "usage": {
+        "calls": [
+          {
+            "view": "architecture",
+            "outcome": "ok",
+            "repairs": 0,
+            "costUsd": 0.10184119999999999
+          }
+        ],
+        "inputTokens": 3019,
+        "cacheWriteTokens": 0,
+        "cacheReadTokens": 3626,
+        "outputTokens": 4452,
+        "costUsd": 0.10184119999999999,
+        "repairs": 0
+      },
+      "model": {
+        "nodes": 11,
+        "edges": 9,
+        "views": [
+          "architecture"
+        ],
+        "openQuestions": 5,
+        "valid": true
+      }
+    },
+    {
+      "id": "repo-spring-realworld",
+      "kind": "repository",
+      "status": "succeeded",
+      "latencyMs": 92829,
+      "gaps": 2,
+      "usage": {
+        "calls": [
+          {
+            "view": "architecture",
+            "outcome": "repaired",
+            "repairs": 1,
+            "costUsd": 0.3162824
+          }
+        ],
+        "inputTokens": 14373,
+        "cacheWriteTokens": 0,
+        "cacheReadTokens": 7252,
+        "outputTokens": 12867,
+        "costUsd": 0.3162824,
+        "repairs": 1
+      },
+      "model": {
+        "nodes": 22,
+        "edges": 1,
+        "views": [
+          "architecture",
+          "component-detail"
+        ],
+        "openQuestions": 7,
+        "valid": true
+      }
+    }
+  ]
+}

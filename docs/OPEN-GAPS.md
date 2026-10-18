@@ -18,7 +18,7 @@ Last reviewed: 2026-10-17, release stack PRs #39–#42 (landing on main via PR #
 
 | Gap | User impact | Found in | Notes |
 |---|---|---|---|
-| Hosted import first-pass validity after the task 19b fixes is unmeasured (the one import measured ran before the fence fix and needed a repair); the description rate comes from 7 cases | Imports may still pay a repair round | Task 19b | Include imports in the next provider evaluation run |
+| One of four hosted imports (spring-realworld) still needed a repair round after the task 19b fixes; its cause was not diagnosed. Imports were 3/4 valid on the first attempt (baseline 0/4), and descriptions 7/7 | That import costs a repair round: 92.8 s and $0.32 | Task 19b import re-run | Diagnose with a recorded repair message in the next provider evaluation |
 | Node and edge ground truth exists only for the two repositories used while fixing the extractors; held-out truth covers endpoints only | Diagram and extraction accuracy on unseen repositories is unmeasured beyond endpoints | Tasks 15 and 19 | Needs hand-authored truth for new held-out repositories |
 | Third-party SDK clients reached through helper functions (SMTP via `emails`/`smtplib`, Sentry) are not extracted | External services such as email delivery are missing from FastAPI diagrams | Task 15 ground truth (full-stack template) | Needs call-graph inference; candidate for a later extractor pass |
 | FastAPI dependencies built by factory calls (`Depends(get_repository(UsersRepository))`) are not resolved | Repository/service links behind parameterised dependency factories are missing | Task 15 held-out reading (fastapi-realworld) | Same call-graph limitation; disclosed only implicitly by the missing edges |
