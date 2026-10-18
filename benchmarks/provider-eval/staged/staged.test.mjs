@@ -80,7 +80,7 @@ async function fakeApp({ ledgerFile, model = 'claude-haiku-5-5', script, config 
       if (job.ticket) settleLater(job.ticket, job.cancelCharge ?? null);
       Object.assign(job, { status: 'cancelled' }); return send(200, {});
     }
-    if (jobMatch) { const job = jobs.get(jobMatch[1]); return send(200, { status: job.status, error: job.error ?? null, questions: job.questions ?? [], modelId: job.modelId ?? null, usagePending: false }); }
+    if (jobMatch) { const job = jobs.get(jobMatch[1]); app.polled = true; return send(200, { status: job.status, error: job.error ?? null, questions: job.questions ?? [], modelId: job.modelId ?? null, usagePending: false }); }
     const modelMatch = /^\/api\/models\/([^/]+)$/.exec(url.pathname);
     if (modelMatch) return models.has(modelMatch[1]) ? send(200, { model: models.get(modelMatch[1]) }) : send(404, { error: 'model not found' });
     if (url.pathname === '/api/refine') {
@@ -212,7 +212,8 @@ describe('staged run through the application API', () => {
     const app = await fakeApp({ ledgerFile, script: { ...allSucceed, checkout: { hang: true, cancelCharge: 3_000_000 } } });
     const controller = new AbortController();
     const running = runStage({ base: app.base, ledger: ledgerFile, out, only: ['checkout'], signal: controller.signal, pollMs: 5, log: quiet });
-    while (!app.posts.length) await new Promise(r => setTimeout(r, 5));
+    // Interrupt once the runner knows the job and is polling it.
+    while (!app.polled) await new Promise(r => setTimeout(r, 5));
     controller.abort();
     await running;
     expect(app.cancelled).toHaveLength(1);
