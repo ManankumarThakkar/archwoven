@@ -10,6 +10,7 @@ import {
 import { deployMode, fakeMode } from './mode';
 import { hostingProbeRequested } from '../../lib/hosting-probe';
 import { evaluationClient } from './evaluation-budget';
+import { spendingClient, type Spender } from './spending';
 import { ingestRepo, ingestLocal, gitRevParse, type IngestResult } from '@archwoven/ingest';
 import { extractSpringBoot, extractFastApi, type Fragment } from '@archwoven/extract';
 import type { SystemModel, ViewType } from '@archwoven/model';
@@ -36,12 +37,12 @@ let applicationStore: Store | undefined;
  */
 export const serverDeps: {
   store: Store;
-  generateModel: (prompt: string, view: ViewType, opts?: { signal?: AbortSignal; allowClarification?: boolean }) => Promise<DescriptionOutcome>;
-  generateRefinement: (instruction: string, model: SystemModel, view: ViewType, opts?: { signal?: AbortSignal }) => Promise<RefineOutcome>;
-  expandComponent: (model: SystemModel, target: string, hint: string, opts?: { signal?: AbortSignal }) => Promise<ExpandOutcome>;
+  generateModel: (prompt: string, view: ViewType, opts?: { signal?: AbortSignal; allowClarification?: boolean; spender?: Spender }) => Promise<DescriptionOutcome>;
+  generateRefinement: (instruction: string, model: SystemModel, view: ViewType, opts?: { signal?: AbortSignal; spender?: Spender }) => Promise<RefineOutcome>;
+  expandComponent: (model: SystemModel, target: string, hint: string, opts?: { signal?: AbortSignal; spender?: Spender }) => Promise<ExpandOutcome>;
   ingestRepo: (parsed: { owner: string; repo: string; ref?: string; subdir?: string }, opts?: { signal?: AbortSignal; onStage?: (stage: 'fetching' | 'extracting') => void }) => Promise<IngestResult>;
   ingestLocal: (dir: string, opts?: { subdir?: string; signal?: AbortSignal; onStage?: (stage: 'fetching' | 'extracting') => void }) => Promise<IngestResult>;
-  assembleRepoModel: (fragment: Fragment, meta: { owner: string; repo: string; sha: string; framework: string }, opts?: { signal?: AbortSignal }) => Promise<GenerateOutcome>;
+  assembleRepoModel: (fragment: Fragment, meta: { owner: string; repo: string; sha: string; framework: string }, opts?: { signal?: AbortSignal; spender?: Spender }) => Promise<GenerateOutcome>;
 } = {
   get store(): Store {
     if (hostingProbeRequested()) throw new Error('Application storage is unavailable during hosting diagnostics.');
@@ -54,15 +55,15 @@ export const serverDeps: {
   generateModel: (prompt, view, opts) =>
     fakeMode() ? generateModel(prompt, view, { ...opts, allowClarification: opts?.allowClarification ?? false })
       : deployMode() === 'local' ? generateModelLocal(prompt, view, { fetchImpl: egressFetch, signal: opts?.signal, allowClarification: opts?.allowClarification ?? false })
-        : generateModel(prompt, view, { ...opts, client: evaluationClient(), allowClarification: opts?.allowClarification ?? false }),
+        : generateModel(prompt, view, { signal: opts?.signal, client: hostedClient(opts?.spender), allowClarification: opts?.allowClarification ?? false }),
   generateRefinement: (instruction, model, view, opts) =>
     fakeMode() ? generateRefinement(instruction, model, view)
       : deployMode() === 'local' ? generateRefinementLocal(instruction, model, view, { fetchImpl: egressFetch, signal: opts?.signal })
-        : generateRefinement(instruction, model, view, { ...opts, client: evaluationClient() }),
+        : generateRefinement(instruction, model, view, { signal: opts?.signal, client: hostedClient(opts?.spender) }),
   expandComponent: (model, target, hint, opts) =>
     fakeMode() ? expandComponent(model, target, hint)
       : deployMode() === 'local' ? expandComponentLocal(model, target, hint, { fetchImpl: egressFetch, signal: opts?.signal })
-        : expandComponent(model, target, hint, { ...opts, client: evaluationClient() }),
+        : expandComponent(model, target, hint, { signal: opts?.signal, client: hostedClient(opts?.spender) }),
   // URLs reaching this seam are already parseRepoUrl-validated (github.com only);
   // repo content is untrusted data, never executed — extraction is static analysis only.
   ingestRepo: (parsed, opts) => ingestRepo(parsed, { fetcher: (url, init) => egressFetch(url, init), extractSpringBoot, extractFastApi }, opts),
@@ -71,8 +72,25 @@ export const serverDeps: {
   assembleRepoModel: (fragment, meta, opts) =>
     fakeMode() ? assembleRepoModel(fragment, meta, opts)
       : deployMode() === 'local' ? assembleRepoModelLocal(fragment, meta, { fetchImpl: egressFetch, signal: opts?.signal })
-        : assembleRepoModel(fragment, meta, { ...opts, client: evaluationClient() }),
+        : assembleRepoModel(fragment, meta, { signal: opts?.signal, client: hostedClient(opts?.spender) }),
 };
+
+/** Local evaluation ledgers take precedence; otherwise hosted spending limits apply where configured. */
+const hostedClient = (spender?: Spender) => evaluationClient() ?? spendingClient(spender);
+
+/** The network a client address belongs to: IPv4 per address, IPv6 per /64, the usual size of one subscriber's allocation. */
+export function networkOf(address: string | null): string | null {
+  if (!address || isIP(address) !== 6) return address;
+  const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i.exec(address)?.[1];
+  if (mapped && isIP(mapped) === 4) return mapped;
+  const [head = '', tail = ''] = address.toLowerCase().split('::');
+  const left = head ? head.split(':') : [], right = tail ? tail.split(':') : [];
+  const groups = address.includes('::') ? [...left, ...Array(8 - left.length - right.length).fill('0'), ...right] : left;
+  return `${groups.slice(0, 4).map(group => group.replace(/^0+(?=.)/, '')).join(':')}::/64`;
+}
+
+/** The visitor and network a paid request is charged to. */
+export const spenderOf = (headers: Headers, sessionId: string): Spender => ({ visitor: sessionId, network: networkOf(clientIp(headers)) });
 
 export const PROMPT_TOKEN_LIMIT = 25_000;
 /** Cheap server-side estimate for the UI chip; the authoritative gate is the
@@ -92,11 +110,14 @@ export const sessionCookie = (sessionId: string) =>
 
 export const tierOf = (_sessionId: string): Tier => 'anonymous'; // No sign-in tier: private repositories are handled by local mode
 
-/** The address appended by the nearest proxy (the last X-Forwarded-For entry), or null when it is unknown.
- *  Best-effort: entries before it are client-controlled, so they never decide a bucket. */
+/** The client address, or null when it is unknown. On Vercel, x-vercel-forwarded-for is set by
+ *  the platform and cannot be spoofed. Elsewhere, the address appended by the nearest proxy (the
+ *  last X-Forwarded-For entry); entries before it are client-controlled and never decide a bucket. */
 export function clientIp(headers: Headers): string | null {
-  const last = headers.get('x-forwarded-for')?.split(',').at(-1)?.trim();
-  return last && isIP(last) ? last : null;
+  const address = process.env.VERCEL === '1'
+    ? headers.get('x-vercel-forwarded-for')?.split(',')[0]?.trim()
+    : headers.get('x-forwarded-for')?.split(',').at(-1)?.trim();
+  return address && isIP(address) ? address : null;
 }
 
 const resetIn = (resetAt: number): string => {

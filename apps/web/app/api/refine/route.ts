@@ -3,7 +3,7 @@ import { applyEditOps, sameModelContent, type ViewType } from '@archwoven/model'
 import {
   serverDeps, readOrCreateSession, sessionCookie, tierOf,
   quotaMessage, clientIp,
-  llmNotConfigured, LLM_NOT_CONFIGURED_COPY,
+  llmNotConfigured, LLM_NOT_CONFIGURED_COPY, spenderOf
 } from '../../lib/server';
 import { withSlot } from '../../lib/llm-limiter';
 import { secretGate } from '../../../lib/secret-gate';
@@ -54,7 +54,7 @@ export async function POST(req: Request) {
   }
 
   const view: ViewType = VALID_VIEWS.includes(body.view as ViewType) ? (body.view as ViewType) : 'architecture';
-  const out = await withSlot(`refine:${modelId}:${baseRevision}`, () => serverDeps.generateRefinement(instruction, latest, view, { signal: req.signal }));
+  const out = await withSlot(`refine:${modelId}:${baseRevision}`, () => serverDeps.generateRefinement(instruction, latest, view, { signal: req.signal, spender: spenderOf(req.headers, sessionId) }));
   if (!out.ok || req.signal.aborted) {
     refundCredits(serverDeps.store, sessionId, day, 0.25);
     recordUsage(serverDeps.store, { sessionId, tier, action: 'refine', view, modelId, usage: out.usage, retries: out.usage.repairs, outcome: 'failed' });

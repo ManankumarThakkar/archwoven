@@ -21,6 +21,11 @@ describe('evaluation holds', () => {
   ] as const)('reserves the full reviewed context and %s output ceiling (%i tokens)', (model, maxTokens, nanos) => {
     expect(evaluationHoldNanos(model, maxTokens)).toBe(nanos);
   });
+  it('reserves a counted context at the matching Haiku tier', () => {
+    expect(evaluationHoldNanos('claude-opus-5-5', 8192, 4_480)).toBe(4_480 * 5_000 + 8192 * 20_000);
+    expect(evaluationHoldNanos('claude-haiku-5-5', 8192, 100_000)).toBe(100_000 * 125 + 8192 * 500);
+    expect(evaluationHoldNanos('claude-haiku-5-5', 8192, 100_001)).toBe((100_001 * 125 + 8192 * 500) * 5);
+  });
   it('names one output ceiling per hosted action, none above the 8k limit', () => {
     expect(Object.fromEntries(Object.entries(HOSTED_REQUESTS).map(([action, request]) => [action, request.maxTokens])))
       .toEqual({ generate: 8192, repo: 8192, repoSourceMap: 2048, refine: 4000, expand: 4000 });

@@ -140,6 +140,27 @@ describe('client address for abuse limits', () => {
     const { clientIp } = await import('./server');
     expect(clientIp(new Headers(header === undefined ? {} : { 'x-forwarded-for': header }))).toBeNull();
   });
+
+  it('groups IPv6 clients by /64, so rotating addresses within one network does not escape its cap', async () => {
+    const { networkOf } = await import('./server');
+    expect(networkOf('2001:db8:1:2:aaaa::1')).toBe(networkOf('2001:0db8:0001:0002:bbbb:cccc:dddd:9'));
+    expect(networkOf('2001:db8:1:2:aaaa::1')).toBe('2001:db8:1:2::/64');
+    expect(networkOf('2001:db8:1:3::1')).not.toBe(networkOf('2001:db8:1:2::1'));
+    expect(networkOf('203.0.113.7')).toBe('203.0.113.7');
+    expect(networkOf(null)).toBeNull();
+    // IPv4 clients seen through an IPv6 socket keep their own address rather than sharing ::/64.
+    expect(networkOf('::ffff:203.0.113.7')).toBe('203.0.113.7');
+    expect(networkOf('::ffff:198.51.100.1')).not.toBe(networkOf('::ffff:203.0.113.7'));
+  });
+
+  it('on Vercel, trusts only the platform-set header', async () => {
+    vi.stubEnv('VERCEL', '1');
+    try {
+      const { clientIp } = await import('./server');
+      expect(clientIp(new Headers({ 'x-vercel-forwarded-for': '203.0.113.7', 'x-forwarded-for': '198.51.100.1' }))).toBe('203.0.113.7');
+      expect(clientIp(new Headers({ 'x-forwarded-for': '198.51.100.1' }))).toBeNull();
+    } finally { vi.unstubAllEnvs(); }
+  });
 });
 
 describe('quota messages', () => {

@@ -38,6 +38,12 @@ beforeEach(() => {
 });
 
 describe('POST /api/refine', () => {
+  it('charges the provider attempt to the requesting visitor and network', async () => {
+    let spender: unknown;
+    serverDeps.generateRefinement = async (_instruction, _model, _view, opts) => { spender = opts?.spender; return { ok: true as const, ops: [addCacheOp], usage }; };
+    await POST(new Request('http://localhost/api/refine', { method: 'POST', headers: { 'content-type': 'application/json', cookie: 'aw_sid=test-sess', 'x-forwarded-for': '203.0.113.7' }, body: JSON.stringify({ modelId: 'm1', baseRevision: validFullModel.revision, instruction: 'add a cache' }) }));
+    expect(spender).toEqual({ visitor: 'test-sess', network: '203.0.113.7' });
+  });
   it('rejects a late refinement when a direct edit has advanced the revision', async () => {
     serverDeps.generateRefinement = async () => {
       const changed = structuredClone(validFullModel); changed.revision=2; changed.parentId=1; changed.nodes[0]!.label='Directly renamed';

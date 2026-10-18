@@ -33,13 +33,14 @@ export type HostedAction = keyof typeof HOSTED_REQUESTS;
 
 /** Largest context an evaluation attempt may report. Holds assume all of it is billed. */
 export const EVALUATION_CONTEXT_CEILING = 1_000_000;
-/** Worst-case cost of one hosted attempt in nano-USD, as the evaluation ledger
- * reserves it: the full context at the highest input rate plus the output
- * ceiling, at Haiku's higher long-context tier. */
-export function evaluationHoldNanos(model: HostedModelId, maxTokens: number): number {
+/** Worst-case cost of one hosted attempt in nano-USD: `contextTokens` at the
+ * highest input rate plus the output ceiling, at Haiku's long-context tier when
+ * the context can exceed 100k tokens. The evaluation ledger reserves the full
+ * reviewed context; hosted spending limits reserve the counted context. */
+export function evaluationHoldNanos(model: HostedModelId, maxTokens: number, contextTokens = EVALUATION_CONTEXT_CEILING): number {
   const { prices } = HOSTED_MODELS[model];
-  const multiplier = model === 'claude-haiku-5-5' ? 5 : 1;
-  return EVALUATION_CONTEXT_CEILING * (Math.max(prices.input, prices.cacheWrite, prices.cacheRead) * 1000) * multiplier
+  const multiplier = model === 'claude-haiku-5-5' && contextTokens > 100_000 ? 5 : 1;
+  return contextTokens * (Math.max(prices.input, prices.cacheWrite, prices.cacheRead) * 1000) * multiplier
     + maxTokens * (prices.output * 1000) * multiplier;
 }
 export type HostedCostBasis = (typeof HOSTED_MODELS)[HostedModelId]['costBasis'];

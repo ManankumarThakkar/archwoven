@@ -11,7 +11,8 @@
     "hosting:preflight": "node scripts/hosting-preflight.mjs",
     "eval:budget": "node benchmarks/provider-eval/budget.mjs",
     "bench:selftest": "pnpm --filter @archwoven/model build && node benchmarks/ordinary-model-floor/harness.selftest.mjs && node benchmarks/provider-eval/score.selftest.mjs",
-    "build:packages": "pnpm -r --filter \"./packages/**\" build"
+    "build:packages": "pnpm -r --filter \"./packages/**\" build",
+    "spend:ledger": "node scripts/spending-ledger.mjs"
   },
   "devDependencies": {
     "happy-dom": "^21.0.1",

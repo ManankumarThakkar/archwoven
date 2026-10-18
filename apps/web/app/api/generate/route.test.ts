@@ -272,6 +272,13 @@ describe('clarification lifecycle', () => {
     const leak = await GET(new Request('http://localhost/api/jobs/'+id, { headers: { cookie: 'aw_sid=other' } }), { params: Promise.resolve({ id }) });
     expect(leak.status).toBe(404);
   });
+  it('charges the provider attempts to the requesting visitor', async () => {
+    let spender: unknown;
+    serverDeps.generateModel = async (_prompt, _view, opts) => { spender = opts?.spender; return { ok: true as const, model: validFullModel, usage }; };
+    const res = await POST(req({ prompt: 'A shop where customers order through an API backed by PostgreSQL.', view: 'architecture' }));
+    expect((await waitJob((await res.json()).jobId)).status).toBe('succeeded');
+    expect(spender).toMatchObject({ visitor: 'test-sess' });
+  });
   it('continues using the stored prompt/view, keeps unanswered questions and marks supplied answers clarified', async () => {
     const id = await questionJob();
     let received = ''; let allowed: boolean | undefined; let receivedView: string | undefined;

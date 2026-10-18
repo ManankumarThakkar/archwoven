@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { EVALUATION_CONTEXT_CEILING, HOSTED_MODELS, evaluationHoldNanos, resolveHostedModelId } from '@archwoven/model';
+import { EVALUATION_CONTEXT_CEILING, HOSTED_MODELS, evaluationHoldNanos, resolveHostedModelId, type HostedModelId } from '@archwoven/model';
 import { openEvaluationBudget, type EvaluationBudget } from '@archwoven/jobs';
 import { makeAnthropic, resolveApiKey, MAX_TOKENS, STRUCTURED_OUTPUTS_BETA, ProviderAccountingError, ProviderRequestNotSentError, type RawUsage, type StructuredClient } from '@archwoven/llm';
 
@@ -32,7 +32,11 @@ function text(value: unknown) {
 export const promptVersion = (parts: Record<string, unknown>) =>
   `p-${createHash('sha256').update(JSON.stringify(parts)).digest('hex').slice(0, 12)}`;
 
-export function evaluationReservation(raw: unknown) {
+/** Request options are pinned so reviewed rates apply: a workspace default could otherwise select US-only inference or another tier. */
+export const PINNED_OPTIONS = { service_tier: 'standard_only', inference_geo: 'global', speed: 'standard' } as const;
+
+/** The model and output ceiling of a request that uses only reviewed options; anything else is refused before sending. */
+export function reviewedRequest(raw: unknown) {
   const request = object(raw); keys(request, ['model', 'max_tokens', 'system', 'messages', 'betas', 'output_config']);
   if (typeof request.model !== 'string' || !Object.hasOwn(HOSTED_MODELS, request.model)) throw refusal();
   const model = resolveHostedModelId(request.model);
@@ -52,21 +56,32 @@ export function evaluationReservation(raw: unknown) {
     if (format.type !== 'json_schema') throw refusal();
     object(format.schema);
   }
-  const maxTokens = request.max_tokens as number;
-  return { model, maxTokens, nanos: evaluationHoldNanos(model, maxTokens), basis: HOSTED_MODELS[model].costBasis };
+  return { model, maxTokens: request.max_tokens as number, basis: HOSTED_MODELS[model].costBasis };
 }
 
-function charge(quote: ReturnType<typeof evaluationReservation>, usage: RawUsage): number | null | 'out-of-contract' {
+export function evaluationReservation(raw: unknown) {
+  const quote = reviewedRequest(raw);
+  return { ...quote, nanos: evaluationHoldNanos(quote.model, quote.maxTokens) };
+}
+
+/** Reported usage priced at reviewed rates in nano-USD, or null when any counter is missing or malformed. */
+export function usageCost(model: HostedModelId, usage: RawUsage): { nanos: number; contextTokens: number; outputTokens: number } | null {
   const values = [usage?.input_tokens, usage?.output_tokens,
     usage?.cache_creation_input_tokens === undefined ? 0 : usage.cache_creation_input_tokens,
     usage?.cache_read_input_tokens === undefined ? 0 : usage.cache_read_input_tokens];
   if (!values.every(value => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0)) return null;
   const [input, output, write, read] = values as number[];
-  const total = input! + write! + read!;
-  if (total > CONTEXT_CEILING || output! > quote.maxTokens) return 'out-of-contract';
-  const rates = HOSTED_MODELS[quote.model].prices;
-  const multiplier = quote.model === 'claude-haiku-5-5' && total > 100_000 ? 5 : 1;
-  return (input! * (rates.input * 1000) + output! * (rates.output * 1000) + write! * (rates.cacheWrite * 1000) + read! * (rates.cacheRead * 1000)) * multiplier;
+  const contextTokens = input! + write! + read!;
+  const rates = HOSTED_MODELS[model].prices;
+  const multiplier = model === 'claude-haiku-5-5' && contextTokens > 100_000 ? 5 : 1;
+  return { nanos: (input! * (rates.input * 1000) + output! * (rates.output * 1000) + write! * (rates.cacheWrite * 1000) + read! * (rates.cacheRead * 1000)) * multiplier, contextTokens, outputTokens: output! };
+}
+
+function charge(quote: ReturnType<typeof evaluationReservation>, usage: RawUsage): number | null | 'out-of-contract' {
+  const cost = usageCost(quote.model, usage);
+  if (!cost) return null;
+  if (cost.contextTokens > CONTEXT_CEILING || cost.outputTokens > quote.maxTokens) return 'out-of-contract';
+  return cost.nanos;
 }
 
 /** All paid attempts (including repairs/retries) cross this boundary. Unknown
@@ -94,7 +109,7 @@ export function withEvaluationBudget(client: StructuredClient, budget: Evaluatio
       try {
         // Pin charge-affecting defaults too: a workspace can default to US-only
         // inference. Explicit global/standard options keep the reviewed rates.
-        response = await client.beta.messages.create({ ...object(params), service_tier: 'standard_only', inference_geo: 'global', speed: 'standard' }, options);
+        response = await client.beta.messages.create({ ...object(params), ...PINNED_OPTIONS }, options);
       }
       catch (error) {
         try { budget.settle(ticket, null); }

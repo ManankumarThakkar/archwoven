@@ -141,6 +141,27 @@ node scripts/hosting-preflight.mjs --url https://your-preview.vercel.app
 
 If Deployment Protection is enabled, the runner also accepts `VERCEL_AUTOMATION_BYPASS_SECRET` from the shell. It sends secrets only in headers and refuses redirects. A passing preview probe confirms dependency execution only; paid generation stays unavailable in this mode.
 
+### Hosted spending limits
+
+Hosted AI requests are charged against a spending ledger in Redis (Upstash REST). Before every paid attempt, including repairs and retries, the server measures the request with the provider's free token count and reserves its worst case: the counted context plus 10% and 512 tokens at the highest input rate, plus the maximum output. One atomic script admits the attempt only if `settled + held + this hold` stays within every cap:
+
+- the annual window and the UTC calendar month;
+- the visitor's UTC day, keyed by the server-issued session cookie;
+- the network's UTC day, keyed by `x-vercel-forwarded-for` on Vercel (IPv6 per /64). On Vercel a request without that address is refused. Elsewhere it is the address the nearest proxy appended to `X-Forwarded-For`, and requests with no verifiable address have no network cap.
+
+Reported usage settles the hold; missing usage, provider failures and crashes keep the whole hold. A charge above its hold pauses all paid requests for inspection. Attempt, month and annual records never expire; only per-day visitor and network totals expire after 35 days. Identities are stored only as keyed hashes. If Redis cannot be reached, paid requests are refused with an explanation, while viewing, editing and downloading keep working.
+
+Configure `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` and `ARCHWOVEN_REDIS_PREFIX` (for example `archwoven:`, or `archwoven-preview:` for previews) as server-side variables, then create the ledger once from a private env file:
+
+```bash
+node --env-file=/path/to/private.env scripts/spending-ledger.mjs init --start 2026-11-01 --annual 84 --month 7 --visitor-day <usd> --network-day <usd>
+node --env-file=/path/to/private.env scripts/spending-ledger.mjs status
+node --env-file=/path/to/private.env scripts/spending-ledger.mjs pause "reason"   # stops paid requests on every instance; resume undoes it
+node --env-file=/path/to/private.env scripts/spending-ledger.mjs unknown          # attempts whose usage was never reported
+```
+
+`init` never replaces an existing ledger, and `renew --start <date>` starts the next annual window only after the current one has ended. Unknown usage keeps its whole hold until the owner confirms the actual charge in the provider's usage console and runs `resolve <attempt-id> <usd> --evidence "<what the console showed>"` in an interactive terminal; the amount can never exceed the hold, and the evidence is kept on the attempt. A preview prefix has its own caps, so preview and production caps together must stay within the $84 annual allowance. On Vercel, a missing or invalid configuration refuses paid requests. A development server without these variables keeps its previous behaviour, and local mode is unchanged. `apps/web/e2e/spending-limits.mjs` checks the limit, pause and outage messages in a real browser against a disposable Redis, without inference.
+
 ## Private mode
 
 `ARCHWOVEN_MODE=local` turns quotas off, routes every inference call to a local Ollama, marks every saved model `private · local-only`, and puts every outbound request behind an allowlist. Nothing leaves the machine.

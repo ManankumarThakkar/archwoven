@@ -5,8 +5,7 @@ import { HOSTED_REQUESTS, validateModel, validFullModelExtended, type Evidence }
 import {
   MODEL, configuredHostedModel, MAX_REPAIRS, CONTEXT_TOKEN_LIMIT, NATIVE_MODEL_JSON_CONTRACT,
   countFailureMessage, hostedClient, fakeMode, decodeWireModel, unfenced, usageFrom, providerRequestStopped,
-  type StructuredClient, type Effort, type GenerateOutcome,
-} from './client';
+  type StructuredClient, type Effort, type GenerateOutcome, attemptError } from './client';
 
 /**
  * Repo→SystemModel assembly. The fragment carries text scraped from
@@ -139,7 +138,7 @@ export async function assembleRepoModel(
         messages,
       }, { signal: opts.signal });
     } catch (e) {
-      lastErrors = [`request failed: ${e instanceof Error ? e.message : String(e)}`];
+      lastErrors = [attemptError(e)];
       if (providerRequestStopped(e, billed) || opts.signal?.aborted) break;
       continue;
     }

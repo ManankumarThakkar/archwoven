@@ -3,7 +3,7 @@ import { expandBlocker } from '@archwoven/model';
 import {
   serverDeps, readOrCreateSession, sessionCookie, tierOf,
   quotaMessage, clientIp,
-  llmNotConfigured, LLM_NOT_CONFIGURED_COPY,
+  llmNotConfigured, LLM_NOT_CONFIGURED_COPY, spenderOf
 } from '../../../../lib/server';
 import { withSlot } from '../../../../lib/llm-limiter';
 import { readDirectEdit } from '../../../../../lib/direct-edit';
@@ -50,7 +50,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     return Response.json({ reason: quota.reason, message, resetAt: quota.resetAt }, { status: 429, headers });
   }
 
-  const out = await withSlot(`expand:${id}:${baseRevision}`, () => serverDeps.expandComponent(latest, target, hint, { signal: req.signal }));
+  const out = await withSlot(`expand:${id}:${baseRevision}`, () => serverDeps.expandComponent(latest, target, hint, { signal: req.signal, spender: spenderOf(req.headers, sessionId) }));
   const fail = (status: number, payload: Record<string, unknown>) => {
     refundCredits(serverDeps.store, sessionId, day, 0.25);
     recordUsage(serverDeps.store, { sessionId, tier, action: 'expand', view: 'component-detail', modelId: id, usage: out.usage, retries: out.usage.repairs, outcome: 'failed' });
