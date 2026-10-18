@@ -97,6 +97,10 @@ Without a configured provider, hosted mode shows setup guidance and refuses to g
 
 The workspace's **Last task** summary shows reported tokens, repairs and an estimated hosted cost. Ollama has no API charge.
 
+`ARCHWOVEN_HOSTED_MODEL` selects the hosted model on the server: `claude-opus-5-5` (default), `claude-sonnet-5-5`, or `claude-haiku-5-5`. Restart after changing it. Requests and repairs keep the model selected when their task began; visitors cannot select a model through the API. Supporting a model does not establish its diagram quality; the measured results above remain Opus results until a comparison is completed.
+
+Hosted estimates use the model's [standard Anthropic API rates](https://platform.claude.com/docs/en/about-claude/pricing), including 5-minute cache writes. Haiku's long-context tier is calculated per attempt, including cached input. Unknown prices or ambiguous legacy totals show “Cost unavailable”; interrupted tasks disclose incomplete usage. These estimates are not the planned reservation-based spending cap.
+
 Production build check:
 
 ```bash
@@ -184,9 +188,11 @@ node benchmarks/repair-rounds/harness.selftest.mjs
 - **`benchmarks/ordinary-model-floor`** checks what an ordinary model must get right. A case passes only when three gates pass: required nodes and relationships (`check`), schema and graph validity (`verify`), and a named person's visual review (`record-visual`). `report` exits 0 for pass, 1 for a failure and 2 for incomplete.
 - **`benchmarks/repair-rounds`** mutates valid models in eight ways and measures whether validation names the fault and whether a rules-only repairer can fix it. Its `verify` writes a fingerprinted receipt pinned to a clean commit.
 - **`benchmarks/provider-eval`** drives a running server through 20 descriptions, 6 refinements and 4 pinned imports. It records validity, repairs, latency, cost and cache savings, and scores imports against ground truth: `node benchmarks/provider-eval/run.mjs <url> <server.db> <outDir> --budget <usd>`. It makes real, billed provider calls.
+  The legacy runner accepts only real hosted Opus output. Its budget stops new tasks after recorded spending reaches the threshold; it does not reserve a worst-case amount before each attempt and can exceed that threshold. Do not use it as a hard spending cap or for cross-model comparisons.
 - **`apps/web/e2e/ground-truth.mjs`** scores extraction against the hand-checked ground truth in `probes/ground-truth/`.
 - **`apps/web/e2e/browser-acceptance.mjs`** runs downloads, axe-core and keyboard checks in Chromium, WebKit and Firefox. Playwright is not a project dependency; point the script at a separate install.
 - **`apps/web/e2e/responsive-workspace.mjs`** checks canvas space, inspector placement, overflow and selection across 390–1440 px using a recorded model, without provider calls. Run `node apps/web/e2e/responsive-workspace.mjs <url> <output-dir> <browser-tools-dir> [chromium,webkit]`; the tools directory needs Playwright and axe-core as above.
+- **`apps/web/e2e/task-usage.mjs`** exercises metering → SQLite → quota API → browser → reload for model prices, cache tiers, incomplete reports and unknown prices. Start a disposable localhost server with `ARCHWOVEN_FAKE=0` and `ARCHWOVEN_DB` in a temporary directory, then run `node apps/web/e2e/task-usage.mjs <url> <temporary-server.db> <output-dir> <browser-tools-dir> [chromium,webkit]`. It seeds content-free usage fixtures through the real metering code and removes its own records afterward. It makes no inference calls and does not measure model quality.
 
 The benchmark case and receipt format is adapted from the MIT-licensed archify benchmark; no archify code is included.
 
