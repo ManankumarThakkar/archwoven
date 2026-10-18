@@ -26,9 +26,9 @@ Last reviewed: 2026-10-17, after PR #46 (main `ddd4b8a`) and the import repair d
 | Schema v1 stores manual positions in one global node-id map | Dragging a node in one view moves it in other graph views | Tasks 6 and 8 | Disclosed in the orientation control; a per-view layout needs schema v2 |
 | Removing a link between two source-backed nodes reports both the edge and the path refusal | Accurate but verbose message | Task 10b | Copy refinement only |
 | Branch names containing `/` are ambiguous with subdirectories in GitHub URLs | Such branches must be given as a commit SHA | M3 | Documented in the URL parser |
-| Hosted IP-based limits depend on one proxy appending `X-Forwarded-For` | Without it, scripted cookie-less requests are bounded only by burst-per-session and the daily stop-loss | Task 18 | Deployment requirement; document with the hosted deployment guide |
+| Hosted IP-based limits depend on one proxy appending `X-Forwarded-For` | Without it, scripted cookie-less requests are bounded only by burst-per-session and the daily stop-loss | Task 18 | On Vercel, use the platform-supplied client address; verified in [LAUNCH-PLAN.md](LAUNCH-PLAN.md) Phase 4 |
 | Abuse escalation ladder (challenges, temporary and permanent blocks) | Determined abusers can still consume up to the stop-loss each day | Release decisions; SPEC §15 | Deferred until metering shows the revisit triggers in SPEC §15 |
-| Jobs are coordinated in a single process | Horizontal scaling would need a distributed registry | Cancellation follow-up | Deployment limitation |
+| Jobs are coordinated in a single process | Horizontal scaling would need a distributed registry | Cancellation follow-up | Hosted mode moves to a shared Redis store with `after()` jobs in [LAUNCH-PLAN.md](LAUNCH-PLAN.md) Phase 3 |
 | The stop-loss cannot include usage a provider never reported, or usage lost when a process dies | Spend estimate can undercount | Task 14 | Provider invoice is authoritative |
 | Secret detection is best-effort; novel or split credential formats can evade it | A rare secret could reach the hosted provider | Task 17; threat model T4 | Residual risk, accepted |
 | Native local model output varies (occasional omitted semantics, extra repairs) | Some local runs need a retry | Tasks 4, 7, 10b | Track in task 19 measurements |

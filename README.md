@@ -6,6 +6,7 @@ AI-assisted architecture workspace: plain-English requirements or public GitHub 
 
 Release scope and acceptance results: [release tracker](docs/RELEASE-PROGRESS.md),
 [verification record](docs/RELEASE-ACCEPTANCE.md), and [remaining gaps](docs/OPEN-GAPS.md).
+Public hosting plan: [launch plan](docs/LAUNCH-PLAN.md).
 
 ## Status
 
