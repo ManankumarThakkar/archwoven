@@ -174,3 +174,30 @@ describe('quota messages', () => {
     for (const reason of ['credits-exhausted', 'network-credits-exhausted'] as const) expect(quotaMessage({ reason, resetAt })).not.toMatch(/sign in|github/i);
   });
 });
+
+describe('server-issued sessions', () => {
+  it('without a session secret, keeps existing cookies working unchanged', async () => {
+    vi.stubEnv('ARCHWOVEN_SESSION_SECRET', '');
+    try {
+      const { readOrCreateSession, sessionCookie } = await import('./server');
+      expect(readOrCreateSession(new Request('http://x', { headers: { cookie: 'aw_sid=legacy-session' } }))).toEqual({ sessionId: 'legacy-session', minted: false });
+      expect(sessionCookie('legacy-session')).toMatch(/^aw_sid=legacy-session;/);
+    } finally { vi.unstubAllEnvs(); }
+  });
+  it('with a session secret, accepts only sessions the server signed', async () => {
+    vi.stubEnv('ARCHWOVEN_SESSION_SECRET', 'test-secret-with-enough-length-0123456789');
+    try {
+      const { readOrCreateSession, sessionCookie } = await import('./server');
+      const minted = readOrCreateSession(new Request('http://x'));
+      expect(minted.minted).toBe(true);
+      const cookie = sessionCookie(minted.sessionId).split(';')[0]!;
+      expect(cookie).toMatch(/^aw_sid=[0-9a-f-]{36}\.[\w-]{22}$/);
+      expect(readOrCreateSession(new Request('http://x', { headers: { cookie } }))).toEqual({ sessionId: minted.sessionId, minted: false });
+      for (const forged of ['aw_sid=chosen-by-client', `aw_sid=${minted.sessionId}`, `${cookie.slice(0, -2)}xx`, `aw_sid=${crypto.randomUUID()}.${cookie.split('.')[1]}`]) {
+        const read = readOrCreateSession(new Request('http://x', { headers: { cookie: forged } }));
+        expect(read.minted).toBe(true);
+        expect(read.sessionId).not.toBe(minted.sessionId);
+      }
+    } finally { vi.unstubAllEnvs(); }
+  });
+});
