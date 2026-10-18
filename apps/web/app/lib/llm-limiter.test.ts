@@ -7,7 +7,7 @@ const deferred = () => {
   return { promise, resolve };
 };
 
-describe('llm concurrency cap (§15: N parallel model calls, excess queue)', () => {
+describe('llm concurrency cap (N parallel model calls, excess queue)', () => {
   it('runs at most N in parallel and queues the excess with a visible position', async () => {
     resetSlots(2);
     const a = deferred(); const b = deferred(); const c = deferred();

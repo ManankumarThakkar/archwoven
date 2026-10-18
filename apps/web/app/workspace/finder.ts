@@ -5,7 +5,7 @@ export interface FinderHit {
   label: string;
 }
 
-/** Node-finder matching (§2): case-insensitive substring over label and id,
+/** Node-finder matching: case-insensitive substring over label and id,
  *  returned in view schema order. Empty query lists the whole current view;
  *  ids in the view that don't resolve to a node are skipped, never guessed. */
 export function findNodes(model: SystemModel, viewNodes: string[], query: string): FinderHit[] {

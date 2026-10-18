@@ -42,12 +42,12 @@ export interface CallRec {
 
 /**
  * SQLite-backed durable state: append-only revisions, job records with idempotency,
- * call accounting (powers §11 eval + stop-loss) and the weighted-credit ledger (§15).
+ * call accounting (powers evaluation data and the stop-loss) and the weighted-credit ledger.
  */
 /** SQLite `datetime()` text form, so stored timestamps compare correctly with SQL defaults. */
 const sqlTime = (d: Date): string => d.toISOString().slice(0, 19).replace('T', ' ');
 
-/** Retention (SPEC §1): diagram content lives 30 days after its last change; content-free metering 90 days. */
+/** Retention: diagram content lives 30 days after its last change; content-free metering 90 days. */
 export const CONTENT_RETENTION_DAYS = 30;
 export const METERING_RETENTION_DAYS = 90;
 
@@ -112,7 +112,7 @@ export function openStore(path = 'data/archwoven.db', opts: { now?: () => Date }
   // dev-scratch DBs created before the gaps column: add it in place
   try { db.exec('ALTER TABLE jobs ADD COLUMN gaps TEXT'); } catch { /* column exists */ }
   try { db.exec('ALTER TABLE jobs ADD COLUMN clarification TEXT'); } catch { /* column exists */ }
-  // Additive: the network a session's daily credits were last reserved from (§15 secondary bucket).
+  // Additive: the network a session's daily credits were last reserved from (secondary bucket).
   try { db.exec('ALTER TABLE credits ADD COLUMN ip TEXT'); } catch { /* column exists */ }
 
   // Additive migration: keep historical costs and saved diagrams untouched.
@@ -158,7 +158,7 @@ export function openStore(path = 'data/archwoven.db', opts: { now?: () => Date }
         : db.prepare('SELECT json FROM revisions WHERE model_id = ? AND revision = ?').get(modelId, revision)) as { json: string } | undefined;
       if (!row) return null;
       const raw = JSON.parse(row.json) as SystemModel;
-      // read-boundary normalization: pre-M4 revisions lack the optional-with-default
+      // read-boundary normalization: revisions saved before semantic fields lack the optional-with-default
       // fields (boundaries/guidedViews) — fill schema defaults so consumers (Canvas)
       // never see undefined where the schema promises an array. Corrupt JSON passes
       // through as before; validation is enforced at the write/generate boundary.

@@ -3,7 +3,7 @@ import { creator as recommended } from '@secretlint/secretlint-rule-preset-recom
 import type { StructuredClient } from './client';
 
 /**
- * Secret detection before anything leaves for a hosted provider (SPEC §9, best-effort).
+ * Secret detection before anything leaves for a hosted provider (best-effort).
  * Precise provider rules (secretlint's recommended preset, pinned) decide what typed text
  * may be sent; repository content is additionally masked with a generic credential rule,
  * because a masked false positive costs nothing while a leaked value cannot be recalled.

@@ -23,7 +23,7 @@ describe('GET /api/models/:id', () => {
     expect(model.title).toBe(validFullModel.title);
   });
 
-  it('pre-M4 raw revision gets schema defaults at the boundary (C2: canvas reads boundaries/guidedViews unguarded)', async () => {
+  it('a revision saved before semantic fields existed gets schema defaults at the boundary (the canvas reads boundaries/guidedViews unguarded)', async () => {
     const preM4 = structuredClone(validFullModel) as Record<string, unknown>;
     delete preM4.boundaries; delete preM4.guidedViews; delete preM4.semanticChecks;
     serverDeps.store.saveRevision('m1', preM4 as never, 'test-sess');
@@ -40,8 +40,8 @@ describe('GET /api/models/:id', () => {
   });
 });
 
-describe('POST /api/models/:id/undo — pre-M4 shape (C2)', () => {
-  it('undo across a pre-M4 revision serves defaults, not undefined', async () => {
+describe('POST /api/models/:id/undo — revisions saved before semantic fields', () => {
+  it('undo across an older revision serves defaults, not undefined', async () => {
     const preM4 = structuredClone(validFullModel) as Record<string, unknown>;
     delete preM4.boundaries; delete preM4.guidedViews; delete preM4.semanticChecks;
     serverDeps.store.saveRevision('m1', preM4 as never, 'test-sess');

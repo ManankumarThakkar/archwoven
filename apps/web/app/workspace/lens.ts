@@ -1,6 +1,6 @@
 import type { NodeKind, SystemModel } from '@archwoven/model';
 
-/** Semantic lens (§2): at most two kinds active at once. */
+/** Semantic lens: at most two kinds active at once. */
 export const LENS_MAX = 2;
 
 const KINDS: readonly NodeKind[] = ['actor', 'service', 'gateway', 'datastore', 'queue', 'external', 'entity', 'component'];

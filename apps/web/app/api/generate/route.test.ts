@@ -14,7 +14,7 @@ const deferred = () => {
 
 const usage = { provider: 'anthropic' as const, transportRetries: 0, usageComplete: true, attempts: [], model: 'claude-opus-5-5', effort: 'medium' as const, inputTokens: 1000, cacheWriteTokens: 5000, cacheReadTokens: 10000, outputTokens: 1500, latencyMs: 500, repairs: 0 };
 
-// §15: quotas compile out in local mode (reserve → Infinity → JSON null); credit gates are hosted-only.
+// Quotas compile out in local mode (reserve → Infinity → JSON null); credit gates are hosted-only.
 const QUOTA = process.env.ARCHWOVEN_MODE !== 'local';
 const hostedOnly = QUOTA ? it : it.skip;
 
@@ -129,7 +129,7 @@ describe('POST /api/generate', () => {
     expect(serverDeps.store.creditsUsed('other-sess', new Date().toISOString().slice(0, 10))).toBe(QUOTA ? 1 : 0);
   });
 
-  it('excess parallel generates queue with a visible position (§15 concurrency cap)', async () => {
+  it('excess parallel generates queue with a visible position (concurrency cap)', async () => {
     const gate = deferred();
     serverDeps.generateModel = async () => {
       await gate.promise;
@@ -217,7 +217,7 @@ describe('POST /api/generate', () => {
     }
   });
 
-  it('failed provider call is still metered to call_log (§11 data, stop-loss input)', async () => {
+  it('failed provider call is still metered to call_log (evaluation data and stop-loss input)', async () => {
     serverDeps.generateModel = async () => ({ ok: false as const, errors: ['boom'], usage });
     expect(serverDeps.store.todayCost()).toBe(0);
     const res = await POST(req({ prompt: 'shop', view: 'architecture', idempotencyKey: 'meter' }));

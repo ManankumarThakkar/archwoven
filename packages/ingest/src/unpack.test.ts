@@ -26,7 +26,7 @@ afterAll(() => { for (const d of dirs) rmSync(d, { recursive: true, force: true 
 
 const CAPS = { maxFiles: 100, maxTotalBytes: 1024 * 1024, maxFileBytes: 64 * 1024 };
 
-describe('unpackTarball (§14 tarball safety)', () => {
+describe('unpackTarball (tarball safety)', () => {
   it('rejects path traversal without writing outside dest', async () => {
     const dest = mkDest();
     const buf = tar([tarEntry('repo-abc/../../evil.txt', 'pwned'), tarEntry('repo-abc/ok.txt', 'fine')]);
@@ -127,7 +127,7 @@ describe('unpackTarball (§14 tarball safety)', () => {
     await expect(unpackTarball(gz, dest, { ...CAPS, maxExpandedBytes: 64 * 1024 })).rejects.toThrow(/oversized/i);
   });
 
-  it('aborts inflate incrementally — never allocates the full expansion (I2)', async () => {
+  it('aborts inflate incrementally — never allocates the full expansion', async () => {
     const dest = mkDest();
     // 1 GB of zeros → ~1 MB gzip. Counting emitted bytes instead of timing keeps
     // this deterministic under load: the stream must pass the 32 MB cap (so the

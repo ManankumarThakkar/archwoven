@@ -1,4 +1,4 @@
-# Private-mode deployment (§8): the whole stack runs inside your boundary.
+# Private-mode deployment: the whole stack runs inside your boundary.
 # One manual step before first run:
 #   docker compose exec ollama ollama pull gpt-oss:20b   (~13 GB, local inference)
 #   Override with OLLAMA_MODEL on the web service (e.g. gpt-oss:120b on ≥64 GB machines).
@@ -7,7 +7,7 @@ services:
     image: archwoven-local
     build: .
     ports:
-      - "127.0.0.1:3000:3000" # loopback only (§9): local mode reads folders on this machine
+      - "127.0.0.1:3000:3000" # loopback only: local mode reads folders on this machine
     environment:
       ARCHWOVEN_MODE: local
       OLLAMA_URL: http://ollama:11434

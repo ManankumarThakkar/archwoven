@@ -109,7 +109,7 @@ describe('generateRefinement', () => {
     if (r.ok) expect(r.ops[0]!.baseRevision).toBe(1);
   });
 
-  it('accumulates billed usage across repair attempts (§15 metering)', async () => {
+  it('accumulates billed usage across repair attempts (metering)', async () => {
     const m = mkModel();
     const { client } = fakeClient(['not json', [addCacheOp]]);
     const r = await generateRefinement('x', m, 'architecture', { client });

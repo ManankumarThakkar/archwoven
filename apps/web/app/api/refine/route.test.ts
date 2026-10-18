@@ -6,7 +6,7 @@ import { POST } from './route';
 
 const usage = { provider: 'anthropic' as const, transportRetries: 0, usageComplete: true, attempts: [], model: 'claude-opus-5-5', effort: 'low' as const, inputTokens: 2000, cacheWriteTokens: 0, cacheReadTokens: 1800, outputTokens: 120, latencyMs: 400, repairs: 0 };
 
-// §15: quotas compile out in local mode (reserve → Infinity → JSON null); credit assertions are hosted-only.
+// Quotas compile out in local mode (reserve → Infinity → JSON null); credit assertions are hosted-only.
 const QUOTA = process.env.ARCHWOVEN_MODE !== 'local';
 
 const addCacheOp: EditOp = {
@@ -99,7 +99,7 @@ describe('POST /api/refine', () => {
     expect(res.status).toBe(502);
     expect(serverDeps.store.creditsUsed('test-sess', new Date().toISOString().slice(0, 10))).toBe(0);
     expect(serverDeps.store.getRevision('m1')?.revision).toBe(validFullModel.revision);
-    // the failed attempt was still metered (§11)
+    // the failed attempt was still metered
     expect(serverDeps.store.todayCost()).toBeGreaterThan(0);
   });
 

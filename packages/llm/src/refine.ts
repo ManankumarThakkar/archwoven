@@ -65,7 +65,7 @@ export async function generateRefinement(
   ];
   const system = [{ type: 'text', text: REFINEMENT_SYSTEM, cache_control: { type: 'ephemeral' } }];
 
-  // §15 per-request gate: exact token count before send; fail closed.
+  // Per-request gate: exact token count before send; fail closed.
   try {
     const counted = await client.messages.countTokens({ model: MODEL, system, messages }, { signal: opts.signal });
     if (counted.input_tokens > CONTEXT_TOKEN_LIMIT) {

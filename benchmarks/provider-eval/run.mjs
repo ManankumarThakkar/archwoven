@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Representative real-provider evaluation (task 19). Drives a running Archwoven
+ * Representative real-provider evaluation. Drives a running Archwoven
  * server through the public API, one case at a time, and reads per-call usage
  * from that server's own metering database.
  *

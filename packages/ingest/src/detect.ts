@@ -1,5 +1,5 @@
 /**
- * Framework detection (§5): Spring Boot vs FastAPI by build-file + source
+ * Framework detection: Spring Boot vs FastAPI by build-file + source
  * markers, reading only candidate files (bounded). Detection chooses specialized
  * extraction where possible; mixed or other languages use bounded general analysis.
  */

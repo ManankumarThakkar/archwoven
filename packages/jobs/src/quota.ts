@@ -2,17 +2,17 @@ import { randomUUID } from 'node:crypto';
 import type { TaskReport, TaskUsage, TokenUsage, ViewType } from '@archwoven/model';
 import type { Store, Tier } from './store';
 
-/** §15 LOCKED numbers — tunable via config review post-launch, not per-call. */
+/** Fixed limits: change them through a reviewed config change, not per call. */
 export const TIERS: Record<Tier, { pool: number }> = {
   anonymous: { pool: 6 },
   github: { pool: 30 },
 };
 export const WEIGHTS = { generate: 1, repo: 2, refine: 0.25, view: 0 } as const;
-/** USD per MTok (§10): cached reads at $0.20 — pricing wrong here trips the stop-loss 20× early. */
+/** USD per MTok: cached reads at $0.20 — pricing wrong here trips the stop-loss 20× early. */
 export const PRICES = { input: 4, output: 20, cacheWrite: 5, cacheRead: 0.2 };
 export const STOP_LOSS_USD = 15;
 export const BURST = { session: 5, ip: 20 };
-/** §15 secondary bucket: daily credits shared by every anonymous session on one network address
+/** Secondary bucket: daily credits shared by every anonymous session on one network address
  *  (about four people behind an office or school NAT). Tunable with the post-launch quota review. */
 export const IP_POOL = 24;
 
@@ -104,8 +104,8 @@ export function refundCredits(store: Store, sessionId: string, day: string, weig
 }
 
 /**
- * Meter the call (§15: every model call logs to SQLite — success, repaired or
- * failed; this is the stop-loss input and the §11 eval data). Credits were
+ * Meter the call (every model call logs to SQLite — success, repaired or
+ * failed; this is the stop-loss input and the evaluation data). Credits were
  * already reserved at the gate; this never touches the credit ledger.
  */
 export function recordUsage(

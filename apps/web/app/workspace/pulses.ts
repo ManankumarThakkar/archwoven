@@ -1,6 +1,6 @@
 import type { Edge, EdgeType } from '@archwoven/model';
 
-/** Flow-token pulse priority (§2 brief): security > event > data > state > call.
+/** Flow-token pulse priority: security > event > data > state > call.
  *  Schema v1 has no security edge type — that tier stays reserved. Mapping:
  *  event→async, data→data, state→control, call→sync; relation is structural, last. */
 export const PULSE_RANK: Record<EdgeType, number> = { async: 1, data: 2, control: 3, sync: 4, relation: 5 };

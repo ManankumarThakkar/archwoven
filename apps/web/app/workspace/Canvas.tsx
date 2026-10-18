@@ -184,7 +184,7 @@ function GraphCanvas({ model, modelId, viewId, permalinkVersion = 0, onSelect, o
   const reach = useMemo(() => (focusId ? reachability(model, focusId, viewId) : null), [model, focusId, viewId]);
   const kindOf = useMemo(() => new Map(model.nodes.map((n) => [n.id, n.kind])), [model]);
   const viewEdges = useMemo(() => (view?.edges ?? []).flatMap((id) => { const e = model.edges.find((m) => m.id === id); return e ? [e] : []; }), [model, view]);
-  // flow tokens only when the motion governor allows it (§6) — never bypass
+  // flow tokens only when the motion governor allows it — never bypass
   const pulseDelays = useMemo(() => (motion === 'motion' ? new Map(pulseOrder(viewEdges).map((id, i) => [id, -(i * 0.45)])) : new Map<string, number>()), [motion, viewEdges]);
   const viewKinds = useMemo(() => lensKindsInView(model, view?.nodes ?? []), [model, view]);
 

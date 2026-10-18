@@ -2,7 +2,7 @@
 /**
  * Quota ladder smoke — runs against a live `next start`. Zero model spend:
  * set ARCHWOVEN_FAKE=1 (llm client returns a canned valid model). Verifies the
- * §15 ladder over real HTTP + cookies + SQLite persistence:
+ * Quota ladder over real HTTP + cookies + SQLite persistence:
  *   - 6 anonymous generates succeed, the 7th is 429 with the reset copy.
  *   - stop-loss (ARCHWOVEN_STOP_LOSS_USD lowered) → paused copy.
  *   - burst (>5/min/session) → burst copy.
@@ -10,7 +10,7 @@
  * Usage (set the SERVER env so credits, not the 5/min burst, is the binding gate):
  *   ARCHWOVEN_FAKE=1 ARCHWOVEN_BURST_WINDOW_SEC=0.05 ARCHWOVEN_DB=/tmp/aw-smoke.db \
  *     node apps/web/e2e/quota-smoke.mjs http://localhost:3000
- * Stop-loss is a §15-locked constant (not env-tunable), so it is covered by the
+ * Stop-loss is a fixed constant (not env-tunable), so it is covered by the
  * quota unit test rather than this HTTP ladder.
  */
 const BASE = process.argv[2] ?? 'http://localhost:3000';

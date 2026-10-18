@@ -12,7 +12,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   return Response.json({ model });
 }
 
-// SPEC §1: deletion is honored on request — every revision and job of the diagram, owner only.
+// Deletion is honored on request — every revision and job of the diagram, owner only.
 export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { sessionId } = readOrCreateSession(req);
   const { id } = await ctx.params;

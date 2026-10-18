@@ -23,7 +23,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       # Check 14 parity: the same relevant quality checks run in local (private) mode.
-      # Quota suites are hosted-only BY DESIGN (quotas compile out in local mode, §15),
+      # Quota suites are hosted-only BY DESIGN (quotas compile out in local mode),
       # so the parity scope is model/extract/ingest/llm + web lib/render.
       - run: ARCHWOVEN_MODE=local pnpm vitest run packages apps/web/lib apps/web/app/lib apps/web/probes
       - run: pnpm bench:selftest
@@ -34,7 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # The local-deployment image must build (§8); ollama is a separate service, not baked in.
+      # The local-deployment image must build; ollama is a separate service, not baked in.
       - name: Build from a development-shaped context
         run: |
           mkdir -p apps/web/node_modules apps/web/.next-context-canary packages/model/dist

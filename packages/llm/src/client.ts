@@ -16,10 +16,10 @@ import {
 
 export const MODEL = 'claude-opus-5-5';
 export const MAX_REPAIRS = 2;
-/** §15 LOCKED: max_tokens ≤ 8k. If live truncation recurs, the fix is effort-low
+/** Fixed: max_tokens ≤ 8k. If live truncation recurs, the fix is effort-low
  *  output or a spec config-review amendment — never silent drift in code. */
 export const MAX_TOKENS = 8192;
-/** §15 LOCKED: assembled context > 25k tokens is rejected before send. */
+/** Fixed: assembled context > 25k tokens is rejected before send. */
 export const CONTEXT_TOKEN_LIMIT = 25_000;
 
 /**
@@ -303,7 +303,7 @@ export async function generateModel(
   const messages: unknown[] = [{ role: 'user', content: `View: ${view}\n\n${prompt}` }];
   const system = [{ type: 'text', text: STABLE_SYSTEM + (opts.allowClarification ? CLARIFICATION_SYSTEM : ''), cache_control: { type: 'ephemeral' } }];
 
-  // §15 per-request gate: exact token count before send. Fail closed — an
+  // Per-request gate: exact token count before send. Fail closed — an
   // uncounted send is exactly the oversized context the gate exists to stop.
   try {
     const counted = await client.messages.countTokens({ model: MODEL, system, messages }, { signal: opts.signal });
@@ -317,7 +317,7 @@ export async function generateModel(
   let lastErrors: string[] = [];
   let repairs = 0;
   // Billed usage accumulates across every attempt — repairs cost real money and
-  // the stop-loss/§11 meter must see it, not just the last attempt.
+  // the stop-loss and evaluation meter must see it, not just the last attempt.
   const billed = newUsageLedger();
 
   for (let attempt = 0; attempt <= MAX_REPAIRS; attempt++) {

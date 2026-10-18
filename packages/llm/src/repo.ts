@@ -9,7 +9,7 @@ import {
 } from './client';
 
 /**
- * Repo→SystemModel assembly (§5, §14). The fragment carries text scraped from
+ * Repo→SystemModel assembly. The fragment carries text scraped from
  * arbitrary public repositories: it is UNTRUSTED DATA, fenced between
  * delimiters the system prompt defines, with delimiter occurrences escaped so
  * nothing inside can close the fence and issue instructions.
@@ -110,7 +110,7 @@ export async function assembleRepoModel(
   const generic = !!fragment.sourceContext;
   const system = [{ type: 'text', text: generic ? SOURCE_PRESENTATION_SYSTEM : REPO_SYSTEM, cache_control: { type: 'ephemeral' } }];
 
-  // §15 gate, fail closed — same contract as generateModel.
+  // Context gate, fail closed — same contract as generateModel.
   try {
     const counted = await client.messages.countTokens({ model: MODEL, system, messages }, { signal: opts.signal });
     if (counted.input_tokens > CONTEXT_TOKEN_LIMIT) {

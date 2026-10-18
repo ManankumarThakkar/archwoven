@@ -2,7 +2,7 @@ import { assertSafeRuntime, deployMode } from './app/lib/mode';
 
 /**
  * Next.js server boot hook — runs exactly once per process (dev and prod).
- * - fail fast on unsafe config (§15 guard)
+ * - fail fast on unsafe config
  * - orphan sweep: settle jobs whose process died mid-flight, refund credits.
  * - hosted retention: expire anonymous diagrams 30 days after their last change (local never expires).
  *   Must live here, not in openStore — dev re-evaluates openStore per route

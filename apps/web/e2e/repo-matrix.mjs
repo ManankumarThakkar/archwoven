@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * M3 extraction matrix — per-construct precision/recall against fixture ground
+ * Extraction matrix — per-construct precision/recall against fixture ground
  * truth, run OFFLINE (no network, no model spend), plus an optional fake-mode
  * HTTP pass against a live `next start` (ARCHWOVEN_FAKE=1) for the repo route.
  *
@@ -8,7 +8,7 @@
  *   node apps/web/e2e/repo-matrix.mjs                 # fixture matrix only
  *   node apps/web/e2e/repo-matrix.mjs http://localhost:3000   # + fake-mode HTTP
  *
- * Numbers are published verbatim into docs/M3-MATRIX.md — failures included.
+ * Prints results verbatim, failures included.
  */
 import { extractSpringBoot, extractFastApi } from '@archwoven/extract';
 import { readFileSync } from 'node:fs';
@@ -73,7 +73,7 @@ function score(name, fragment, expected) {
   return { tp, expected, miss };
 }
 
-console.log('# Archwoven M3 extraction matrix');
+console.log('# Archwoven extraction matrix');
 console.log(`run: ${new Date().toISOString()} · fixtures offline · no model spend`);
 
 for (const fx of FIXTURES) {

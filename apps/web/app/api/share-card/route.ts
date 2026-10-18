@@ -24,9 +24,9 @@ export const runtime = 'nodejs';
 let fontsReady: Promise<void> | null = null;
 
 /**
- * Quota-gated route/reach share card (§15: action 'view' — weight 0,
+ * Quota-gated route/reach share card (action 'view' — weight 0,
  * burst limiter still applies; pools untouched). Owner-checked; the PNG's
- * only text is titles + node labels — never evidence (§14 privacy).
+ * only text is titles + node labels — never evidence (privacy).
  */
 export async function POST(req: Request) {
   const { sessionId, minted } = readOrCreateSession(req);
@@ -53,9 +53,9 @@ export async function POST(req: Request) {
   if (!model || serverDeps.store.getRevisionOwner(modelId) !== sessionId)
     return Response.json({ error: 'model not found' }, { status: 404, headers });
 
-  // §15 burst, applied directly: reserve() skips burst for weight-0 actions,
+  // Burst limit, applied directly: reserve() skips burst for weight-0 actions,
   // and cards must stay burst-limited (locked numbers, untouched reserve).
-  // Card keys are SEPARATE from the model-call bucket (§15 burst guards
+  // Card keys are SEPARATE from the model-call bucket (burst guards
   // model-calling requests — a free card must never block a generate), and
   // local mode compiles quota out entirely.
   const burstWindowSec = Number(process.env.ARCHWOVEN_BURST_WINDOW_SEC ?? 60);

@@ -5,7 +5,7 @@ import { isInternal } from './groups';
 import { reconcileReferences } from './reconcile';
 
 /**
- * §7 controlled edits: every op is checked against baseRevision, the batch is
+ * Controlled edits: every op is checked against baseRevision, the batch is
  * atomic (all-or-nothing), and the result must pass validateModel. Layout is
  * only ever touched by `move` — semantic edits preserve every position.
  */

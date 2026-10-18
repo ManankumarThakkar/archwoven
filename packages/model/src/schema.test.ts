@@ -43,7 +43,7 @@ describe('SystemModelSchema', () => {
   });
 });
 
-describe('M4 semantic additions (optional, backward-compatible)', () => {
+describe('semantic additions (optional, backward-compatible)', () => {
   const withExtras = () => {
     const m = structuredClone(validFull);
     (m as Record<string, unknown>).semanticChecks = {
@@ -59,7 +59,7 @@ describe('M4 semantic additions (optional, backward-compatible)', () => {
     return m;
   };
 
-  it('pre-M4 fixture validates unchanged; new fields default cleanly', () => {
+  it('a fixture without semantic fields validates unchanged; new fields default cleanly', () => {
     const r = SystemModelSchema.safeParse(validFull);
     expect(r.success).toBe(true);
     if (r.success) {
@@ -69,7 +69,7 @@ describe('M4 semantic additions (optional, backward-compatible)', () => {
     }
   });
 
-  it('accepts all M4 fields together', () => {
+  it('accepts all semantic fields together', () => {
     expect(SystemModelSchema.safeParse(withExtras()).success).toBe(true);
   });
 

@@ -182,14 +182,14 @@ describe('generateModel (mocked SDK)', () => {
     expect(faithfulSchema.properties).not.toHaveProperty('layout');
   });
 
-  it('sends max_tokens at the §15-locked ceiling, never above', async () => {
+  it('sends max_tokens at the fixed ceiling, never above', async () => {
     const { client, calls } = fakeClient([validFull]);
     await generateModel('x', 'architecture', { client });
     expect((calls[0] as { max_tokens: number }).max_tokens).toBe(8192);
     expect(MAX_TOKENS).toBeLessThanOrEqual(8192);
   });
 
-  it('accumulates billed usage across every attempt (§15 metering)', async () => {
+  it('accumulates billed usage across every attempt (metering)', async () => {
     const { client } = fakeClient(['```json\n{"revision":1', validFull]);
     const r = await generateModel('x', 'architecture', { client });
     expect(r.ok).toBe(true);
@@ -227,7 +227,7 @@ describe('generateModel (mocked SDK)', () => {
   });
 });
 
-describe('STABLE_SYSTEM — M4 semantic fields', () => {
+describe('STABLE_SYSTEM — semantic fields', () => {
   it('documents optional semanticChecks/mainPath/guidedViews', () => {
     expect(STABLE_SYSTEM).toContain('semanticChecks');
     expect(STABLE_SYSTEM).toContain('mainPath');

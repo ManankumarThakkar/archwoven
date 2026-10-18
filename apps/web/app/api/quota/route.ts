@@ -4,7 +4,7 @@ import { fakeMode } from '../../lib/mode';
 
 export const runtime = 'nodejs';
 
-/** Live credit meter (§15) — the header chip's real data source. */
+/** Live credit meter — the header chip's real data source. */
 export async function GET(req: Request) {
   const { sessionId, minted } = readOrCreateSession(req);
   const headers: Record<string, string> = { 'content-type': 'application/json', 'cache-control': 'private, no-store' };

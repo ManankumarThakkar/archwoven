@@ -58,7 +58,7 @@ describe('validateModel', () => {
   });
 });
 
-describe('validateModel — M4 semanticChecks', () => {
+describe('validateModel — semanticChecks', () => {
   const base = () => structuredClone(validFull);
 
   it('accepts reachable requiredPaths and satisfied roots/terminals', () => {

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-/** Where a piece of the model came from. Exactly the four categories from SPEC §5. */
+/** Where a piece of the model came from. Exactly four categories. */
 export const ProvenanceSchema = z.enum([
   'user-specified',
   'source-supported',
@@ -60,7 +60,7 @@ export type Node = z.infer<typeof NodeSchema>;
 export const EdgeTypeSchema = z.enum(['sync', 'async', 'data', 'relation', 'control']);
 export type EdgeType = z.infer<typeof EdgeTypeSchema>;
 
-/** Edge's narrative role (M4, optional): powers mainPath playback + route exploration. */
+/** Edge's narrative role (optional): powers mainPath playback + route exploration. */
 export const EdgeRoleSchema = z.enum(['main', 'branch', 'async', 'return', 'error']);
 export type EdgeRole = z.infer<typeof EdgeRoleSchema>;
 
@@ -157,7 +157,7 @@ export const PrivacySchema = z
   .strict();
 export type Privacy = z.infer<typeof PrivacySchema>;
 
-/** Machine-checkable integrity (M4, optional): extraction emits from detected routes,
+/** Machine-checkable integrity (optional): extraction emits from detected routes,
  *  validateModel enforces at every revision. Absent = no enforcement (backward compat). */
 export const SemanticChecksSchema = z
   .object({

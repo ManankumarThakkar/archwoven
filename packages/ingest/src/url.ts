@@ -1,8 +1,8 @@
 /**
- * Repo URL validation (§14): exact host allowlist, https-only, and SSRF blocking
+ * Repo URL validation: exact host allowlist, https-only, and SSRF blocking
  * of every IP-literal encoding before any fetch is attempted. DNS names that
  * resolve internally are a known gap (api.github.com/codeload are pinned hosts;
- * resolution-level blocking is M4 hardening).
+ * resolution-level blocking is future hardening).
  */
 export type ParsedRepoUrl =
   | { ok: true; owner: string; repo: string; ref?: string; subdir?: string }

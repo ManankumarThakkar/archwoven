@@ -7,7 +7,7 @@ const spy = (calls: string[]) =>
     return new Response('{}');
   }) as unknown as typeof fetch;
 
-describe('egress guard (§9)', () => {
+describe('egress guard', () => {
   it('allows the ollama host and GitHub fetch hosts', async () => {
     const calls: string[] = [];
     const guard = makeEgressGuard(LOCAL_EGRESS_ALLOW, spy(calls));

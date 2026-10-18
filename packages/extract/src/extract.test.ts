@@ -301,7 +301,7 @@ describe('extractFastApi edge cases', () => {
   });
 });
 
-describe('semanticChecks emission (M4)', () => {
+describe('semanticChecks emission', () => {
   it('spring-mini: requiredEdges carry controller→service DI pairs actually seen', async () => {
     const f = await extractSpringBoot(`${FIXTURES}spring-mini`);
     expect(f.semanticChecks).toBeDefined();

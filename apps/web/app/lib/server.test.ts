@@ -33,7 +33,7 @@ const withEnv = (env: Record<string, string | undefined>, fn: () => void) => {
   }
 };
 
-describe('assertSafeRuntime (§15 fake/local mode never ships to production)', () => {
+describe('assertSafeRuntime (fake/local mode never ships to production)', () => {
   afterEach(() => { delete process.env.ARCHWOVEN_FAKE; delete process.env.ARCHWOVEN_MODE; delete process.env.ARCHWOVEN_DEMO_ACK; });
 
   it('refuses to boot production with fake model data and no explicit ack', () => {
@@ -61,7 +61,7 @@ describe('assertSafeRuntime (§15 fake/local mode never ships to production)', (
   });
 });
 
-describe('serverDeps local routing (§8/§9)', () => {
+describe('serverDeps local routing', () => {
   it('local mode: generate hits ollama behind the guard, never anthropic', async () => {
     const urls: string[] = [];
     const prevFetch = globalThis.fetch;
