@@ -23,6 +23,8 @@ next-env.d.ts
 !benchmarks/ordinary-model-floor/review/todo-api.png
 !benchmarks/ordinary-model-floor/review/checkout.png
 !benchmarks/ordinary-model-floor/review/boring-crud.png
+# First-party social preview, rendered from code with the bundled font.
+!apps/web/public/og.png
 
 # SDD scratch (ledgers, briefs, review packages, research notes) — never committed
 .superpowers/
