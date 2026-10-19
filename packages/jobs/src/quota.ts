@@ -124,10 +124,10 @@ export function refundCredits(store: Store, sessionId: string, day: string, weig
  * failed; this is the stop-loss input and the evaluation data). Credits were
  * already reserved at the gate; this never touches the credit ledger.
  */
-export function recordUsage(
-  store: Store,
-  req: { sessionId: string; tier: Tier; action: Action | 'expand'; view?: ViewType; taskId?: string; modelId?: string; usage: Usage; retries?: number; outcome?: 'ok' | 'repaired' | 'failed' },
-): TaskReport {
+export type TaskRequest = { action: Action | 'expand'; view?: ViewType; taskId?: string; modelId?: string; usage: Usage; retries?: number; outcome?: 'ok' | 'repaired' | 'failed' };
+
+/** The task report shown to the visitor, priced at reviewed rates; no storage. */
+export function taskReport(req: TaskRequest): TaskReport {
   const cost = costOf(req.usage);
   const provider = ['anthropic', 'ollama', 'demo'].includes(req.usage.provider ?? '') ? req.usage.provider as TaskUsage['provider'] : 'unknown';
   const task: TaskReport = {
@@ -139,6 +139,11 @@ export function recordUsage(
     estimatedCostUsd: cost, costBasis: provider === 'ollama' ? 'local-inference' : provider === 'demo' ? 'demo' : cost === null ? 'unavailable' : hostedModelProfile(req.usage.model)!.costBasis,
     outcome: req.outcome ?? 'ok',
   };
-  store.logCall({ sessionId: req.sessionId, tier: req.tier, view: req.view ?? req.action, inputTokens: task.inputTokens, outputTokens: task.outputTokens, cacheWriteTokens: task.cacheWriteTokens, cacheReadTokens: task.cacheReadTokens, costUsd: cost, retries: task.repairs, outcome: task.outcome, task });
+  return task;
+}
+
+export function recordUsage(store: Store, req: TaskRequest & { sessionId: string; tier: Tier }): TaskReport {
+  const task = taskReport(req);
+  store.logCall({ sessionId: req.sessionId, tier: req.tier, view: req.view ?? req.action, inputTokens: task.inputTokens, outputTokens: task.outputTokens, cacheWriteTokens: task.cacheWriteTokens, cacheReadTokens: task.cacheReadTokens, costUsd: task.estimatedCostUsd, retries: task.repairs, outcome: task.outcome, task });
   return task;
 }

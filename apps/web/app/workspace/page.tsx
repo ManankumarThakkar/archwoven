@@ -56,6 +56,24 @@ async function responseMessage(res: Response, fallback: string): Promise<string>
   }
 }
 
+/** A running job survives a closed tab: its id is kept until the job reaches a final state. */
+const ACTIVE_JOB = 'aw_activeJob';
+/** Hosted servers ask for slower polling to save shared storage commands. */
+const pollAfter = (job: { pollAfterMs?: unknown }) => typeof job.pollAfterMs === 'number' && job.pollAfterMs >= 200 && job.pollAfterMs <= 10_000 ? job.pollAfterMs : 400;
+function rememberJob(jobId: string, preferredView?: ViewType) {
+  try { localStorage.setItem(ACTIVE_JOB, JSON.stringify({ jobId, preferredView })); } catch { /* storage can be disabled */ }
+}
+function forgetJob(jobId: string) {
+  try { if (storedJob()?.jobId === jobId) localStorage.removeItem(ACTIVE_JOB); } catch { /* storage can be disabled */ }
+}
+function storedJob(): { jobId: string; preferredView?: ViewType } | null {
+  try {
+    const value = JSON.parse(localStorage.getItem(ACTIVE_JOB) ?? 'null') as { jobId?: unknown; preferredView?: unknown } | null;
+    if (typeof value?.jobId !== 'string' || !/^[\w-]{1,64}$/.test(value.jobId)) return null;
+    return { jobId: value.jobId, preferredView: typeof value.preferredView === 'string' ? value.preferredView as ViewType : undefined };
+  } catch { return null; }
+}
+
 export default function WorkspacePage() {
   const [state, dispatch] = useReducer(next, initial);
   const [model, setModel] = useState<SystemModel | null>(null);
@@ -71,7 +89,7 @@ export default function WorkspacePage() {
   const usageSequence = useRef(0);
   const usageWatch = useRef(0);
   const [usagePending, setUsagePending] = useState(false);
-  const [pool, setPool] = useState(6);
+  const [pool, setPool] = useState<number | null>(6);
   const [fake, setFake] = useState(false);
   const [deploy, setDeploy] = useState<'hosted' | 'local'>('hosted');
   const [llmReady, setLlmReady] = useState(true);
@@ -173,11 +191,14 @@ export default function WorkspacePage() {
       let saved: string | null = null;
       try { saved = sessionStorage.getItem('aw_modelId'); } catch { /* permalink still works */ }
       const id = hash.get('model') || saved;
+      const pending = storedJob();
       if (id) await loadModel(id);
-      else if (['focus', 'lens', 'route', 'chapter', 'relation'].some((key) => hash.has(key))) {
+      else if (!pending && ['focus', 'lens', 'route', 'chapter', 'relation'].some((key) => hash.has(key))) {
         dispatch({ type: 'RESTORE_FAILED', message: 'This link does not include a saved diagram. Open the original diagram and copy its full address, or create a new diagram.' });
       }
       setRestoring(false);
+      // A job accepted before the tab closed keeps running on the server; reconnect to it.
+      if (pending && !cancelled && !generationRef.current) void resumeJob(pending.jobId, pending.preferredView);
     })();
     return () => { cancelled = true; ++loadSequence.current; ++usageSequence.current; ++usageWatch.current; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -208,10 +229,10 @@ export default function WorkspacePage() {
     let runningSince: number | null = null;
     let misses = 0;
     for (;;) {
-      let job: { status: string; stage?: Stage | null; modelId: string; revision: number; queuePosition?: number | null; deadlineAt?: number | null; questions?: string[]; usagePending?: boolean; remaining?: number | null; error?: string | null } | null = null;
+      let job: { status: string; stage?: Stage | null; modelId: string; revision: number; queuePosition?: number | null; deadlineAt?: number | null; questions?: string[]; usagePending?: boolean; remaining?: number | null; error?: string | null; pollAfterMs?: number } | null = null;
       try {
         const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}`);
-        if (res.status === 404) { dispatch({ type: 'ERROR', message: 'This generation no longer exists — please try again.' }); return; }
+        if (res.status === 404) { forgetJob(jobId); dispatch({ type: 'ERROR', message: 'This generation no longer exists — please try again.' }); return; }
         if (!res.ok) throw new Error('Could not read job status');
         job = await res.json();
         if (!job || !['queued', 'running', 'cancelled', 'succeeded', 'failed', 'clarifying'].includes(job.status)
@@ -227,7 +248,7 @@ export default function WorkspacePage() {
       if (job.status === 'queued') {
         setQueuedPos(job.queuePosition ?? null);
         dispatch({ type: 'STAGE', stage: 'queued' });
-        await new Promise((r) => setTimeout(r, 400));
+        await new Promise((r) => setTimeout(r, pollAfter(job)));
         continue;
       }
       if (job.status === 'running') {
@@ -236,7 +257,7 @@ export default function WorkspacePage() {
         if (job.stage) dispatch({ type: 'STAGE', stage: job.stage });
         const deadline = typeof job.deadlineAt === 'number' ? job.deadlineAt : runningSince + 180_000;
         if (Date.now() > deadline + 10_000) { dispatch({ type: 'ERROR', message: 'The server has not confirmed completion. Retry the same input to reconnect to the job.' }); return; }
-        await new Promise((r) => setTimeout(r, 400));
+        await new Promise((r) => setTimeout(r, pollAfter(job)));
         continue;
       }
       if (job.status === 'clarifying') {
@@ -244,11 +265,13 @@ export default function WorkspacePage() {
           dispatch({ type: 'ERROR', message: 'Could not read the clarification. Retry the same description to reconnect.' }); return;
         }
         setQueuedPos(null);
+        forgetJob(jobId);
         if (typeof job.remaining === 'number') setRemaining(job.remaining);
         setClarification({ jobId, questions: job.questions, preferredView });
         dispatch({ type: 'CLARIFY', questions: job.questions });
         return;
       }
+      forgetJob(jobId);
       if (job.usagePending && (job.status === 'cancelled' || job.status === 'failed')) void watchUsage(jobId);
       if (job.status === 'cancelled') { setQueuedPos(null); dispatch({ type: 'CANCEL' }); return; }
       if (job.status === 'succeeded') {
@@ -259,6 +282,14 @@ export default function WorkspacePage() {
       dispatch({ type: 'ERROR', message: job.error ?? 'generation failed' });
       return;
     }
+  };
+
+  const resumeJob = async (jobId: string, preferredView?: ViewType) => {
+    generationRef.current = true;
+    jobIdRef.current = jobId;
+    dispatch({ type: 'GENERATE' });
+    try { await poll(jobId, preferredView); }
+    finally { generationRef.current = false; jobIdRef.current = null; void refreshUsage(); }
   };
 
   const submitGeneration = async (url: string, body: object, preferredView?: ViewType) => {
@@ -276,10 +307,12 @@ export default function WorkspacePage() {
         return;
       }
       if (!res.ok) { dispatch({ type: 'ERROR', message: await responseMessage(res, 'Could not start generation. Please try again.') }); return; }
-      const { jobId, remaining } = (await res.json()) as { jobId?: unknown; remaining?: number };
+      const { jobId, remaining, resumable } = (await res.json()) as { jobId?: unknown; remaining?: number; resumable?: unknown };
       if (typeof jobId !== 'string' || !jobId) throw new Error('Missing job ID');
       if (typeof remaining === 'number') setRemaining(remaining);
       jobIdRef.current = jobId;
+      // Only hosted jobs keep running when the tab closes; single-server jobs are not remembered.
+      if (resumable === true) rememberJob(jobId, preferredView);
       await poll(jobId, preferredView);
     } catch {
       dispatch({ type: 'ERROR', message: 'Could not start generation. Check your connection and try again; retrying the same input will reconnect to any job already started.' });
@@ -549,7 +582,10 @@ export default function WorkspacePage() {
         <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 6, background: '#111a2e', color: '#93c5fd' }}>{privacy}</span>
         {deploy === 'local'
           ? <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 6, background: '#111a2e', color: '#93c5fd' }}>Local · no credit limits</span>
-          : <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 6, background: '#111a2e', color: '#fbbf24' }}>◐ {remaining ?? pool}/{pool} credits today</span>}
+          : pool === null
+            // Hosted spending caps are money limits, not credits.
+            ? <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 6, background: '#111a2e', color: '#fbbf24' }}>◐ Free AI · daily limit</span>
+            : <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 6, background: '#111a2e', color: '#fbbf24' }}>◐ {remaining ?? pool}/{pool} credits today</span>}
         {usagePending ? <span role="status">Usage pending · provider is settling</span> : lastTask && <TaskUsageSummary task={lastTask} />}
         {!llmReady && (
           <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 6, background: '#3b2f0d', color: '#fbbf24' }}>
