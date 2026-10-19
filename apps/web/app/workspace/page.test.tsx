@@ -19,7 +19,26 @@ const requests: string[] = [];
 let status = 200;
 let transport: (input: string, init?: RequestInit) => Response | Promise<Response> | undefined;
 
+/**
+ * Browsers never fire hashchange for history.replaceState, and the workspace relies on that.
+ * happy-dom does, one task later; such an event can reach the page after it has moved on and
+ * switch views back. Drop exactly those events. Navigation (location.hash) and events a test
+ * dispatches still arrive.
+ */
+const replacedUrls = new Set<string>();
+const dropReplaceStateHashChange = (event: Event) => {
+  const url = (event as HashChangeEvent).newURL;
+  if (url && replacedUrls.delete(url)) event.stopImmediatePropagation();
+};
+
 beforeEach(() => {
+  const replaceState = window.history.replaceState.bind(window.history);
+  vi.spyOn(window.history, 'replaceState').mockImplementation((...args: Parameters<History['replaceState']>) => {
+    const before = window.location.href;
+    replaceState(...args);
+    if (window.location.href !== before) replacedUrls.add(window.location.href);
+  });
+  window.addEventListener('hashchange', dropReplaceStateHashChange, true);
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true, React });
   sessionStorage.clear();
   localStorage.clear();
@@ -46,6 +65,8 @@ beforeEach(() => {
 
 afterEach(async () => {
   await act(async () => root.unmount());
+  window.removeEventListener('hashchange', dropReplaceStateHashChange, true);
+  replacedUrls.clear();
   container.remove();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -730,7 +751,9 @@ it('discloses when auto-arranging pinned nodes also affects another graph view',
 describe('component detail views', () => {
   const ok = (r: { ok: true; model: SystemModel } | { ok: false; errors: string[] }) => { if (!r.ok) throw new Error(r.errors.join('; ')); return r.model; };
   /** Edit responses deliver their body late, as on a busy CI runner, so assertions cannot race the save. */
-  const late = (response: Response) => { const json = response.json.bind(response); response.json = () => new Promise(r => setTimeout(r, 20)).then(json); return response; };
+  /** Edit responses still being read by the page; a press waits for them rather than for transient status text. */
+  let unread = 0;
+  const late = (response: Response) => { unread++; const json = response.json.bind(response); response.json = () => new Promise(r => setTimeout(r, 20)).then(json).finally(() => { unread--; }); return response; };
   /** Fake server backed by the real model edit functions. */
   function detailServer(initial: SystemModel = structuredClone(validFullModelExtended)) {
     let stored = initial;
@@ -764,15 +787,17 @@ describe('component detail views', () => {
   const tabs = () => [...container.querySelectorAll('.aw-view-tabs > button[aria-pressed], .aw-view-tabs > .aw-detail-tab > button[aria-pressed]')].map(b => b.textContent);
   const button = (text: string) => [...container.querySelectorAll('button')].find(b => b.textContent?.trim() === text);
   const labelled = (label: string) => container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
-  // A click does not await its async handler: wait until any save it started has finished.
+  // A click does not await its async handler: wait until any save it started has been read and rendered.
   const saving = () => container.querySelector('.aw-refine-status')?.textContent === 'Saving change…';
   const press = async (b: HTMLButtonElement | null | undefined) => {
     expect(b).toBeTruthy();
     await act(async () => b!.click());
-    for (let i = 0; i < 100 && saving(); i++) await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
+    for (let i = 0; i < 200 && (saving() || unread > 0); i++) await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
     expect(saving()).toBe(false);
+    expect(unread).toBe(0);
   };
-  beforeEach(() => window.history.replaceState(null, '', '/workspace#model=m1'));
+  beforeEach(() => { unread = 0; window.history.replaceState(null, '', '/workspace#model=m1'); });
 
   it('opens a saved detail tab from the inspector and switches to it without inference', async () => {
     const server = detailServer();
