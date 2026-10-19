@@ -17,7 +17,7 @@ type Limits = { visitor: number; network: number; global: number; windowSeconds:
 /** Free whole-diagram writes (restores and imports) per day, bounding shared Redis memory. */
 export const COPY_LIMITS: Limits = { visitor: 30, network: 60, global: 200, windowSeconds: 86_400 };
 /** Free direct edits and undos per day, bounding shared Redis commands. */
-export const EDIT_LIMITS: Limits = { visitor: 300, network: 600, global: 3000, windowSeconds: 86_400 };
+export const EDIT_LIMITS: Limits = { visitor: 300, network: 600, global: 600, windowSeconds: 86_400 };
 const LATER = 'Try again tomorrow; viewing and downloads still work.';
 const COPY_LIMIT_COPY = { visitor: `You have restored or imported many diagrams today. ${LATER}`, network: `Many diagrams were restored or imported from your network today. ${LATER}`, global: `Archwoven has restored or imported as many diagrams as it can today. ${LATER}` };
 const EDIT_LIMIT_COPY = { visitor: `You have made many changes today. ${LATER}`, network: `Many changes were made from your network today. ${LATER}`, global: `Archwoven has saved as many changes as it can today. ${LATER}` };

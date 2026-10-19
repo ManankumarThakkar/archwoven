@@ -96,6 +96,11 @@ describe('hosted spending guard', () => {
   it('names reset times in UTC', () => {
     expect(refusalCopy('month-exhausted', Date.UTC(2026, 11, 20))).toMatch(/resets on 1 January 2027/);
     expect(refusalCopy('visitor-exhausted', Date.UTC(2026, 11, 20))).toMatch(/resets at 00:00 UTC/);
+    expect(refusalCopy('day-exhausted')).toMatch(/^Today's free AI budget is used up\. It resets at 00:00 UTC\./);
+    // A budget refusal leaves editing available; an outage of the services editing needs does not.
+    expect(refusalCopy('month-exhausted')).toMatch(/view, edit and download/);
+    expect(refusalCopy('unavailable')).not.toMatch(/edit/);
+    expect(refusalCopy('unavailable')).toMatch(/view and download/);
   });
 });
 
@@ -122,6 +127,8 @@ describe('choosing the hosted client', () => {
     vi.stubGlobal('fetch', network);
     try {
       await expect(spendingClient({ visitor: 'v', network: null })!.beta.messages.create(request)).rejects.toThrow(/No further AI request was sent/);
+      // Storage is fine here, so editing still works and the message says so.
+      await expect(spendingClient({ visitor: 'v', network: null })!.beta.messages.create(request)).rejects.toThrow(/network address.*You can still view, edit and download/);
       expect(network).not.toHaveBeenCalled();
     } finally { vi.unstubAllGlobals(); }
   });
@@ -161,7 +168,7 @@ describe.skipIf(!redis)('two instances racing for the last of the budget (real R
     await redis!.flush();
     const open = () => openSpendingLedger({ url: redis!.url, token: redis!.token, prefix: 'archwoven-test:' });
     const hold = evaluationHoldNanos('claude-opus-5-5', 8192, inputCeiling(1000));
-    await open().initialize({ start: Date.now() - 1000, end: Date.now() + 86_400_000 }, { annualNanos: hold * 10, monthNanos: hold + hold / 2, visitorDayNanos: hold + hold / 2, networkDayNanos: hold + hold / 2 });
+    await open().initialize({ start: Date.now() - 1000, end: Date.now() + 86_400_000 }, { annualNanos: hold * 10, monthNanos: hold + hold / 2, dayNanos: hold + hold / 2, visitorDayNanos: hold + hold / 2, networkDayNanos: hold + hold / 2 });
     const a = provider(), b = provider();
     const results = await Promise.allSettled([
       withSpendingLimits(a.client, open(), { visitor: 'tab-1', network: '203.0.113.9' }).beta.messages.create(request),

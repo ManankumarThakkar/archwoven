@@ -196,13 +196,20 @@ export default function WorkspacePage() {
     const sequence = ++loadSequence.current;
     requestedModelRef.current = id;
     try {
-      const res = await fetch(`/api/models/${encodeURIComponent(id)}`);
+      // A lost connection is treated like an unavailable server, so this browser's copy can still be shown.
+      const res = await fetch(`/api/models/${encodeURIComponent(id)}`).catch(() => new Response(null, { status: 503 }));
       let m: SystemModel, restoredNote = '', reopenedAs: string | undefined;
       if (res.ok) m = SystemModelSchema.parse((await res.json()).model);
       else if (res.status === 404 && copiesRef.current) ({ model: m, note: restoredNote, id: reopenedAs } = await restoreFromBrowser(id));
-      else throw new Error(res.status === 404
-        ? 'This saved diagram is unavailable in this browser session. Open it in the browser that created it, or create a new diagram.'
-        : 'Could not open the saved diagram. Check your connection and reload.');
+      else {
+        // The server is unreachable: show what this browser kept rather than nothing.
+        const kept = copiesRef.current && res.status !== 404 ? loadBrowserDiagram(id) : null;
+        if (!kept || !('model' in kept)) throw new Error(res.status === 404
+          ? 'This saved diagram is unavailable in this browser session. Open it in the browser that created it, or create a new diagram.'
+          : 'Could not open the saved diagram. Check your connection and reload.');
+        m = kept.model;
+        restoredNote = "Showing this browser's copy because the server is unavailable. Downloads still work; editing and AI resume when the server is back.";
+      }
       if (sequence !== loadSequence.current) return;
       if (reopenedAs) { id = reopenedAs; requestedModelRef.current = id; }
       const hashView = new URLSearchParams(window.location.hash.slice(1)).get('view');

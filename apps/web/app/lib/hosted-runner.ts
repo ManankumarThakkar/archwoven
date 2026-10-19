@@ -18,10 +18,10 @@ export function hostedJobLimits(): HostedJobLimits {
   };
 }
 
-export const HOSTED_UNAVAILABLE_COPY = 'AI generation is temporarily unavailable. You can still view, edit and download your diagrams.';
+export const HOSTED_UNAVAILABLE_COPY = 'AI generation and saving changes are temporarily unavailable. You can still view and download your diagrams.';
 /** For operators: what hosted job storage needs (names only, never values). */
 export const HOSTED_STORAGE_VARIABLES = 'UPSTASH_REDIS_REST_URL (an https://…upstash.io address), UPSTASH_REDIS_REST_TOKEN, ARCHWOVEN_REDIS_PREFIX (lowercase, ending in a colon) and ARCHWOVEN_SESSION_SECRET (at least 32 characters)';
-export const HOSTED_NOT_CONFIGURED_COPY = 'AI generation is unavailable: hosted job storage is not configured. You can still view, edit and download your diagrams.';
+export const HOSTED_NOT_CONFIGURED_COPY = 'AI generation and saving changes are unavailable: hosted job storage is not configured. You can still view and download your diagrams.';
 
 let cached: { key: string; jobs: HostedJobs } | undefined;
 /**
