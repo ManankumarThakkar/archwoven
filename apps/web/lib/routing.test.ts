@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { validFullModel, validateModel, type SystemModel } from '@archwoven/model';
-import stressRaw from '../probes/render/stress-fixture.json';
+import stressRaw from '../test-fixtures/layout-stress.json';
 import { layoutModel } from './layout';
 import { buildSvg } from './export-svg';
 

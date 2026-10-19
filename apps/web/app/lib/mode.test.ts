@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { assertSafeRuntime, deployMode, privacyForMode } from './mode';
 
 describe('hosted model configuration', () => {

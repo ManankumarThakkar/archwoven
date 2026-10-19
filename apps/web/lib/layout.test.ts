@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { validateModel, validFullModel } from '@archwoven/model';
-import { layoutModel, countOverlaps, nodeSize } from './layout';
-import stressRaw from './stress-fixture.json';
+import { layoutModel, nodeSize, type PlacedNode } from './layout';
+import stressRaw from '../test-fixtures/layout-stress.json';
 
 describe('layoutModel (ELK)', () => {
   it('positions every node of the golden architecture view with finite coords', async () => {
@@ -37,3 +37,23 @@ describe('layoutModel (ELK)', () => {
     expect(big.height).toBeGreaterThan(small.height);
   });
 });
+
+/** Counts padded node overlaps in layout regression tests. */
+function countOverlaps(nodes: PlacedNode[], pad = 8): number {
+  let overlaps = 0;
+  for (let i = 0; i < nodes.length; i++) {
+    for (let j = i + 1; j < nodes.length; j++) {
+      const a = nodes[i]!;
+      const b = nodes[j]!;
+      if (
+        a.x + a.width + pad > b.x &&
+        b.x + b.width + pad > a.x &&
+        a.y + a.height + pad > b.y &&
+        b.y + b.height + pad > a.y
+      ) {
+        overlaps++;
+      }
+    }
+  }
+  return overlaps;
+}

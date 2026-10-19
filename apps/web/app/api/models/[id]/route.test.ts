@@ -24,9 +24,9 @@ describe('GET /api/models/:id', () => {
   });
 
   it('a revision saved before semantic fields existed gets schema defaults at the boundary (the canvas reads boundaries/guidedViews unguarded)', async () => {
-    const preM4 = structuredClone(validFullModel) as Record<string, unknown>;
-    delete preM4.boundaries; delete preM4.guidedViews; delete preM4.semanticChecks;
-    serverDeps.store.saveRevision('m1', preM4 as never, 'test-sess');
+    const legacyModel = structuredClone(validFullModel) as Record<string, unknown>;
+    delete legacyModel.boundaries; delete legacyModel.guidedViews; delete legacyModel.semanticChecks;
+    serverDeps.store.saveRevision('m1', legacyModel as never, 'test-sess');
     const res = await GET(req(), ctx);
     expect(res.status).toBe(200);
     const { model } = (await res.json()) as { model: Record<string, unknown> };
@@ -42,9 +42,9 @@ describe('GET /api/models/:id', () => {
 
 describe('POST /api/models/:id/undo — revisions saved before semantic fields', () => {
   it('undo across an older revision serves defaults, not undefined', async () => {
-    const preM4 = structuredClone(validFullModel) as Record<string, unknown>;
-    delete preM4.boundaries; delete preM4.guidedViews; delete preM4.semanticChecks;
-    serverDeps.store.saveRevision('m1', preM4 as never, 'test-sess');
+    const legacyModel = structuredClone(validFullModel) as Record<string, unknown>;
+    delete legacyModel.boundaries; delete legacyModel.guidedViews; delete legacyModel.semanticChecks;
+    serverDeps.store.saveRevision('m1', legacyModel as never, 'test-sess');
     const rev2 = structuredClone(validFullModel);
     rev2.revision = 2; rev2.parentId = 1;
     serverDeps.store.saveRevision('m1', rev2, 'test-sess');

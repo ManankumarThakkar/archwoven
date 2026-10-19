@@ -101,7 +101,6 @@ export async function unpackTarball(tarball: ArrayBufferView | ArrayBuffer, dest
     let name = new TextDecoder().decode(header.subarray(0, 100)).replace(/\0.*$/, '');
     const size = octal(header.subarray(124, 136));
     const typeflag = String.fromCharCode(header[156] ?? 0x30);
-    const linkname = new TextDecoder().decode(header.subarray(157, 257)).replace(/\0.*$/, '');
     const prefix = new TextDecoder().decode(header.subarray(345, 500)).replace(/\0.*$/, '');
     if (prefix) name = `${prefix}/${name}`;
 
