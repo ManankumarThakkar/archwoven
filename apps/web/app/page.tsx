@@ -1,5 +1,6 @@
 import { CreatorLinks, SocialIcon } from './components/CreatorLinks';
 import { site } from './lib/site';
+import { landingMetadata, structuredData } from './lib/seo';
 import './landing.css';
 
 const diagramTypes = [
@@ -9,9 +10,13 @@ const diagramTypes = [
   ['Component detail', 'Explore a component and the responsibilities inside it.'],
 ];
 
+export function generateMetadata() { return landingMetadata(); }
+
 export default function Home() {
+  const schema = structuredData();
   return (
     <div className="aw-landing">
+      {schema && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema).replace(/</g, '\\u003c') }} />}
       <a className="lp-skip" href="#main">Skip to content</a>
       <header className="lp-header">
         <a className="aw-brand" href="/" aria-label="Archwoven home"><span className="aw-brand-mark" aria-hidden="true">⌘</span>Arch<span>woven</span></a>

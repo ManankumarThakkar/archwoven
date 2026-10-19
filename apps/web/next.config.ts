@@ -2,6 +2,9 @@ import type { NextConfig } from 'next';
 import { join } from 'node:path';
 
 const nextConfig: NextConfig = {
+  async headers() {
+    return [{ source: '/api/:path*', headers: [{ key: 'X-Robots-Tag', value: 'noindex, nofollow' }] }];
+  },
   // Pin the monorepo root, even when a parent folder has another lockfile.
   outputFileTracingRoot: join(__dirname, '../..'),
   // The extractor is an external esbuild bundle, so NFT cannot follow its
