@@ -70,6 +70,8 @@ describe('direct edits and revision history',()=>{
       }
       if(input==='/api/models/m1/undo'){
         const body=JSON.parse(String(init?.body));expect(body.baseRevision).toBe(stored.revision);undone.push(body.prevRevision);
+        // Hosted servers keep only the latest revision: the page sends the earlier version it showed.
+        expect(body.previous).toEqual(revisions.get(body.prevRevision));
         const prev=structuredClone(revisions.get(body.prevRevision)!);prev.parentId=stored.revision;prev.revision=stored.revision+1;stored=prev;return Response.json({model:stored});
       }
       return undefined;

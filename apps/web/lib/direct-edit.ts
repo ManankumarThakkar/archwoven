@@ -1,4 +1,4 @@
-import type { EditOp, SystemModel } from '@archwoven/model';
+import { applyEditOps, closeDetailView, openDetailView, orientArchitecture, type EditOp, type SystemModel } from '@archwoven/model';
 export const MAX_POSITION = 100000;
 export type Point = {
     x: number;
@@ -56,6 +56,18 @@ export function detailEdit(raw: unknown, model: SystemModel): Extract<DirectEdit
     if (action.type === 'detail' && keys(action, ['type', 'target']) && typeof action.target === 'string') return { type: 'detail', target: action.target };
     if (action.type === 'close-detail' && keys(action, ['type', 'viewId']) && typeof action.viewId === 'string') return { type: 'close-detail', viewId: action.viewId };
     return null;
+}
+
+export const INVALID_EDIT_COPY = 'Invalid edit. Choose an existing element, a name of 1–500 characters, node positions within ±100000, a horizontal/vertical architecture direction, or a component detail view.';
+/** Apply one direct edit (no AI) to the latest saved revision; the body must name that revision. */
+export function applyDirectEdit(raw: unknown, latest: SystemModel): { ok: true; model: SystemModel } | { ok: false; errors: string[]; invalid?: true } {
+    const orientation = orientationEdit(raw, latest);
+    const detail = orientation ? null : detailEdit(raw, latest);
+    const ops = orientation || detail ? null : directEditOps(raw, latest);
+    if (!ops && !orientation && !detail) return { ok: false, errors: [INVALID_EDIT_COPY], invalid: true };
+    return orientation ? orientArchitecture(latest, orientation.viewId, orientation.orientation)
+        : detail ? (detail.type === 'detail' ? openDetailView(latest, detail.target) : closeDetailView(latest, detail.viewId))
+        : applyEditOps(latest, ops!);
 }
 
 /** Read a bounded body rather than trusting Content-Length or buffering arbitrary input. */

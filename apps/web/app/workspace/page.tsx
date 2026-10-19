@@ -20,6 +20,7 @@ import { summarizeOps, pushHistory, undo, idempotencyKeyFor } from './refine-flo
 import { buildSvg } from '../../lib/export-svg';
 import { modelJson, modelJsonFileName, sourceReferences } from '../../lib/export-json';
 import { downloadBlob } from '../../lib/download';
+import { svgToPng } from '../../lib/png';
 import type { DirectEdit } from '../../lib/direct-edit';
 
 const STAGE_LABEL: Record<Stage, string> = {
@@ -471,7 +472,8 @@ export default function WorkspacePage() {
     try {
       const res = await fetch(`/api/models/${modelId}/undo`, {
         method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ prevRevision: prev.revision, baseRevision:model.revision }),
+        // Hosted servers keep only the latest revision, so the earlier version travels with the request (checked as untrusted input).
+        body: JSON.stringify({ prevRevision: prev.revision, baseRevision: model.revision, previous: prev }),
       });
       if(res.status===409){const body=await res.json();setModel(body.model);setHistory([body.model]);setSummary('The diagram changed elsewhere. Review the latest version before undoing.');return;}
       if (!res.ok) { setSummary(await responseMessage(res, 'Undo failed. Please try again.')); return; }
@@ -580,19 +582,7 @@ export default function WorkspacePage() {
       let ext = 'svg';
       if (kind === 'png') {
         try {
-          const { ensureResvg, renderPng } = await import('../../probes/render/export');
-          const [wasm, ...fonts] = await Promise.all([
-            '/resvg/index_bg.wasm', '/fonts/inter-400.woff2', '/fonts/inter-600.woff2',
-          ].map(async (path) => {
-            const res = await fetch(path);
-            if (!res.ok) throw new Error(`Export asset unavailable: ${path}`);
-            const bytes = new Uint8Array(await res.arrayBuffer());
-            if (!bytes.byteLength) throw new Error(`Export asset empty: ${path}`);
-            return bytes;
-          }));
-          await ensureResvg(wasm!);
-          const png = await renderPng(svg, fonts);
-          blob = new Blob([png as unknown as BlobPart], { type: 'image/png' });
+          blob = await svgToPng(svg);
           ext = 'png';
         } catch { /* fall back to SVG, honestly named and reported below */ }
       }

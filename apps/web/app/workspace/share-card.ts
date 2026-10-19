@@ -1,10 +1,10 @@
 import type { SystemModel } from '@archwoven/model';
-import { journey, reachability } from '../../workspace/graph-inspect';
+import { journey, reachability } from './graph-inspect';
 
 /**
  * 1200×630 share card SVG (route/reach). TEXT SURFACE RULE:
  * only model titles + node labels appear here — never evidence paths, commits,
- * or repo names. Text is escaped; the SVG is rendered to PNG server-side.
+ * or repo names. Text is escaped; the browser renders the SVG to PNG (lib/png.ts).
  */
 const esc = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 

@@ -86,8 +86,6 @@ export async function postHostedGenerate(req: Request, jobs: HostedJobs | 'misco
       const stamped = { ...checked.model, privacy: privacyForMode(deployMode()) };
       // Saved only while this instance still runs the job: a cancel that landed meanwhile keeps nothing.
       if (await jobs.putModel(jobId, sessionId, stamped, null, claim) !== 'ok') { await report('failed'); return { status: 'failed', error: 'Cancelled.' }; }
-      // A development server keeps editing working through its local store; Vercel has none.
-      if (process.env.VERCEL !== '1') serverDeps.store.saveRevision(jobId, stamped, sessionId);
       await report(out.usage.repairs > 0 ? 'repaired' : 'ok');
       if (answeredBy) await jobs.scrubClarification(answeredBy.jobId).catch(() => undefined);
       return { status: 'succeeded', fields: { modelId: jobId, revision: stamped.revision } };

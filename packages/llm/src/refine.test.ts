@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { applyEditOps, type EditOp, type SystemModel } from '@archwoven/model';
-import { generateRefinement } from './refine';
+import { generateRefinement, REFINEMENT_NO_CHANGE_COPY } from './refine';
 import type { StructuredClient } from './client';
 
 const USAGE = { input_tokens: 2000, cache_creation_input_tokens: 0, cache_read_input_tokens: 1800, output_tokens: 120 };
@@ -158,7 +158,8 @@ describe('empty edit batches', () => {
     const { client } = fakeClient([[]]);
     const out = await generateRefinement('make it nicer', mkModel(), 'architecture', { client });
     expect(out.ok).toBe(false);
-    if (!out.ok) expect(out.errors.join(' ')).toMatch(/No EditOps were emitted/);
+    // The repair instruction is for the provider; the visitor gets plain advice.
+    if (!out.ok) expect(out.errors).toEqual([REFINEMENT_NO_CHANGE_COPY]);
   });
 
   it('asks the provider to emit refused source-backed ops so the user learns why', async () => {
@@ -198,7 +199,7 @@ describe('net-zero refinements and source refusals', () => {
     const { client } = fakeClient([[sameName]]);
     const out = await generateRefinement('make it nicer', mkModel(), 'architecture', { client });
     expect(out.ok).toBe(false);
-    if (!out.ok) expect(out.errors.join(' ')).toMatch(/change nothing/);
+    if (!out.ok) expect(out.errors).toEqual([REFINEMENT_NO_CHANGE_COPY]);
   });
 
   it('tells the provider that views follow automatically', async () => {

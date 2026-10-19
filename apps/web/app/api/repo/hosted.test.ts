@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { openStore } from '@archwoven/jobs';
-import { validFullModel, type TaskUsage } from '@archwoven/model';
+import type { Store } from '@archwoven/jobs';
+import { validFullModel, type SystemModel, type TaskUsage } from '@archwoven/model';
 import type { Fragment } from '@archwoven/extract';
 import { startTestRedis } from '../../../../../packages/jobs/src/redis-test-server';
 import { serverDeps } from '../../lib/server';
@@ -23,6 +23,12 @@ const fragment = (): Fragment => ({
   edges: [], endpoints: [], gaps: [],
 });
 const okIngest = () => ({ ok: true as const, sha: SHA, framework: 'fastapi', fragment: fragment(), gaps: ['No database detected.'], filesScanned: 3 });
+const sessionOf = (cookie: string) => cookie.split('=')[1]!.split('.')[0]!;
+// Hosted mode keeps diagrams in Redis only: any use of the local database fails the test.
+const noLocalStore = new Proxy({}, { get() { throw new Error('hosted diagrams must not use the local database'); } }) as Store;
+const hosted = () => { const jobs = hostedJobs(); if (!jobs || jobs === 'misconfigured') throw new Error('hosted jobs unavailable'); return jobs; };
+const savedModel = async (owner: string, id: string) => (await hosted().modelState(id, sessionOf(owner))).model as SystemModel | null;
+const saveOver = async (owner: string, id: string, model: SystemModel) => { expect(await hosted().putModel(id, sessionOf(owner), model, model.revision - 1)).toBe('ok'); };
 const scheduled: (() => Promise<void>)[] = [];
 const drain = async () => { while (scheduled.length) await scheduled.shift()!(); };
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
@@ -35,7 +41,7 @@ describe.skipIf(!redis)('hosted repository import jobs (real Redis)', () => {
   beforeEach(async () => {
     await redis!.flush();
     for (const [key, value] of Object.entries({ ARCHWOVEN_MODE: 'hosted', ARCHWOVEN_FAKE: '0', ANTHROPIC_API_KEY: 'test-key-not-real', UPSTASH_REDIS_REST_URL: redis!.url, UPSTASH_REDIS_REST_TOKEN: redis!.token, ARCHWOVEN_REDIS_PREFIX: 'archwoven-test:', ARCHWOVEN_SESSION_SECRET: 'test-session-secret-0123456789abcdef', VERCEL: '' })) vi.stubEnv(key, value);
-    serverDeps.store = openStore(':memory:');
+    serverDeps.store = noLocalStore;
     serverDeps.schedule = task => { scheduled.push(task); };
     serverDeps.ingestRepo = async () => okIngest();
     serverDeps.assembleRepoModel = async () => ({ ok: true as const, model: validFullModel, usage });
@@ -80,7 +86,6 @@ describe.skipIf(!redis)('hosted repository import jobs (real Redis)', () => {
     // Redis holds the diagram for the hosted deployment; a development server also keeps it locally for editing.
     const jobs = hostedJobs(); if (!jobs || jobs === 'misconfigured') throw new Error('hosted jobs unavailable');
     expect((await jobs.modelState(jobId, owner.split('=')[1]!.split('.')[0]!)).model).toMatchObject({ revision: 1 });
-    expect(serverDeps.store.getRevision(jobId)!.revision).toBe(1);
     expect((await (await getQuota(new Request('http://x', as(owner)))).json()).lastTask).toMatchObject({ action: 'repo', id: jobId });
 
     const stranger = cookieOf(await getQuota(new Request('http://x')));
@@ -155,7 +160,7 @@ describe.skipIf(!redis)('hosted repository import jobs (real Redis)', () => {
     await running;
     expect(await job(jobId, owner)).toMatchObject({ status: 'cancelled' });
     expect((await getModel(new Request('http://x', as(owner)), params(jobId))).status).toBe(404);
-    expect(serverDeps.store.getRevision(jobId)).toBeNull();
+    expect(await savedModel(owner, jobId)).toBeNull();
   });
 
   it('reports a repository that cannot be fetched without calling the AI provider', async () => {

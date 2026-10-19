@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { openStore } from '@archwoven/jobs';
+import type { Store } from '@archwoven/jobs';
 import { validFullModel, type SystemModel, type TaskUsage } from '@archwoven/model';
 import { startTestRedis } from '../../../../../../../packages/jobs/src/redis-test-server';
 import { serverDeps } from '../../../../lib/server';
@@ -23,6 +23,12 @@ const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const as = (cookie: string) => ({ headers: { cookie } });
 const cookieOf = (response: Response) => response.headers.get('set-cookie')!.split(';')[0]!;
 const sessionOf = (cookie: string) => cookie.split('=')[1]!.split('.')[0]!;
+
+// Hosted mode keeps diagrams in Redis only: any use of the local database fails the test.
+const noLocalStore = new Proxy({}, { get() { throw new Error('hosted diagrams must not use the local database'); } }) as Store;
+const hosted = () => { const jobs = hostedJobs(); if (!jobs || jobs === 'misconfigured') throw new Error('hosted jobs unavailable'); return jobs; };
+const savedModel = async (owner: string, id: string) => (await hosted().modelState(id, sessionOf(owner))).model as SystemModel | null;
+const saveOver = async (owner: string, id: string, model: SystemModel) => { expect(await hosted().putModel(id, sessionOf(owner), model, model.revision - 1)).toBe('ok'); };
 const json = (body: unknown, cookie = '') => ({ method: 'POST', headers: { 'content-type': 'application/json', ...(cookie ? { cookie } : {}) }, body: JSON.stringify(body) });
 const expanded = (): SystemModel => { const m = structuredClone(validFullModel) as SystemModel; m.revision = 2; m.parentId = 1; m.nodes.push({ id: 'svc.orders.validator', kind: 'component', label: 'Order Validator', provenance: 'inferred', evidence: [] } as never); return m; };
 
@@ -39,7 +45,7 @@ describe.skipIf(!redis)('hosted expansion jobs (real Redis)', () => {
   beforeEach(async () => {
     await redis!.flush();
     for (const [key, value] of Object.entries({ ARCHWOVEN_MODE: 'hosted', ARCHWOVEN_FAKE: '0', ANTHROPIC_API_KEY: 'test-key-not-real', UPSTASH_REDIS_REST_URL: redis!.url, UPSTASH_REDIS_REST_TOKEN: redis!.token, ARCHWOVEN_REDIS_PREFIX: 'archwoven-test:', ARCHWOVEN_SESSION_SECRET: 'test-session-secret-0123456789abcdef', VERCEL: '' })) vi.stubEnv(key, value);
-    serverDeps.store = openStore(':memory:');
+    serverDeps.store = noLocalStore;
     serverDeps.schedule = task => { scheduled.push(task); };
     serverDeps.generateModel = async () => ({ ok: true as const, model: validFullModel, usage });
     serverDeps.expandComponent = async () => ({ ok: true as const, model: expanded(), usage });
@@ -58,7 +64,7 @@ describe.skipIf(!redis)('hosted expansion jobs (real Redis)', () => {
     expect(seen).toEqual({ target: 'svc.orders', hint: 'validation first' });
     expect(await (await getJob(new Request('http://x', as(owner)), params(jobId))).json()).toMatchObject({ status: 'succeeded', modelId, revision: 2 });
     expect((await (await getResult(new Request('http://x', as(owner)), params(jobId))).json()).model.nodes.some((n: { label: string }) => n.label === 'Order Validator')).toBe(true);
-    expect(serverDeps.store.getRevision(modelId)!.revision).toBe(2);
+    expect((await savedModel(owner, modelId))!.revision).toBe(2);
     expect((await (await getQuota(new Request('http://x', as(owner)))).json()).lastTask).toMatchObject({ action: 'expand', id: jobId });
     const stranger = cookieOf(await getQuota(new Request('http://x')));
     expect((await getResult(new Request('http://x', as(stranger)), params(jobId))).status).toBe(404);
@@ -73,7 +79,7 @@ describe.skipIf(!redis)('hosted expansion jobs (real Redis)', () => {
     expect((await expandReq(modelId, owner, { target: 'svc.missing' })).status).toBe(400);
     expect((await expandReq(modelId, cookieOf(await getQuota(new Request('http://x'))))).status).toBe(404);
     const newer = structuredClone(validFullModel) as SystemModel; newer.revision = 2; newer.parentId = 1; newer.nodes[0]!.label = 'Renamed';
-    serverDeps.store.saveRevision(modelId, newer, sessionOf(owner));
+    await saveOver(owner, modelId, newer);
     const stale = await expandReq(modelId, owner);
     expect(stale.status).toBe(409);
     expect(await stale.json()).toMatchObject({ reason: 'stale-revision', revision: 2 });
@@ -84,13 +90,13 @@ describe.skipIf(!redis)('hosted expansion jobs (real Redis)', () => {
     const { owner, modelId } = await diagram();
     serverDeps.expandComponent = async () => {
       const edited = structuredClone(validFullModel) as SystemModel; edited.revision = 2; edited.parentId = 1; edited.nodes[0]!.label = 'Edited meanwhile';
-      serverDeps.store.saveRevision(modelId, edited, sessionOf(owner));
+      await saveOver(owner, modelId, edited);
       return { ok: true as const, model: expanded(), usage };
     };
     const { jobId } = await (await expandReq(modelId, owner)).json();
     await drain();
     expect(await (await getJob(new Request('http://x', as(owner)), params(jobId))).json()).toMatchObject({ status: 'failed', error: STALE_COPY });
-    expect(serverDeps.store.getRevision(modelId)!.nodes[0]!.label).toBe('Edited meanwhile');
+    expect((await savedModel(owner, modelId))!.nodes[0]!.label).toBe('Edited meanwhile');
   });
 
   it('starts one job for repeated submissions and can be cancelled without changing the diagram', async () => {
@@ -107,7 +113,7 @@ describe.skipIf(!redis)('hosted expansion jobs (real Redis)', () => {
     await cancelJob(new Request('http://x', { method: 'POST', ...as(owner) }), params(jobId));
     await running;
     expect(await (await getJob(new Request('http://x', as(owner)), params(jobId))).json()).toMatchObject({ status: 'cancelled' });
-    expect(serverDeps.store.getRevision(modelId)!.revision).toBe(1);
+    expect((await savedModel(owner, modelId))!.revision).toBe(1);
   }, 15_000);
 
   it('keeps the diagram unchanged when the expansion is cancelled while its result returns', async () => {
@@ -122,7 +128,7 @@ describe.skipIf(!redis)('hosted expansion jobs (real Redis)', () => {
     release();
     await running;
     expect(await (await getJob(new Request('http://x', as(owner)), params(jobId))).json()).toMatchObject({ status: 'cancelled' });
-    expect(serverDeps.store.getRevision(modelId)!.revision).toBe(1);
+    expect((await savedModel(owner, modelId))!.revision).toBe(1);
     expect((await getResult(new Request('http://x', as(owner)), params(jobId))).status).toBe(404);
   });
 

@@ -76,16 +76,13 @@ export async function postHostedDiagramJob(req: Request, jobs: HostedJobs | 'mis
   if (estimateTokens(JSON.stringify(op.rawModel ?? null) + op.texts.map(t => t.text).join('')) > PROMPT_TOKEN_LIMIT) return Response.json({ reason: 'oversized', message: OVERSIZED_COPY }, { status: 413, headers });
   const model = clientModel(op.rawModel, baseRevision);
   if (!model) return Response.json({ reason: 'invalid-model', error: 'This diagram could not be read. Reload it, or import a valid JSON export, and try again.' }, { status: 400, headers });
-  const localStore = process.env.VERCEL !== '1';
 
   try {
     // Another visitor's diagram id is refused before any paid work.
     const stored = await jobs.modelState(modelId, sessionId);
     if (stored.owner === 'other') return Response.json({ error: 'model not found' }, { status: 404, headers });
-    const local = localStore && serverDeps.store.getRevision(modelId);
-    if (local && serverDeps.store.getRevisionOwner(modelId) !== sessionId) return Response.json({ error: 'model not found' }, { status: 404, headers });
     // A newer saved revision means this page is behind: send it the latest instead of paying for a refusal.
-    const latest = local || (stored.model && typeof stored.model.revision === 'number' ? stored.model as SystemModel : null);
+    const latest = stored.model && typeof stored.model.revision === 'number' ? stored.model as SystemModel : null;
     if (latest && latest.revision !== baseRevision)
       return Response.json({ reason: 'stale-revision', message: 'The diagram changed since you loaded it — here is the latest.', model: latest, revision: latest.revision }, { status: 409, headers });
     const blocked = op.precheck?.(model);
@@ -111,15 +108,11 @@ export async function postHostedDiagramJob(req: Request, jobs: HostedJobs | 'mis
       if (sameModelContent(out.model, model)) return fail(NO_CHANGE_COPY);
       if (signal.aborted) return fail('Cancelled.');
       const changed = { ...out.model, privacy: privacyForMode(deployMode()) };
-      // A change saved while inference ran wins: the result applies only over its base revision.
-      // A development server's local store holds direct edits, so it decides there; Redis decides elsewhere.
-      const current = localStore && serverDeps.store.getRevisionOwner(modelId) === sessionId ? serverDeps.store.getRevision(modelId) : null;
-      if (current && current.revision !== baseRevision) return fail(STALE_COPY);
-      const saved = await jobs.putModel(modelId, sessionId, changed, current ? null : baseRevision, claim);
+      // A change saved while inference ran (an edit, undo or another tab's result) wins: the result applies only over its base revision.
+      const saved = await jobs.putModel(modelId, sessionId, changed, baseRevision, claim);
       if (saved === 'stale') return fail(STALE_COPY);
       if (saved === 'not-owner') return fail('This diagram is not available.');
       if (saved === 'cancelled') return fail('Cancelled.');
-      if (current) serverDeps.store.saveRevision(modelId, changed, sessionId);
       await jobs.putOwned('result', jobId, sessionId, { ...out.extra, model: changed });
       await report(out.usage.repairs > 0 ? 'repaired' : 'ok');
       return { status: 'succeeded', fields: { modelId, revision: changed.revision } };

@@ -9,10 +9,11 @@
  * UPSTASH_REDIS_REST_URL=https://fixture-redis.upstash.io, ARCHWOVEN_FIXTURE_REDIS pointing at a
  * disposable loopback Redis REST server, a session secret, ARCHWOVEN_DB inside a read-only directory
  * (any attempt to open it is logged as an error, which this script checks), and the fixture preload. Vercel's proxy sets x-vercel-forwarded-for; the
- * browser sends a documentation-range address in its place. This is not a Vercel deployment.
+ * browser sends a documentation-range address in its place. Set ARCHWOVEN_FIXTURE_LOG to the server's
+ * fixture log to check that edits send no AI request. This is not a Vercel deployment.
  */
 import { createRequire } from 'node:module';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const [base, out, tools, serverLog, engines = 'chromium,webkit'] = process.argv.slice(2);
@@ -26,6 +27,8 @@ const check = (scope, name, ok) => { results.push({ scope, name, ok: !!ok }); co
 const diagram = page => page.locator('.react-flow__node').first().waitFor({ timeout: 30_000 }).then(() => true, () => false);
 const benign = message => /^.*\/api\/jobs\/[0-9a-f-]{36} due to access control checks\.$/.test(message) || message === 'ResizeObserver loop completed with undelivered notifications.';
 let jobs = 0;
+const fixtureLog = process.env.ARCHWOVEN_FIXTURE_LOG;
+const messages = () => fixtureLog && existsSync(fixtureLog) ? readFileSync(fixtureLog, 'utf8').split('\n').filter(Boolean).length : 0;
 
 const landing = await fetch(base);
 check('server', 'the landing page renders', landing.status === 200 && /Archwoven/.test(await landing.text()));
@@ -58,13 +61,77 @@ for (const name of engines.split(',')) {
       await page.getByText('Edge Gateway').first().waitFor({ timeout: 30_000 }).catch(() => undefined);
       check(scope, 'a refinement job applies its result', await page.locator('.react-flow__node').filter({ hasText: 'Edge Gateway' }).count() === 1);
 
-      await page.getByRole('button', { name: 'Find node /', exact: true }).click();
-      await page.getByRole('textbox', { name: 'Find node', exact: true }).fill('Order Service');
-      await page.getByRole('textbox', { name: 'Find node', exact: true }).press('Enter');
-      await page.getByRole('textbox', { name: 'Element name', exact: true }).fill('Orders API');
-      await page.getByRole('button', { name: 'Save name', exact: true }).click();
-      check(scope, 'a direct edit explains that editing is not available yet, without breaking the workspace',
-        await page.getByText(/Editing and undo are not available in this deployment yet/).first().waitFor({ timeout: 10_000 }).then(() => true, () => false) && await diagram(page));
+      // Direct edits and undo on the hosted server copy: no AI request, kept across reloads.
+      const node = label => page.locator('.react-flow__node').filter({ hasText: label });
+      const find = async (target, label) => {
+        await target.getByRole('button', { name: 'Find node /', exact: true }).click();
+        await target.getByRole('textbox', { name: 'Find node', exact: true }).fill(label);
+        await target.getByRole('textbox', { name: 'Find node', exact: true }).press('Enter');
+      };
+      const renameTo = async (target, from, to) => {
+        await find(target, from);
+        await target.getByRole('textbox', { name: 'Element name', exact: true }).fill(to);
+        await target.getByRole('button', { name: 'Save name', exact: true }).click();
+      };
+      const sent = messages();
+      await renameTo(page, 'Order Service', 'Orders API');
+      check(scope, 'a direct edit is saved', await page.getByText('Name saved.').first().waitFor({ timeout: 10_000 }).then(() => true, () => false) && await node('Orders API').count() === 1);
+      await page.reload();
+      check(scope, 'the edit survives a reload', await diagram(page) && await node('Orders API').count() === 1);
+      await renameTo(page, 'Orders API', 'Order Desk');
+      await page.getByText('Name saved.').first().waitFor({ timeout: 10_000 }).catch(() => undefined);
+      await page.getByRole('button', { name: '↶ Undo', exact: true }).click();
+      await node('Orders API').first().waitFor({ timeout: 10_000 }).catch(() => undefined);
+      check(scope, 'undo restores the previous name', await node('Orders API').count() === 1 && await node('Order Desk').count() === 0);
+      await page.reload();
+      check(scope, 'the undo survives a reload', await diagram(page) && await node('Orders API').count() === 1);
+      check(scope, 'edits and undo sent no AI request', messages() === sent);
+
+      // Another tab's accepted change wins over a stale edit and over a late refinement.
+      const other = await context.newPage();
+      await other.goto(page.url());
+      await diagram(other);
+      await renameTo(other, 'Orders API', 'Orders From Tab B');
+      await other.getByText('Name saved.').first().waitFor({ timeout: 10_000 }).catch(() => undefined);
+      await renameTo(page, 'Orders API', 'Orders From Tab A');
+      check(scope, 'a stale edit is refused and the latest version is shown',
+        await page.getByText(/changed elsewhere/).first().waitFor({ timeout: 10_000 }).then(() => true, () => false) && await node('Orders From Tab B').count() === 1);
+      // The recorded refinement renames the gateway to Edge Gateway, so give it another name first.
+      await renameTo(page, 'Edge Gateway', 'API Gateway');
+      await page.getByText('Name saved.').first().waitFor({ timeout: 10_000 }).catch(() => undefined);
+      await other.reload();
+      await diagram(other);
+      await instruction.fill('Rename the API gateway to Edge Gateway');
+      await instruction.press('Enter');
+      await renameTo(other, 'Orders From Tab B', 'Orders Meanwhile');
+      await page.getByText(/changed while this request was running|changed since you loaded it/).first().waitFor({ timeout: 30_000 }).catch(() => undefined);
+      await page.screenshot({ path: join(out, `${name}-${width}-late-refinement.png`), fullPage: true });
+      check(scope, 'a late refinement over another tab\'s edit is refused and keeps the instruction',
+        await page.getByText(/changed while this request was running|changed since you loaded it/).first().isVisible() && await instruction.inputValue() === 'Rename the API gateway to Edge Gateway');
+      await other.close();
+      await instruction.fill('');
+
+      // Expansion starts from the component's detail view, opened by a direct edit.
+      await page.reload();
+      await diagram(page);
+      await find(page, 'Orders Meanwhile');
+      await page.getByRole('button', { name: 'Open detail', exact: true }).click();
+      const hint = page.getByRole('textbox', { name: 'Optional focus for the expansion', exact: true });
+      await hint.waitFor({ timeout: 10_000 }).catch(() => undefined);
+      await page.getByRole('button', { name: /Expand internals/ }).click();
+      check(scope, 'a component expands from its detail view', await page.getByText(/Added 2 inferred internals/).first().waitFor({ timeout: 30_000 }).then(() => true, () => false));
+
+      // Downloads and share cards are made in the browser from the diagram on screen.
+      for (const [label, pattern] of [['SVG', /\.svg$/], ['PNG', /\.png$/], ['JSON', /\.json$/]]) {
+        const [download] = await Promise.all([page.waitForEvent('download', { timeout: 15_000 }).catch(() => null), page.getByRole('button', { name: label, exact: true }).click()]);
+        check(scope, `${label} downloads`, !!download && pattern.test(download.suggestedFilename()));
+      }
+      await page.getByRole('group', { name: 'Diagram views' }).getByRole('button', { name: /^architecture$/i }).click();
+      await page.getByRole('combobox', { name: 'route from', exact: true }).selectOption('actor.user');
+      await page.getByRole('combobox', { name: 'route to', exact: true }).selectOption('datastore.postgres');
+      await page.getByRole('button', { name: '▶ probe', exact: true }).click();
+      const [card] = await Promise.all([page.waitForEvent('download', { timeout: 15_000 }).catch(() => null), page.getByRole('button', { name: '⤓ share', exact: true }).click()]);
+      check(scope, 'a share card downloads as PNG', !!card && /\.png$/.test(card.suggestedFilename()));
 
       await page.goto(`${base}/workspace`);
       await page.getByRole('button', { name: 'Import repository', exact: true }).click();
