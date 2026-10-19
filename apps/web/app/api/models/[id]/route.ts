@@ -1,6 +1,7 @@
 import { serverDeps, readOrCreateSession } from '../../../lib/server';
 import { hostedJobs, HOSTED_NOT_CONFIGURED_COPY, HOSTED_UNAVAILABLE_COPY } from '../../../lib/hosted-runner';
 import { putRestoredModel } from '../../../lib/hosted-model-edit';
+import { ownedModel } from '../../../lib/hosted-diagram-job';
 
 export const runtime = 'nodejs';
 
@@ -12,11 +13,12 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   const jobs = hostedJobs();
   if (jobs === 'misconfigured') return Response.json({ error: HOSTED_NOT_CONFIGURED_COPY }, { status: 503 });
   if (jobs) {
-    try {
-      const model = await jobs.getOwned('model', id, sessionId);
-      if (model) return Response.json({ model }, { headers: { 'cache-control': 'private, no-store' } });
-    } catch { return Response.json({ error: HOSTED_UNAVAILABLE_COPY }, { status: 503 }); }
-    return Response.json({ error: 'model not found' }, { status: 404 });
+    let stored;
+    try { stored = await ownedModel(jobs, id, sessionId); }
+    catch { return Response.json({ error: HOSTED_UNAVAILABLE_COPY }, { status: 503 }); }
+    if (stored.owner === 'self') return Response.json({ model: stored.model }, { headers: { 'cache-control': 'private, no-store' } });
+    // An expired or unreadable copy of one's own diagram can be put back from the browser.
+    return Response.json(stored.owner === 'absent' ? { error: 'model not found', reason: 'expired' } : { error: 'model not found' }, { status: 404 });
   }
   if (serverDeps.store.getRevisionOwner(id) === sessionId) {
     const model = serverDeps.store.getRevision(id);

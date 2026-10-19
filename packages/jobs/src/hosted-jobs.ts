@@ -182,6 +182,8 @@ if KEYS[2] then
 end
 local v = redis.call('HMGET', KEYS[1], 'owner', 'revision')
 if v[1] and v[1] ~= ARGV[1] then return 'not-owner' end
+-- A change based on a revision never recreates a diagram the server no longer holds (expired or deleted).
+if not v[1] and ARGV[3] ~= '' then return 'stale' end
 -- Records saved before revisions were tracked carry no revision field and are not checked.
 if v[1] and ARGV[3] ~= '' and v[2] and v[2] ~= ARGV[3] then return 'stale' end
 redis.call('HSET', KEYS[1], 'owner', ARGV[1], 'value', ARGV[2], 'revision', ARGV[4])

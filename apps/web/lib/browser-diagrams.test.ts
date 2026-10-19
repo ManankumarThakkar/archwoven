@@ -32,6 +32,12 @@ describe('diagrams kept in this browser', () => {
     expect(latestBrowserDiagram(storage)).toBe(id(1));
   });
 
+  it('never replaces a newer revision another tab kept with an older one', () => {
+    saveBrowserDiagram(id(1), model('Newer', 5), storage, now);
+    expect(saveBrowserDiagram(id(1), model('Older', 3), storage, now)).toBe('saved');
+    expect(loadBrowserDiagram(id(1), storage)).toEqual({ model: model('Newer', 5) });
+  });
+
   it(`keeps at most ${MAX_BROWSER_DIAGRAMS} diagrams, forgetting the least recently saved`, () => {
     for (let n = 1; n <= MAX_BROWSER_DIAGRAMS + 1; n++) saveBrowserDiagram(id(n), model(`Diagram ${n}`), storage, now);
     expect(loadBrowserDiagram(id(1), storage)).toBeNull();

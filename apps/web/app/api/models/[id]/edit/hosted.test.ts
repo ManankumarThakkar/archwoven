@@ -9,6 +9,7 @@ import { GET as getModel } from '../route';
 import { GET as getQuota } from '../../../quota/route';
 import { POST as edit } from './route';
 import { POST as undo } from '../undo/route';
+import { EDIT_LIMITS } from '../../../../lib/hosted-model-edit';
 
 const redis = await startTestRedis();
 if (!redis && process.env.CI) throw new Error('CI must provide Redis for the hosted editing tests.');
@@ -137,6 +138,39 @@ describe.skipIf(!redis)('hosted direct edits and undo (real Redis)', () => {
     const stale = await undoReq(id, owner, { prevRevision: 1, baseRevision: 2, previous: before });
     expect(stale.status).toBe(409);
     expect(await stale.json()).toMatchObject({ reason: 'stale-revision', model: { revision: 3 } });
+  });
+
+  it('bounds the earlier version an undo may send to what a browser copy can hold', async () => {
+    const { owner, id } = await diagram();
+    const before = await saved(id, owner);
+    await editReq(id, owner, rename(1, 'Edge Gateway'));
+    const big = { ...before, title: 'x'.repeat(600_000) };
+    expect((await undoReq(id, owner, { prevRevision: 1, baseRevision: 2, previous: big })).status).toBe(413);
+  });
+
+  it('limits free edits per visitor so a loop cannot exhaust shared Redis', async () => {
+    const { owner, id } = await diagram();
+    const limit = EDIT_LIMITS.visitor;
+    EDIT_LIMITS.visitor = 2;
+    try {
+      expect((await editReq(id, owner, rename(1, 'One'))).status).toBe(200);
+      expect((await editReq(id, owner, rename(2, 'Two'))).status).toBe(200);
+      const refused = await editReq(id, owner, rename(3, 'Three'));
+      expect(refused.status).toBe(429);
+      expect((await refused.json()).message).toMatch(/many changes/);
+      expect((await saved(id, owner)).revision).toBe(3);
+    } finally { EDIT_LIMITS.visitor = limit; }
+  });
+
+  it('treats an unreadable server copy as expired, so the browser copy can replace it', async () => {
+    const { owner, id } = await diagram();
+    const jobs = hostedJobs(); if (!jobs || jobs === 'misconfigured') throw new Error('hosted jobs unavailable');
+    await jobs.putOwned('model', id, sessionOf(owner), { revision: 'not a diagram' });
+    const read = await getModel(new Request('http://x', { headers: { cookie: owner } }), params(id));
+    expect(read.status).toBe(404);
+    expect(await read.json()).toMatchObject({ reason: 'expired' });
+    expect((await editReq(id, owner, rename(1, 'Edge'))).status).toBe(404);
+    expect((await jobs.modelState(id, sessionOf(owner))).owner).toBe('absent');
   });
 
   it('refuses edits when Redis is unreachable, without falling back to anything else', async () => {

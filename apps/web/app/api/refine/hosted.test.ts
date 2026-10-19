@@ -8,7 +8,7 @@ import { POST as refine } from './route';
 import { GET as getJob } from '../jobs/[id]/route';
 import { POST as cancelJob } from '../jobs/[id]/cancel/route';
 import { GET as getResult } from '../jobs/[id]/result/route';
-import { GET as getModel } from '../models/[id]/route';
+import { GET as getModel, DELETE as deleteModel } from '../models/[id]/route';
 import { GET as getQuota } from '../quota/route';
 import { POST as editModel } from '../models/[id]/edit/route';
 import { POST as undoModel } from '../models/[id]/undo/route';
@@ -188,14 +188,25 @@ describe.skipIf(!redis)('hosted refinement jobs (real Redis)', () => {
     expect((await savedModel(owner, modelId)).revision).toBe(1);
   }, 15_000);
 
-  it('refines a diagram the server no longer holds (its 24-hour copy expired) from the browser copy', async () => {
+  it('refuses to refine a diagram whose server copy expired, before any paid work, so the page restores it first', async () => {
     const owner = await stranger(), modelId = crypto.randomUUID();
-    const started = await post(refine, '/api/refine', refineBody(modelId), owner);
-    expect(started.status).toBe(202);
-    const { jobId } = await started.json();
+    const refineCall = vi.fn(); serverDeps.generateRefinement = refineCall;
+    const response = await post(refine, '/api/refine', refineBody(modelId), owner);
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({ reason: 'expired' });
+    expect(scheduled).toHaveLength(0); expect(refineCall).not.toHaveBeenCalled();
+  });
+
+  it('does not bring back a diagram deleted while its refinement ran', async () => {
+    const { owner, modelId } = await diagram();
+    serverDeps.generateRefinement = async () => {
+      await deleteModel(new Request('http://x', { method: 'DELETE', headers: { cookie: owner } }), params(modelId));
+      return { ok: true as const, ops: [rename], usage };
+    };
+    const { jobId } = await (await post(refine, '/api/refine', refineBody(modelId), owner)).json();
     await drain();
-    expect(await (await getJob(new Request('http://x', as(owner)), params(jobId))).json()).toMatchObject({ status: 'succeeded', modelId, revision: 2 });
-    expect((await (await getModel(new Request('http://x', as(owner)), params(modelId))).json()).model.revision).toBe(2);
+    expect(await (await getJob(new Request('http://x', as(owner)), params(jobId))).json()).toMatchObject({ status: 'failed', error: STALE_COPY });
+    expect((await getModel(new Request('http://x', as(owner)), params(modelId))).status).toBe(404);
   });
 
   it('on Vercel without valid hosted storage, refuses edits and undo with an explanation', async () => {

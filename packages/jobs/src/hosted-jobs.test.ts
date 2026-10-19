@@ -205,9 +205,10 @@ describe.skipIf(!redis)('hosted job lifecycle (real Redis)', () => {
     expect(await queue.putModel(model, 'a', { revision: 3, title: 'late' }, 2)).toBe('stale');
     expect(await queue.putModel(model, 'a', { revision: 2, title: 'v2' }, 1)).toBe('ok');
     expect(await queue.getOwned('model', model, 'a')).toEqual({ revision: 2, title: 'v2' });
-    // A model the server no longer holds (expired) is recorded again from its owner's refinement.
+    // A change based on a revision never creates a diagram the server does not hold (expired or deleted).
     const fresh = id();
-    expect(await queue.putModel(fresh, 'a', { revision: 5 }, 4)).toBe('ok');
+    expect(await queue.putModel(fresh, 'a', { revision: 5 }, 4)).toBe('stale');
+    expect(await queue.getOwned('model', fresh, 'a')).toBeNull();
     await queue.putOwned('result', fresh, 'a', { ops: [] });
     expect(await queue.getOwned('result', fresh, 'a')).toEqual({ ops: [] });
     expect(await queue.getOwned('result', fresh, 'b')).toBeNull();

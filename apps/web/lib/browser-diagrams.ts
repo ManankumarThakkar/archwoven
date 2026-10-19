@@ -38,6 +38,9 @@ export function saveBrowserDiagram(id: string, model: SystemModel, storage: Stor
   try {
     const entry = JSON.stringify({ v: 1, savedAt: now(), model } satisfies Entry);
     if (entry.length > MAX_BROWSER_DIAGRAM_BYTES) return 'too-large';
+    // Another tab may have kept a newer revision; an older page never replaces it.
+    const kept = loadBrowserDiagram(id, storage);
+    if (kept && 'model' in kept && kept.model.revision > model.revision) return 'saved';
     const others = saved(storage).filter(e => e.id !== id);
     while (others.length >= MAX_BROWSER_DIAGRAMS) storage.removeItem(PREFIX + others.pop()!.id);
     for (;;) {

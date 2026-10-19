@@ -84,6 +84,17 @@ describe.skipIf(!redis)('browser copies on hosted deployments (real Redis)', () 
     expect((await restore(crypto.randomUUID(), owner, { model: edited() })).status).toBe(429);
   });
 
+  it('names which limit was reached when shared copies run out', async () => {
+    const limit = COPY_LIMITS.global;
+    COPY_LIMITS.global = 1;
+    try {
+      expect((await importing(await visitor(), { model: edited() })).status).toBe(201);
+      const refused = await importing(await visitor(), { model: edited() });
+      expect(refused.status).toBe(429);
+      expect((await refused.json()).message).toMatch(/^Archwoven has restored or imported/);
+    } finally { COPY_LIMITS.global = limit; }
+  });
+
   it('refuses copies without falling back when Redis is unreachable', async () => {
     const owner = await visitor();
     redis!.setDown(true);
@@ -91,6 +102,17 @@ describe.skipIf(!redis)('browser copies on hosted deployments (real Redis)', () 
       expect((await importing(owner, { model: edited() })).status).toBe(503);
       expect((await restore(crypto.randomUUID(), owner, { model: edited() })).status).toBe(503);
     } finally { redis!.setDown(false); }
+  });
+});
+
+describe('JSON import without hosted job storage', () => {
+  beforeEach(() => { vi.stubEnv('ARCHWOVEN_MODE', 'hosted'); vi.stubEnv('UPSTASH_REDIS_REST_URL', ''); vi.stubEnv('UPSTASH_REDIS_REST_TOKEN', ''); vi.stubEnv('ARCHWOVEN_REDIS_PREFIX', ''); vi.stubEnv('VERCEL', ''); serverDeps.store = openStore(':memory:'); });
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('is refused on a public single-server deployment, which has no limit for free writes', async () => {
+    const response = await importing('aw_sid=someone', { model: edited() });
+    expect(response.status).toBe(503);
+    expect((await response.json()).message).toMatch(/not available in this deployment/);
   });
 });
 

@@ -227,8 +227,9 @@ export default function WorkspacePage() {
       const hash = new URLSearchParams(window.location.hash.slice(1));
       let saved: string | null = null;
       try { saved = sessionStorage.getItem('aw_modelId'); } catch { /* permalink still works */ }
-      // A closed tab reopens the diagram this browser kept most recently.
-      const id = hash.get('model') || saved || (copiesRef.current ? latestBrowserDiagram() : null);
+      // A closed tab reopens the diagram this browser kept most recently (a link without a diagram id is explained instead).
+      const interaction = ['focus', 'lens', 'route', 'chapter', 'relation'].some((key) => hash.has(key));
+      const id = hash.get('model') || saved || (copiesRef.current && !interaction ? latestBrowserDiagram() : null);
       const pending = storedJob();
       if (id) await loadModel(id);
       else if (!pending && ['focus', 'lens', 'route', 'chapter', 'relation'].some((key) => hash.has(key))) {
@@ -436,6 +437,8 @@ export default function WorkspacePage() {
   /** A hosted diagram job (refinement, expansion): wait for it, then apply the result. Failures keep what the user typed. */
   const finishHostedJob = async (jobId: string, diagramId: string, baseRevision: number, copy: { name: string; failed: string; done: (result: { model: SystemModel; ops?: EditOp[] }) => string }): Promise<boolean> => {
     const job = await waitForJob(jobId);
+    // The visitor opened another diagram meanwhile: never apply (or keep) this result under that one.
+    if (requestedModelRef.current !== diagramId) { setSummary(`The ${copy.name} finished for a diagram that is no longer open. Open that diagram again to see its latest version.`); return false; }
     if (!job) { setSummary(`Connection lost. The ${copy.name} may still finish; reload this page to see the latest diagram.`); return false; }
     if (job.status !== 'succeeded') {
       const reason = job.status === 'cancelled' ? `${copy.name[0]!.toUpperCase()}${copy.name.slice(1)} cancelled.` : job.error || copy.failed;
@@ -464,11 +467,11 @@ export default function WorkspacePage() {
     mutationRef.current=true;
     setRefining(true);
     try {
-      const res = await fetch('/api/refine', {
+      const res = await withServerCopy(() => fetch('/api/refine', {
         method: 'POST', headers: { 'content-type': 'application/json' },
         // Hosted servers refine the diagram this page holds; the server keeps it only for 24 hours.
         body: JSON.stringify({ modelId, baseRevision: model.revision, instruction, view: (model.views.find((v) => v.id === activeView) ?? model.views[0])?.type ?? 'architecture', model }),
-      });
+      }));
       if (res.status === 202) return await finishHostedJob((await res.json() as { jobId: string }).jobId, modelId, model.revision,
         { name: 'refinement', failed: 'Refinement failed. Please try again.', done: r => r.ops ? summarizeOps(r.ops) : 'Refined.' });
       if (res.status === 409) {
@@ -537,7 +540,10 @@ export default function WorkspacePage() {
     if (first.status !== 404 || !copiesRef.current || !model || !modelId) return first;
     const reason = (await first.clone().json().catch(() => null) as { reason?: unknown } | null)?.reason;
     if (reason !== 'expired') return first;
-    const put = await fetch(`/api/models/${encodeURIComponent(modelId)}`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ model }) }).catch(() => null);
+    // Another tab may have kept a newer revision than this page: put the newest copy back.
+    const kept = loadBrowserDiagram(modelId);
+    const newest = kept && 'model' in kept && kept.model.revision > model.revision ? kept.model : model;
+    const put = await fetch(`/api/models/${encodeURIComponent(modelId)}`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ model: newest }) }).catch(() => null);
     return put && (put.ok || put.status === 409) ? send() : first;
   };
 
@@ -566,7 +572,7 @@ export default function WorkspacePage() {
     setSummary(`Expanding ${label}…`);
     try {
       // Hosted servers expand the diagram this page holds; the server keeps it only for 24 hours.
-      const res = await fetch(`/api/models/${modelId}/expand`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ baseRevision: model.revision, target, ...(hint ? { hint } : {}), model }) });
+      const res = await withServerCopy(() => fetch(`/api/models/${modelId}/expand`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ baseRevision: model.revision, target, ...(hint ? { hint } : {}), model }) }));
       if (res.status === 202) return await finishHostedJob((await res.json() as { jobId: string }).jobId, modelId, model.revision,
         { name: 'expansion', failed: 'Could not expand this component. Try again.', done: r => `Added ${internalsOf(r.model, target).length} inferred internals to ${label}.` });
       if (res.status === 409) {

@@ -158,6 +158,29 @@ describe('hosted refinement jobs', () => {
     expect(container.textContent).toContain('Edge Gateway');
     expect(box.value).toBe('');
   });
+  it('drops a result for a diagram that is no longer open', async () => {
+    window.history.replaceState(null, '', '/workspace#model=m1');
+    const second = structuredClone(validFullModelExtended); second.nodes.find(n => n.id === 'gateway.api')!.label = 'Second diagram';
+    const refined = structuredClone(validFullModelExtended); refined.revision += 1; refined.nodes.find(n => n.id === 'gateway.api')!.label = 'Edge Gateway';
+    let switched = false;
+    transport = (input) => {
+      if (input === '/api/models/m2') return Response.json({ model: second });
+      if (input === '/api/refine') return Response.json({ jobId: 'refine-job', remaining: null, resumable: true }, { status: 202 });
+      if (input === '/api/jobs/refine-job') return Response.json(switched ? { status: 'succeeded', modelId: 'm1', revision: refined.revision } : { status: 'running', pollAfterMs: 100 });
+      if (input === '/api/jobs/refine-job/result') return Response.json({ model: refined });
+      return undefined;
+    };
+    await mount(); await settle();
+    await refineIn('Rename the gateway to Edge Gateway');
+    window.location.hash = 'model=m2';
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+    await settle();
+    switched = true;
+    await settle();
+    expect(container.querySelector('[aria-label="Rendered API"]')!.textContent).toBe('Second diagram');
+    expect(container.textContent).toContain('finished for a diagram that is no longer open');
+  });
+
   it('shows the latest saved diagram when a failed refinement left the server copy newer than this page', async () => {
     window.history.replaceState(null, '', '/workspace#model=m1');
     const newer = structuredClone(validFullModelExtended); newer.revision = validFullModelExtended.revision + 1; newer.nodes.find(n => n.id === 'gateway.api')!.label = 'Saved Elsewhere';
@@ -1519,6 +1542,44 @@ describe('diagrams kept in this browser', () => {
     await fill('input[aria-label="Element name"]', 'Edge'); await click('Save name'); await settle();
     expect([edits, puts]).toEqual([2, 1]);
     expect(container.querySelector('[aria-label="Rendered API"]')!.textContent).toBe('Edge');
+  });
+
+  it("restores the newest copy, even when another tab kept a newer revision than this page", async () => {
+    window.history.replaceState(null, '', '/workspace#model=m1');
+    const newer = structuredClone(validFullModelExtended); newer.revision += 2; newer.parentId = newer.revision - 1; newer.nodes.find(n => n.id === 'gateway.api')!.label = 'Newer';
+    keep('m1', newer);
+    const restoredRevisions: number[] = [];
+    transport = (input, init) => hostedQuota(input) ?? (
+      input === '/api/models/m1/edit' ? (restoredRevisions.length ? Response.json({ reason: 'stale-revision', message: 'The diagram changed elsewhere.', model: newer }, { status: 409 }) : Response.json({ reason: 'expired', message: 'expired' }, { status: 404 })) :
+      input === '/api/models/m1' && init?.method === 'PUT' ? (restoredRevisions.push(JSON.parse(String(init.body)).model.revision), Response.json({ model: newer })) : undefined);
+    await mount(); await settle();
+    expect(JSON.parse(localStorage.getItem(copyKey('m1'))!).model.revision).toBe(newer.revision);
+    await click('Inspect API');
+    await fill('input[aria-label="Element name"]', 'Mine'); await click('Save name'); await settle();
+    expect(restoredRevisions).toEqual([newer.revision]);
+    expect(container.querySelector('[aria-label="Rendered API"]')!.textContent).toBe('Newer');
+  });
+
+  it('does not apply a link without a diagram id to the last kept diagram', async () => {
+    keep('m2');
+    window.history.replaceState(null, '', '/workspace#focus=gateway.api');
+    transport = hostedQuota;
+    await mount(); await settle();
+    expect(requests).not.toContain('/api/models/m2');
+    expect(container.textContent).toContain('This link does not include a saved diagram');
+  });
+
+  it('puts an expired server copy back before refining', async () => {
+    window.history.replaceState(null, '', '/workspace#model=m1');
+    let refines = 0, puts = 0;
+    transport = (input, init) => hostedQuota(input) ?? (
+      input === '/api/refine' ? (++refines === 1 ? Response.json({ reason: 'expired', message: 'expired' }, { status: 404 }) : Response.json({ error: 'stop here' }, { status: 400 })) :
+      input === '/api/models/m1' && init?.method === 'PUT' ? (++puts, Response.json({ model: validFullModelExtended })) : undefined);
+    await mount(); await settle();
+    const box = container.querySelector<HTMLInputElement>('input[placeholder^="Refine:"]')!;
+    await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(box, 'Add a cache'); box.dispatchEvent(new Event('input', { bubbles: true })); });
+    await click('Refine'); await settle();
+    expect([refines, puts]).toEqual([2, 1]);
   });
 
   it('opens a JSON download as a new diagram', async () => {
