@@ -62,3 +62,36 @@ describe('boot hook retention', () => {
     await expect(register()).resolves.toBeUndefined();
   });
 });
+
+describe('boot hook on Vercel', () => {
+  const vercel = (database: string) => {
+    for (const [key, value] of Object.entries({ NEXT_RUNTIME: 'nodejs', ARCHWOVEN_MODE: 'hosted', ARCHWOVEN_FAKE: '0', VERCEL: '1', VERCEL_ENV: 'preview', ARCHWOVEN_DB: database })) vi.stubEnv(key, value);
+  };
+
+  it('boots a hosted deployment without creating SQLite or starting the retention sweep', async () => {
+    const database = join(mkdtempSync(join(tmpdir(), 'aw-vercel-')), 'absent', 'db.sqlite');
+    vercel(database);
+    for (const [key, value] of Object.entries({ UPSTASH_REDIS_REST_URL: 'https://example-test.upstash.io', UPSTASH_REDIS_REST_TOKEN: 'test-token-not-a-credential', ARCHWOVEN_REDIS_PREFIX: 'archwoven-preview:', ARCHWOVEN_SESSION_SECRET: 's'.repeat(40) })) vi.stubEnv(key, value);
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { register } = await import('./instrumentation');
+    await register();
+    expect(existsSync(database)).toBe(false);
+    expect(sweeper.start).not.toHaveBeenCalled();
+    expect(errors).not.toHaveBeenCalled();
+    errors.mockRestore();
+  });
+
+  it('reports missing hosted job storage at boot, naming the variables but never their values', async () => {
+    const database = join(mkdtempSync(join(tmpdir(), 'aw-vercel-')), 'absent', 'db.sqlite');
+    vercel(database);
+    for (const [key, value] of Object.entries({ UPSTASH_REDIS_REST_URL: 'https://example-test.upstash.io', UPSTASH_REDIS_REST_TOKEN: 'secret-token-value', ARCHWOVEN_REDIS_PREFIX: '', ARCHWOVEN_SESSION_SECRET: '' })) vi.stubEnv(key, value);
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { register } = await import('./instrumentation');
+    await register();
+    const logged = errors.mock.calls.flat().join('\n');
+    expect(logged).toMatch(/UPSTASH_REDIS_REST_URL.*ARCHWOVEN_SESSION_SECRET/s);
+    expect(logged).not.toContain('secret-token-value');
+    expect(existsSync(database)).toBe(false);
+    errors.mockRestore();
+  });
+});

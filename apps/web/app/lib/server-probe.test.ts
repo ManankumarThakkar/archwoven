@@ -17,3 +17,15 @@ it('does not open SQLite when Next preloads application routes in diagnostic mod
     expect(existsSync(database)).toBe(false);
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
+
+it('never opens SQLite on Vercel, where the hosted application keeps no local database', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'aw-vercel-import-'));
+  const database = join(directory, 'must-not-exist', 'data.db');
+  vi.stubEnv('VERCEL', '1');
+  vi.stubEnv('ARCHWOVEN_DB', database);
+  try {
+    const { serverDeps } = await import('./server');
+    expect(() => serverDeps.store).toThrow(/no local database on Vercel/i);
+    expect(existsSync(database)).toBe(false);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});

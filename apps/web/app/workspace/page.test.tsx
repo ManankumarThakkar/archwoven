@@ -1395,6 +1395,17 @@ describe('deleting a diagram', () => {
     await mount();
     expect(container.querySelector('#retention-note')?.textContent).toBe('Stored on this machine until you delete it.');
   });
+
+  it('states the 24-hour server copy when hosted jobs keep diagrams in Redis', async () => {
+    transport = (input, init) => {
+      if (input === '/api/quota') return Response.json({ remaining: null, pool: null, fake: false });
+      if (input === '/api/models/m1' && !init) return Response.json({ model: validFullModelExtended });
+      return undefined;
+    };
+    await mount();
+    await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+    expect(container.querySelector('#retention-note')?.textContent).toBe('The server keeps this diagram for 24 hours after its last change.');
+  });
 });
 
 describe('quota refusals', () => {

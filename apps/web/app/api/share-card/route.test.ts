@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { validFullModel, validFullModelExtended } from '@archwoven/model';
 import { openStore } from '@archwoven/jobs';
 import { serverDeps } from '../../lib/server';
@@ -104,5 +104,15 @@ describe('card content follows the requested view', () => {
     expect(overview).not.toMatch(/\+\d+ more hops/);
     const unscoped = buildCardSvg(m, 'missing-view', 'route', 'actor.user', 'datastore.postgres');
     expect(unscoped).not.toContain('API Gateway');
+  });
+});
+
+describe('share cards on Vercel', () => {
+  afterEach(() => vi.unstubAllEnvs());
+  it('explains that cards are unavailable instead of reaching for a local database', async () => {
+    vi.stubEnv('VERCEL', '1');
+    const res = await POST(req({ modelId: 'm1', kind: 'route', from: 'actor.user', to: 'datastore.postgres' }));
+    expect(res.status).toBe(503);
+    expect((await res.json()).message).toMatch(/not available in this deployment.*SVG or PNG/);
   });
 });
