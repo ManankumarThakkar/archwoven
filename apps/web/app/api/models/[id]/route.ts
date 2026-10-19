@@ -1,5 +1,6 @@
 import { serverDeps, readOrCreateSession } from '../../../lib/server';
 import { hostedJobs, HOSTED_NOT_CONFIGURED_COPY, HOSTED_UNAVAILABLE_COPY } from '../../../lib/hosted-runner';
+import { putRestoredModel } from '../../../lib/hosted-model-edit';
 
 export const runtime = 'nodejs';
 
@@ -37,4 +38,9 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }
   } else if (serverDeps.store.getRevisionOwner(id) === sessionId) { serverDeps.store.deleteModel(id); deleted = true; }
   if (!deleted) return Response.json({ error: 'model not found' }, { status: 404 });
   return Response.json({ deleted: true });
+}
+
+// Put this browser's saved copy back after the 24-hour server copy expired (hosted only).
+export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  return putRestoredModel(req, hostedJobs(), (await ctx.params).id);
 }

@@ -213,6 +213,26 @@ describe.skipIf(!redis)('hosted job lifecycle (real Redis)', () => {
     expect(await queue.getOwned('result', fresh, 'b')).toBeNull();
   });
 
+  it('restores a diagram only where the server holds no copy, and never over another one', async () => {
+    const queue = jobs(), model = id();
+    expect(await queue.restoreModel(model, 'a', { revision: 4, title: 'from the browser' })).toBe('ok');
+    expect(await queue.getOwned('model', model, 'a')).toEqual({ revision: 4, title: 'from the browser' });
+    expect(await queue.restoreModel(model, 'a', { revision: 9, title: 'older tab' })).toBe('exists');
+    expect(await queue.restoreModel(model, 'b', { revision: 9, title: 'someone else' })).toBe('not-owner');
+    expect(await queue.getOwned('model', model, 'a')).toEqual({ revision: 4, title: 'from the browser' });
+    expect(await raw()(['TTL', `archwoven-test:model:${model}`])).toBeGreaterThan(RESULT_TTL_SECONDS - 5);
+  });
+
+  it('counts free writes per identity within a window, without storing the identity', async () => {
+    const queue = jobs();
+    for (let i = 0; i < 3; i++) expect(await queue.allow('copies', 'visitor-a', 3, 86_400)).toBe(true);
+    expect(await queue.allow('copies', 'visitor-a', 3, 86_400)).toBe(false);
+    expect(await queue.allow('copies', 'visitor-b', 3, 86_400)).toBe(true);
+    const keys = await raw()(['KEYS', 'archwoven-test:rate:*']) as string[];
+    expect(keys.join(' ')).not.toContain('visitor-a');
+    expect(await raw()(['TTL', keys[0]!])).toBeGreaterThan(86_000);
+  });
+
   it('expires job state and owned results after 24 hours, keyed without raw session ids', async () => {
     const queue = jobs(), job = id();
     await queue.admit(job, 'session-secret-value', 'generate', 'k1', limits);

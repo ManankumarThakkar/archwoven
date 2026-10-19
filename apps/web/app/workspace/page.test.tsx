@@ -1406,7 +1406,7 @@ describe('deleting a diagram', () => {
     };
     await mount();
     await act(async () => { await new Promise(r => setTimeout(r, 20)); });
-    expect(container.querySelector('#retention-note')?.textContent).toBe('The server keeps this diagram for 24 hours after its last change.');
+    expect(container.querySelector('#retention-note')?.textContent).toMatch(/^The server keeps this diagram for 24 hours after its last change/);
   });
 });
 
@@ -1422,5 +1422,133 @@ describe('quota refusals', () => {
     await act(async () => { await vi.waitFor(() => expect(container.textContent).toContain(title)); });
     expect(container.textContent).toContain(message);
     expect(container.textContent).not.toMatch(/sign in|GitHub for/i);
+  });
+});
+
+describe('diagrams kept in this browser', () => {
+  const copyKey = (id: string) => `aw:diagram:v1:${id}`;
+  const hostedQuota = (input: string) => input === '/api/quota' ? Response.json({ remaining: null, pool: null, fake: false }) : undefined;
+  const settle = async () => { for (let i = 0; i < 10; i++) await act(async () => { await new Promise(r => setTimeout(r, 10)); }); };
+  const keep = (id: string, model: unknown = validFullModelExtended) => localStorage.setItem(copyKey(id), JSON.stringify({ v: 1, savedAt: Date.now(), model }));
+  const rendered = () => container.querySelector('[aria-label="Rendered view"]');
+  const gone = () => Response.json({ error: 'model not found' }, { status: 404 });
+  const chooseFile = async (text: string, name = 'diagram.json') => {
+    const input = container.querySelector<HTMLInputElement>('input[type="file"][aria-label="Open a JSON download"]')!;
+    expect(input).not.toBeNull();
+    Object.defineProperty(input, 'files', { configurable: true, value: [new File([text], name, { type: 'application/json' })] });
+    await act(async () => { input.dispatchEvent(new Event('change', { bubbles: true })); });
+    await settle();
+  };
+
+  it('keeps a copy of the diagram on screen', async () => {
+    window.history.replaceState(null, '', '/workspace#model=m1');
+    transport = hostedQuota;
+    await mount(); await settle();
+    expect(JSON.parse(localStorage.getItem(copyKey('m1'))!).model.revision).toBe(validFullModelExtended.revision);
+    expect(container.querySelector('#retention-note')?.textContent).toMatch(/24 hours.*this browser keeps a copy/s);
+  });
+
+  it('restores a diagram whose server copy expired from this browser, and says so', async () => {
+    window.history.replaceState(null, '', '/workspace#model=m1');
+    keep('m1');
+    const restored: unknown[] = [];
+    transport = (input, init) => hostedQuota(input) ?? (input === '/api/models/m1' && init?.method === 'PUT'
+      ? (restored.push(JSON.parse(String(init.body))), Response.json({ model: validFullModelExtended }))
+      : input === '/api/models/m1' ? gone() : undefined);
+    await mount(); await settle();
+    expect(restored).toEqual([{ model: validFullModelExtended }]);
+    expect(rendered()).not.toBeNull();
+    expect(container.textContent).toContain('The server copy had expired, so this diagram was restored from this browser.');
+  });
+
+  it('explains when neither the server nor this browser has the diagram', async () => {
+    window.history.replaceState(null, '', '/workspace#model=m1');
+    transport = input => hostedQuota(input) ?? (input === '/api/models/m1' ? gone() : undefined);
+    await mount(); await settle();
+    expect(rendered()).toBeNull();
+    expect(container.textContent).toContain('no longer on the server');
+    expect(container.textContent).toContain('Open a JSON download');
+  });
+
+  it("removes and explains a browser copy that cannot be read", async () => {
+    window.history.replaceState(null, '', '/workspace#model=m1');
+    localStorage.setItem(copyKey('m1'), '{not json');
+    transport = input => hostedQuota(input) ?? (input === '/api/models/m1' ? gone() : undefined);
+    await mount(); await settle();
+    expect(container.textContent).toContain("this browser's copy could not be read");
+    expect(localStorage.getItem(copyKey('m1'))).toBeNull();
+  });
+
+  it('reopens the most recently kept diagram after the tab was closed', async () => {
+    keep('m2');
+    transport = input => hostedQuota(input) ?? (input === '/api/models/m2' ? Response.json({ model: validFullModelExtended }) : undefined);
+    await mount(); await settle();
+    expect(requests).toContain('/api/models/m2');
+    expect(rendered()).not.toBeNull();
+  });
+
+  it('forgets the browser copy when the diagram is deleted', async () => {
+    window.history.replaceState(null, '', '/workspace#model=m1');
+    transport = (input, init) => hostedQuota(input) ?? (input === '/api/models/m1' && init?.method === 'DELETE' ? Response.json({ deleted: true }) : undefined);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    await mount(); await settle();
+    expect(localStorage.getItem(copyKey('m1'))).not.toBeNull();
+    await click('Delete diagram'); await settle();
+    expect(localStorage.getItem(copyKey('m1'))).toBeNull();
+  });
+
+  it('says when this browser cannot keep a copy', async () => {
+    window.history.replaceState(null, '', '/workspace#model=m1');
+    vi.spyOn(localStorage, 'setItem').mockImplementation(() => { throw new DOMException('denied', 'SecurityError'); });
+    transport = hostedQuota;
+    await mount(); await settle();
+    expect(container.textContent).toContain('This browser is not keeping a copy');
+    expect(rendered()).not.toBeNull();
+  });
+
+  it('puts an expired server copy back from the page and retries the edit', async () => {
+    window.history.replaceState(null, '', '/workspace#model=m1');
+    const renamed = applyEditOps(validFullModelExtended, [{ op: 'update', target: 'gateway.api', patch: { label: 'Edge' }, baseRevision: validFullModelExtended.revision, summary: 'rename' }]);
+    if (!renamed.ok) throw new Error('fixture');
+    let edits = 0, puts = 0;
+    transport = (input, init) => hostedQuota(input) ?? (
+      input === '/api/models/m1/edit' ? (++edits === 1 ? Response.json({ reason: 'expired', message: 'expired' }, { status: 404 }) : Response.json({ model: renamed.model })) :
+      input === '/api/models/m1' && init?.method === 'PUT' ? (++puts, Response.json({ model: validFullModelExtended })) : undefined);
+    await mount(); await settle();
+    await click('Inspect API');
+    await fill('input[aria-label="Element name"]', 'Edge'); await click('Save name'); await settle();
+    expect([edits, puts]).toEqual([2, 1]);
+    expect(container.querySelector('[aria-label="Rendered API"]')!.textContent).toBe('Edge');
+  });
+
+  it('opens a JSON download as a new diagram', async () => {
+    const imported: unknown[] = [];
+    transport = (input, init) => hostedQuota(input) ?? (
+      input === '/api/models' && init?.method === 'POST' ? (imported.push(JSON.parse(String(init.body))), Response.json({ id: 'm9', model: validFullModelExtended }, { status: 201 })) :
+      input === '/api/models/m9' ? Response.json({ model: validFullModelExtended }) : undefined);
+    await mount(); await settle();
+    await chooseFile(JSON.stringify(validFullModelExtended));
+    expect(imported).toEqual([{ model: validFullModelExtended }]);
+    expect(rendered()).not.toBeNull();
+    expect(window.location.hash).toContain('model=m9');
+  });
+
+  it('refuses a file that is not an Archwoven diagram without sending it', async () => {
+    transport = hostedQuota;
+    await mount(); await settle();
+    await chooseFile('{"title":"something else"}');
+    await chooseFile('not json at all');
+    expect(requests).not.toContain('/api/models');
+    expect(container.textContent).toContain('This file is not an Archwoven diagram');
+    await chooseFile('x'.repeat(600_000));
+    expect(container.textContent).toContain('too large to open');
+  });
+
+  it('keeps nothing in the browser in local mode', async () => {
+    window.history.replaceState(null, '', '/workspace#model=m1');
+    transport = input => input === '/api/config' ? Response.json({ mode: 'local', llmReady: true }) : undefined;
+    await mount(); await settle();
+    expect(rendered()).not.toBeNull();
+    expect(Object.keys(localStorage).some(key => key.startsWith('aw:diagram:'))).toBe(false);
   });
 });
