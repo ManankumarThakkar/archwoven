@@ -99,7 +99,7 @@ The workspace's **Last task** summary shows reported tokens, repairs and an esti
 
 `ARCHWOVEN_HOSTED_MODEL` selects the hosted model on the server: `claude-opus-5-5` (default), `claude-sonnet-5-5`, or `claude-haiku-5-5`. Restart after changing it. Requests and repairs keep the model selected when their task began; visitors cannot select a model through the API. Supporting a model does not establish its diagram quality; the measured results above remain Opus results until a comparison is completed.
 
-Hosted estimates use the model's [standard Anthropic API rates](https://platform.claude.com/docs/en/about-claude/pricing), including 5-minute cache writes. Haiku's long-context tier is calculated per attempt, including cached input. Unknown prices or ambiguous legacy totals show “Cost unavailable”; interrupted tasks disclose incomplete usage. These estimates are not the planned reservation-based spending cap.
+Hosted estimates use the model's [standard Anthropic API rates](https://platform.claude.com/docs/en/about-claude/pricing), including 5-minute cache writes. Haiku's long-context tier is calculated per attempt, including cached input. Unknown prices or ambiguous legacy totals show “Cost unavailable”; interrupted tasks disclose incomplete usage. These estimates report cost; the Redis reservation ledger enforces spending limits separately.
 
 Production build check:
 
@@ -111,7 +111,7 @@ Development output goes to `.next-dev` and production output to `.next`, so a bu
 
 ### Vercel preview diagnostics
 
-The application currently uses SQLite and process-local job coordination; the hosted Redis backend and reservation ledger are not implemented yet. Do not expose the application APIs as a public service until those are ready.
+The hosted Redis spending ledger and shared jobs are implemented for descriptions, refinement, component expansion and repository imports. Local/private mode keeps SQLite. Public launch still needs browser-held diagrams and editing/undo on Vercel, removal of the legacy SQLite dependency during serverless startup, and acceptance against actual Vercel and Upstash deployments. Keep application APIs restricted until those checks are complete.
 
 To check serverless dependency packaging without a provider key:
 
@@ -151,10 +151,20 @@ Hosted AI requests are charged against a spending ledger in Redis (Upstash REST)
 
 Reported usage settles the hold; missing usage, provider failures and crashes keep the whole hold. A charge above its hold pauses all paid requests for inspection. Attempt, month and annual records never expire; only per-day visitor and network totals expire after 35 days. Identities are stored only as keyed hashes. If Redis cannot be reached, paid requests are refused with an explanation, while viewing, editing and downloading keep working.
 
-Configure `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` and `ARCHWOVEN_REDIS_PREFIX` (for example `archwoven:`, or `archwoven-preview:` for previews) as server-side variables, then create the ledger once from a private env file:
+For development, add `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, `ARCHWOVEN_REDIS_PREFIX` and `ARCHWOVEN_SESSION_SECRET` to **`apps/web/.env.local`**, alongside your existing `ANTHROPIC_API_KEY`. Use the HTTPS REST endpoint and a token with write access. The session secret must be a stable, cryptographically random value of at least 32 characters. Set `ARCHWOVEN_MODE=hosted` and `ARCHWOVEN_FAKE=0`, then restart the server. The root `.env.local` is not the web app's env file.
+
+On Vercel, configure the same server-side variables in the project's environment settings. Do not use `NEXT_PUBLIC_` names, manually set `VERCEL`, or enable hosting diagnostics for ordinary application use. Keep development, Preview and Production Redis prefixes distinct (for example `archwoven-dev:`, `archwoven-preview:` and `archwoven:`), including when sharing a Redis database with another project. Changing the session secret invalidates existing visitor sessions and job ownership.
+
+Environment variables alone do not initialize the spending ledger. From the repository root, check the configured namespace without making a provider call, then create the ledger once with your approved caps:
 
 ```bash
-node --env-file=/path/to/private.env scripts/spending-ledger.mjs init --start 2026-11-01 --annual 84 --month 7 --visitor-day <usd> --network-day <usd>
+node --env-file=apps/web/.env.local scripts/spending-ledger.mjs status
+```
+
+For initialization and operator commands, `--env-file` can point to any private file containing the same Redis settings. Choose an annual start date that covers the intended usage; the ledger refuses requests before that date:
+
+```bash
+node --env-file=/path/to/private.env scripts/spending-ledger.mjs init --start <YYYY-MM-DD> --annual 84 --month 7 --visitor-day <usd> --network-day <usd>
 node --env-file=/path/to/private.env scripts/spending-ledger.mjs status
 node --env-file=/path/to/private.env scripts/spending-ledger.mjs pause "reason"   # stops paid requests on every instance; resume undoes it
 node --env-file=/path/to/private.env scripts/spending-ledger.mjs unknown          # attempts whose usage was never reported
@@ -173,7 +183,7 @@ With the same Redis variables and `ARCHWOVEN_SESSION_SECRET` (at least 32 random
 - Cancelling stops the job at its next check, and a result that arrives after the cancel is not saved. The provider attempt in flight keeps its spending hold, because its usage is unknown.
 - A refinement or expansion works on the diagram the browser sends, which the server checks as untrusted input (size, schema and graph validity, and the stated revision). A refinement of an outdated revision is refused before any paid work, and the page is given the latest diagram. Its result is saved only over the revision it was based on: a change saved meanwhile (another refinement, or on a development server a direct edit in another tab) wins, the late result is refused with an explanation, the typed instruction is kept, and the page shows the latest saved version. On Vercel, direct edits and undo are not available yet; they say so instead of failing. Expansion starts from a component's detail view, which is opened by a direct edit, so on Vercel it also waits for browser-held diagrams. Another visitor's diagram id is refused before any paid work.
 - A repository import shows its stage (fetching, designing, checking) while it runs. Likely secrets are masked before any code reaches the provider, and a failure of the secret scanner stops the job before any paid work. A repository that cannot be fetched fails without a paid request.
-- Job status, questions and results expire 24 hours after the job was created, as does the server's copy of a hosted diagram. Spending records are kept separately and do not expire.
+- Job status and questions expire 24 hours after the job was created. The server's diagram and last-task report expire 24 hours after their most recent write. Spending records are kept separately and do not expire.
 
 Without these variables, jobs stay in the server's SQLite database as before, and local mode is unchanged. On Vercel, missing or invalid configuration refuses generation with an explanation. `apps/web/e2e/hosted-jobs.mjs` checks acceptance, reload and close/reopen recovery, two tabs, cancellation, refinement, expansion, a repository import, owner isolation and a killed server in Chromium and WebKit. It runs the production build against real Redis with `apps/web/e2e/fixture-provider.mjs`, a labelled test fixture that returns a recorded model instead of calling a provider and serves one fixture repository instead of GitHub, so it tests the job lifecycle, not model quality.
 
@@ -205,10 +215,10 @@ ARCHWOVEN_MODE=local ARCHWOVEN_DEMO_ACK=1 pnpm start:local
 
 ## Data retention
 
-- **Hosted diagrams:** kept for 30 days after their last change, then removed by a sweep that runs at startup and every 24 hours.
-- **Finished jobs:** removed after 30 days.
-- **Content-free usage records:** kept for 90 days.
-- **Delete diagram** removes a diagram and its history immediately.
+- **Redis-hosted jobs:** status and questions expire 24 hours after creation; diagram and last-task copies expire 24 hours after their most recent write.
+- **Redis spending records:** attempts, annual and monthly totals do not expire. Visitor and network daily totals expire after 35 days.
+- **Legacy SQLite in hosted/development mode:** diagrams and finished jobs are removed after 30 days; content-free usage records after 90 days. A development server using Redis also keeps SQLite copies for editing.
+- **Delete diagram** removes the stored diagram immediately, and its SQLite history/jobs where present. Redis job status and task reports retain their separate expiry; spending records remain.
 - **Local diagrams** stay on your machine until you delete them.
 
 ## Testing and evaluation

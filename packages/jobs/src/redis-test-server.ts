@@ -44,7 +44,7 @@ function respClient(socket: Socket) {
     return [items, cursor];
   };
   socket.on('data', chunk => {
-    buffer = Buffer.concat([buffer, chunk]);
+    buffer = Buffer.concat([buffer, typeof chunk === 'string' ? Buffer.from(chunk) : chunk]);
     for (let parsed = parse(0); parsed; parsed = buffer.length ? parse(0) : null) {
       buffer = buffer.subarray(parsed[1]);
       waiting.shift()!(parsed[0]);
