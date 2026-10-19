@@ -3,18 +3,22 @@ import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 import { validFullModel } from '@archwoven/model';
 import { sequenceSvg } from './sequence';
-import { ensureResvg, renderPng } from './export';
+import { ensureResvg, renderPng } from './render-png';
 import { Resvg } from '@resvg/resvg-wasm';
-import { entityLayout } from '../../lib/entity';
-import { buildSvg } from '../../lib/export-svg';
+import { entityLayout } from './entity';
+import { buildSvg } from './export-svg';
 import { layoutModel } from './layout';
-import { expandedDetailModel } from './detail-fixture';
+import { expandedDetailModel } from '../test-fixtures/detail';
 
 const require = createRequire(import.meta.url);
 
 const here = new URL('.', import.meta.url).pathname;
 
 describe('renderPng (resvg-wasm)', () => {
+  it('refuses to render before wasm initialization', async () => {
+    await expect(renderPng('<svg xmlns="http://www.w3.org/2000/svg"/>', [])).rejects.toThrow('ensureResvg() must be called before renderPng()');
+  });
+
   it('paints omitted-boundary membership warnings inside the actual PNG bounds', async () => {
     await ensureResvg(readFileSync(require.resolve('@resvg/resvg-wasm/index_bg.wasm')));
     const model = structuredClone(validFullModel), view = model.views.find(v => v.type === 'architecture')!;
@@ -24,7 +28,7 @@ describe('renderPng (resvg-wasm)', () => {
     const svg = await buildSvg(model, view.id), footer = svg.match(/<g data-layout-warnings="true">[\s\S]*?<\/g>/)?.[0];
     expect(footer).toBeTruthy();
     const [x, y, width, height] = svg.match(/viewBox="([^"]+)"/)![1]!.split(' ').map(Number) as [number, number, number, number];
-    const fonts = [readFileSync(`${here}../../public/fonts/inter-400.woff2`)];
+    const fonts = [readFileSync(`${here}../public/fonts/inter-400.woff2`)];
     const renderer = new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" width="2000" height="2000" font-family="Inter">${footer}</svg>`, { font: { fontBuffers: fonts, defaultFontFamily: 'Inter' } });
     try {
       const box = renderer.getBBox()!;
@@ -43,7 +47,7 @@ describe('renderPng (resvg-wasm)', () => {
     expect(caption).toBeTruthy();
     const internal = svg.match(/<g data-node="svc.orders\/intake">[\s\S]*?<\/g>/)![0];
     expect(internal).toContain('stroke-dasharray="6 4"');
-    const fonts = [readFileSync(`${here}../../public/fonts/inter-400.woff2`)];
+    const fonts = [readFileSync(`${here}../public/fonts/inter-400.woff2`)];
     const png = await renderPng(svg, fonts);
     expect(png).not.toEqual(await renderPng(svg.replace(caption!, ''), fonts));
     expect(png).not.toEqual(await renderPng(svg.replace(internal, internal.replace(' stroke-dasharray="6 4"', '')), fonts));
@@ -60,7 +64,7 @@ describe('renderPng (resvg-wasm)', () => {
     const caption = svg.match(/<g data-detail-caption="true">[\s\S]*?<\/g>/)?.[0];
     expect(caption).toBeTruthy();
     const [x, y, width, height] = svg.match(/viewBox="([^"]+)"/)![1]!.split(' ').map(Number) as [number, number, number, number];
-    const renderer = new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" width="2000" height="2000" font-family="Inter">${caption}</svg>`, { font: { fontBuffers: [readFileSync(`${here}../../public/fonts/inter-400.woff2`)], defaultFontFamily: 'Inter' } });
+    const renderer = new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" width="2000" height="2000" font-family="Inter">${caption}</svg>`, { font: { fontBuffers: [readFileSync(`${here}../public/fonts/inter-400.woff2`)], defaultFontFamily: 'Inter' } });
     try {
       const box = renderer.getBBox()!;
       expect(box.x).toBeGreaterThanOrEqual(x); expect(box.y).toBeGreaterThanOrEqual(y);
@@ -78,7 +82,7 @@ describe('renderPng (resvg-wasm)', () => {
     const svg = await buildSvg(model, view.id);
     const [x, y, width, height] = svg.match(/viewBox="([^"]+)"/)![1]!.split(' ').map(Number) as [number, number, number, number];
     const title = svg.match(/<g[^>]*><rect[^>]*stroke-dasharray="6 4"[\s\S]*?<\/g>/)![0];
-    const renderer = new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" width="2000" height="2000" font-family="Inter">${title}</svg>`, { font: { fontBuffers: [readFileSync(`${here}../../public/fonts/inter-400.woff2`)], defaultFontFamily: 'Inter' } });
+    const renderer = new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" width="2000" height="2000" font-family="Inter">${title}</svg>`, { font: { fontBuffers: [readFileSync(`${here}../public/fonts/inter-400.woff2`)], defaultFontFamily: 'Inter' } });
     try {
       const box = renderer.getBBox()!;
       expect(box.x).toBeGreaterThanOrEqual(x); expect(box.y).toBeGreaterThanOrEqual(y);
@@ -93,7 +97,7 @@ describe('renderPng (resvg-wasm)', () => {
     edge.from = node; edge.to = node; edge.label = 'scheduled retry';
     if (type === 'er') edge.cardinality = '1:N';
     view.nodes = [node]; view.edges = [edge.id];
-    const svg = await buildSvg(model, view.id), fonts = [readFileSync(`${here}../../public/fonts/inter-400.woff2`)];
+    const svg = await buildSvg(model, view.id), fonts = [readFileSync(`${here}../public/fonts/inter-400.woff2`)];
     const png = await renderPng(svg, fonts);
     const path = svg.match(/<path data-edge="[^\"]+"[^>]+\/>/)![0];
     expect(png).not.toEqual(await renderPng(svg.replace(path, ''), fonts));
@@ -106,7 +110,7 @@ describe('renderPng (resvg-wasm)', () => {
     m.edges.find(e => e.id === 'er.user-order')!.label = 'has a reader profile';
     const svg = await buildSvg(m, view.id), placed = await layoutModel(m, view.id);
     const caption = svg.match(/<g data-edge-label="er.user-order">[\s\S]+?<\/g>/)![0];
-    const renderer = new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" width="2000" height="2000" font-family="Inter">${caption}</svg>`, { font: { fontBuffers: [readFileSync(`${here}../../public/fonts/inter-400.woff2`)], defaultFontFamily: 'Inter' } });
+    const renderer = new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" width="2000" height="2000" font-family="Inter">${caption}</svg>`, { font: { fontBuffers: [readFileSync(`${here}../public/fonts/inter-400.woff2`)], defaultFontFamily: 'Inter' } });
     try {
       const label = renderer.getBBox()!;
       for (const node of placed.nodes) expect(label.x + label.width <= node.x || label.x >= node.x + node.width || label.y + label.height <= node.y || label.y >= node.y + node.height).toBe(true);
@@ -117,7 +121,7 @@ describe('renderPng (resvg-wasm)', () => {
     const entity = structuredClone(validFullModel.nodes.find(n => n.id === 'entity.user')!);
     entity.label = 'W'.repeat(42); entity.fields = [{ name: 'W'.repeat(22), type: 'W'.repeat(16) }];
     const box = entityLayout(entity);
-    const fonts = [readFileSync(`${here}../../public/fonts/inter-400.woff2`), readFileSync(`${here}../../public/fonts/inter-600.woff2`)];
+    const fonts = [readFileSync(`${here}../public/fonts/inter-400.woff2`), readFileSync(`${here}../public/fonts/inter-600.woff2`)];
     const groups = [{ lines: box.label, size: 13, width: box.width - 28 }, ...box.rows.flatMap(row => [{ lines: row.name, size: 12, width: 160 }, { lines: row.type, size: 12, width: 124 }])];
     for (const group of groups) for (const line of group.lines) {
       const rendered = new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="40"><text x="0" y="25" font-family="Inter" font-size="${group.size}" font-weight="600">${line}</text></svg>`, { font: { fontBuffers: fonts, defaultFontFamily: 'Inter' } });
@@ -129,7 +133,7 @@ describe('renderPng (resvg-wasm)', () => {
     const m = structuredClone(validFullModel); m.edges.find(e => e.id === 'er.user-order')!.cardinality = cardinality;
     m.views.find(v => v.id === 'view.er')!.edges = ['er.user-order'];
     const svg = await buildSvg(m, 'view.er');
-    const fonts = [readFileSync(`${here}../../public/fonts/inter-400.woff2`)];
+    const fonts = [readFileSync(`${here}../public/fonts/inter-400.woff2`)];
     const original = await renderPng(svg, fonts);
     for (const endpoint of ['start', 'end']) {
       const removed = svg.replace(new RegExp(` marker-${endpoint}="url\\(#er-[^"]+\\)"`, 'g'), '');
@@ -143,7 +147,7 @@ describe('renderPng (resvg-wasm)', () => {
     seq.messages = [{ seq: 1, from: seq.participants[0]!, to: seq.participants[1]!, kind, label: 'Response' }];
     const svg = sequenceSvg(m, 'view.sequence');
     const withoutHeads = svg.replace(/<marker\b[\s\S]*?<\/marker>/g, marker => marker.replace(/stroke="[^"]+"/g, 'stroke="none"'));
-    const fonts = [readFileSync(`${here}../../public/fonts/inter-400.woff2`)];
+    const fonts = [readFileSync(`${here}../public/fonts/inter-400.woff2`)];
     const original = await renderPng(svg, fonts);
     const removed = await renderPng(withoutHeads, fonts);
     expect(original).not.toEqual(removed);
@@ -151,8 +155,8 @@ describe('renderPng (resvg-wasm)', () => {
   it('renders the sequence SVG to a valid PNG at 2x with bundled fonts', async () => {
     await ensureResvg(readFileSync(require.resolve('@resvg/resvg-wasm/index_bg.wasm')));
     const fontBuffers = [
-      readFileSync(`${here}../../public/fonts/inter-400.woff2`),
-      readFileSync(`${here}../../public/fonts/inter-600.woff2`),
+      readFileSync(`${here}../public/fonts/inter-400.woff2`),
+      readFileSync(`${here}../public/fonts/inter-600.woff2`),
     ];
 
     const png = await renderPng(sequenceSvg(validFullModel, 'view.sequence'), fontBuffers);
@@ -168,9 +172,4 @@ describe('renderPng (resvg-wasm)', () => {
     expect(png.byteLength).toBeGreaterThan(10_000);
   });
 
-  it('refuses to render before wasm init', async () => {
-    // fresh module state is shared in-process; ensureResvg already ran above,
-    // so assert the guard message shape via a direct check instead:
-    await expect(renderPng('<svg xmlns="http://www.w3.org/2000/svg"/>', [])).resolves.toBeDefined();
-  });
 });

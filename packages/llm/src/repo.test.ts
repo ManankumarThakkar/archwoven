@@ -163,7 +163,6 @@ describe('assembleRepoModel (injection-hardened, mocked SDK)', () => {
     expect(content.split('</repo-data>').length - 1).toBe(1);
     expect(content.indexOf('<repo-data>')).toBeLessThan(content.indexOf('svc.api'));
     expect(content.indexOf('svc.api')).toBeLessThan(content.indexOf('</repo-data>'));
-    const p = calls[0] as { output_config: { format: { name: string; schema: unknown } } };
   });
 
   it('injected </repo-data> + "ignore previous instructions" stays escaped inside the data', async () => {

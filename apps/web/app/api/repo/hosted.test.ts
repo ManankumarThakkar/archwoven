@@ -28,7 +28,6 @@ const sessionOf = (cookie: string) => cookie.split('=')[1]!.split('.')[0]!;
 const noLocalStore = new Proxy({}, { get() { throw new Error('hosted diagrams must not use the local database'); } }) as Store;
 const hosted = () => { const jobs = hostedJobs(); if (!jobs || jobs === 'misconfigured') throw new Error('hosted jobs unavailable'); return jobs; };
 const savedModel = async (owner: string, id: string) => (await hosted().modelState(id, sessionOf(owner))).model as SystemModel | null;
-const saveOver = async (owner: string, id: string, model: SystemModel) => { expect(await hosted().putModel(id, sessionOf(owner), model, model.revision - 1)).toBe('ok'); };
 const scheduled: (() => Promise<void>)[] = [];
 const drain = async () => { while (scheduled.length) await scheduled.shift()!(); };
 const params = (id: string) => ({ params: Promise.resolve({ id }) });

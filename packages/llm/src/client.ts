@@ -19,18 +19,13 @@ export const MODEL = DEFAULT_HOSTED_MODEL;
 /** Server configuration only; each task captures this once for all its attempts. */
 export const configuredHostedModel = (): HostedModelId => resolveHostedModelId(process.env.ARCHWOVEN_HOSTED_MODEL);
 export const MAX_REPAIRS = 2;
-/** Fixed: max_tokens ≤ 8k. If live truncation recurs, the fix is effort-low
- *  output or a spec config-review amendment — never silent drift in code. */
+/** Maximum output per attempt; spending reservations include this bound. */
 export const MAX_TOKENS = 8192;
 /** Fixed: assembled context > 25k tokens is rejected before send. */
 export const CONTEXT_TOKEN_LIMIT = 25_000;
 
-/**
- * Always talk to api.anthropic.com directly. The SDK defaults baseURL to
- * process.env.ANTHROPIC_BASE_URL — a dev shell behind a proxy (Claude Code's
- * 127.0.0.1:2018) would silently drop output_config and free-generate markdown,
- * and would forward the API key to whatever proxy is configured.
- */
+/** Pin the provider endpoint so shell-level proxy configuration cannot receive
+ * the API key or alter the structured-output contract. */
 export const makeAnthropic = (apiKey: string): Anthropic =>
   new Anthropic({ apiKey, baseURL: 'https://api.anthropic.com', maxRetries: 0 });
 
@@ -38,8 +33,7 @@ export const makeAnthropic = (apiKey: string): Anthropic =>
 export const fakeMode = () => process.env.ARCHWOVEN_FAKE === '1';
 const fakeUsage = (effort: Effort): TaskUsage => ({ ...usageFrom({}, effort, 0, 0), provider: 'demo' });
 
-/** tsx/node --env-file does not strip surrounding quotes; a key written as
- *  KEY="sk-ant-…" arrives with literal quotes and 401s. Sanitize defensively. */
+/** Accept keys copied with surrounding whitespace or quotes. */
 export const resolveApiKey = (raw = process.env.ANTHROPIC_API_KEY): string =>
   (raw ?? '').trim().replace(/^["']|["']$/g, '');
 /** Structured outputs is a beta capability — without this header the API silently

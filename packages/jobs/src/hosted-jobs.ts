@@ -15,8 +15,8 @@ import { STORAGE_LUA, STORAGE_USAGE_LUA, HOSTED_STORAGE_LIMITS, HOSTED_MODEL_BYT
  *   read:   owner-checked; a job past its deadline reads as failed, which is
  *           how crashed or killed executions end. Nothing is ever retried.
  *
- * Job status, results and the visitor's last task report expire 24 hours
- * after the job was created. Spending records live elsewhere and never do.
+ * Job status expires 24 hours after creation; saved payloads expire 24 hours
+ * after their most recent write. Spending records live elsewhere and never do.
  */
 
 export type HostedJobStatus = 'queued' | 'running' | 'clarifying' | 'succeeded' | 'failed' | 'cancelled';

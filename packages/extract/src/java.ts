@@ -114,7 +114,6 @@ export async function extractSpringBoot(dir: string, inventory?: SourceInventory
       for (const mod of modifiers.children) {
         if (mod.type !== 'marker_annotation' && mod.type !== 'annotation') continue;
         const ann = mod.childForFieldName('name')?.text ?? '';
-        const args = mod.childForFieldName('arguments')?.text ?? '';
         if (CLASS_KINDS[ann]) kind = CLASS_KINDS[ann];
         if (ann === 'RequestMapping') classPrefixes = mappingPaths(mod.childForFieldName('arguments'), unresolvedPath(relPath));
         if (ann === 'RequiredArgsConstructor' || ann === 'AllArgsConstructor') lombokCtor = true;

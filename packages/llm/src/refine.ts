@@ -4,7 +4,6 @@ import { EditOpSchema, HOSTED_REQUESTS, applyEditOps, isSourceEvidenceRefusal, s
 import {
   CONTEXT_TOKEN_LIMIT, MAX_REPAIRS, MODEL, configuredHostedModel, STRUCTURED_OUTPUTS_BETA, fakeMode, countFailureMessage, hostedClient, usageFrom, wireSchema, providerRequestStopped,
   type Effort, type StructuredClient, attemptError } from './client';
-import type { RawUsage } from './client';
 
 export type RefineOutcome =
   | { ok: true; ops: EditOp[]; usage: ReturnType<typeof usageFrom> }

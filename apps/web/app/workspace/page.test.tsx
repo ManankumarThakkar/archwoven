@@ -11,7 +11,7 @@ import { createHash } from 'node:crypto';
 // Layout is covered separately in Canvas tests and the real-browser pass.
 vi.mock('./Canvas', () => ({ Canvas: ({ viewId, model, onSelect, onMove, permalinkVersion }: { permalinkVersion?: number; viewId: string; model: typeof validFullModelExtended; onSelect: (id: string) => void; onMove?: unknown }) => <><output aria-label="Rendered view">{viewId}</output><output aria-label="Permalink version">{permalinkVersion}</output><output aria-label="Rendered API">{model.nodes.find(n=>n.id==='gateway.api')?.label}</output><output aria-label="Can move">{String(!!onMove)}</output><button onClick={()=>onSelect('gateway.api')}>Inspect API</button><button onClick={()=>onSelect('entity.user')}>Inspect entity</button><button onClick={()=>onSelect('e.user-api')}>Inspect connection</button></> }));
 const rasterizer = vi.hoisted(() => ({ ensureResvg: vi.fn(), renderPng: vi.fn() }));
-vi.mock('../../probes/render/export', () => rasterizer);
+vi.mock('../../lib/render-png', () => rasterizer);
 
 let container: HTMLDivElement;
 let root: Root;

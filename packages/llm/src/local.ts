@@ -5,7 +5,7 @@ import { z } from 'zod';
 import type { Fragment } from '@archwoven/extract';
 import {
   EditOpSchema, applyEditOps, applyExpansion, expandBlocker, isSourceEvidenceRefusal, sameModelContent, validateModel,
-  type EditOp, type SystemModel, type ViewType,
+  type SystemModel, type ViewType,
 } from '@archwoven/model';
 import { LOCAL_MODEL_SYSTEM, NATIVE_MODEL_JSON_SCHEMA, MAX_REPAIRS, type GenerateOutcome, type TaskUsage } from './client';
 import { LOCAL_REPO_SYSTEM, fenceEscape, pinEvidence, sourceEvidenceErrors, preserveSourceGaps } from './repo';

@@ -35,12 +35,10 @@ jobs:
         run: pnpm hosting:preflight
       - run: pnpm typecheck
       - run: pnpm test
-      # Check 14 parity: the same relevant quality checks run in local (private) mode.
-      # Quota suites are hosted-only BY DESIGN (quotas compile out in local mode),
-      # so the parity scope is model/extract/ingest/llm + web lib/render.
-      - run: ARCHWOVEN_MODE=local pnpm vitest run packages apps/web/lib apps/web/app/lib apps/web/probes
+      # Local mode skips hosted-only quota suites; keep shared logic and rendering checks.
+      - run: ARCHWOVEN_MODE=local pnpm vitest run packages apps/web/lib apps/web/app/lib
       - run: pnpm bench:selftest
-      # Suite B repair-rounds: deterministic detector round-trips (needs built model dist).
+      # Deterministic repair checks use the built model package.
       - run: node benchmarks/repair-rounds/harness.selftest.mjs
 
   deploy-image:

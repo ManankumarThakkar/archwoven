@@ -4,7 +4,7 @@ import { layoutModel } from './layout';
 import { manualLayout } from './manual-layout';
 import { buildSvg } from './export-svg';
 import { openDetailView, validateModel } from '@archwoven/model';
-import stressRaw from '../probes/render/stress-fixture.json';
+import stressRaw from '../test-fixtures/layout-stress.json';
 it('honors saved positions exactly and routes around the moved node interiors', async () => {
     const model = structuredClone(validFullModel), view = model.views.find(v => v.type === 'architecture')!;
     view.nodes = ['actor.user', 'gateway.api', 'svc.orders'];

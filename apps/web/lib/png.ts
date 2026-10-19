@@ -9,7 +9,7 @@ const fetchAsset: AssetLoader = async (path) => {
 
 /** Render an SVG to PNG in the browser with the bundled resvg build and Inter fonts; nothing is sent to a server. */
 export async function svgToPng(svg: string, scale = 2, load: AssetLoader = fetchAsset): Promise<Blob> {
-  const { ensureResvg, renderPng } = await import('../probes/render/export');
+  const { ensureResvg, renderPng } = await import('./render-png');
   const [wasm, ...fonts] = await Promise.all(['/resvg/index_bg.wasm', '/fonts/inter-400.woff2', '/fonts/inter-600.woff2'].map(async (path) => {
     const bytes = await load(path);
     if (!bytes.byteLength) throw new Error(`Export asset empty: ${path}`);

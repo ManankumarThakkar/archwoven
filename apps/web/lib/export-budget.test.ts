@@ -6,7 +6,7 @@ vi.mock('@resvg/resvg-wasm', () => ({ initWasm: async () => { }, Resvg: class {
         render = raster.render;
         free = raster.free;
     } }));
-import { ensureResvg, renderPng } from '../probes/render/export';
+import { ensureResvg, renderPng } from './render-png';
 it('rejects excessive raster allocation before rendering and frees its parsed scene', async () => {
     await ensureResvg(new Uint8Array());
     await expect(renderPng('<svg/>', [])).rejects.toThrow('too large');
