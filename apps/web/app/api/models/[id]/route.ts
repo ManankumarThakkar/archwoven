@@ -1,5 +1,6 @@
 import { serverDeps, readOrCreateSession } from '../../../lib/server';
 import { hostedJobs, HOSTED_NOT_CONFIGURED_COPY, HOSTED_UNAVAILABLE_COPY } from '../../../lib/hosted-runner';
+import { isOwnedId } from '../../../lib/owned-ids';
 import { putRestoredModel } from '../../../lib/hosted-model-edit';
 import { ownedModel } from '../../../lib/hosted-diagram-job';
 
@@ -13,6 +14,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   const jobs = hostedJobs();
   if (jobs === 'misconfigured') return Response.json({ error: HOSTED_NOT_CONFIGURED_COPY }, { status: 503 });
   if (jobs) {
+    if (!isOwnedId(id, sessionId)) return Response.json({ error: 'model not found' }, { status: 404 });
     let stored;
     try { stored = await ownedModel(jobs, id, sessionId); }
     catch { return Response.json({ error: HOSTED_UNAVAILABLE_COPY }, { status: 503 }); }
@@ -35,6 +37,7 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }
   if (jobs === 'misconfigured') return Response.json({ error: HOSTED_NOT_CONFIGURED_COPY }, { status: 503 });
   let deleted = false;
   if (jobs) {
+    if (!isOwnedId(id, sessionId)) return Response.json({ error: 'model not found' }, { status: 404 });
     try { deleted = await jobs.deleteOwned('model', id, sessionId); }
     catch { return Response.json({ error: HOSTED_UNAVAILABLE_COPY }, { status: 503 }); }
   } else if (serverDeps.store.getRevisionOwner(id) === sessionId) { serverDeps.store.deleteModel(id); deleted = true; }

@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { isOwnedId, ownedId } from './owned-ids';
 import type { HostedJobs } from '@archwoven/jobs';
 import { undoTo, type SystemModel } from '@archwoven/model';
 import { readOrCreateSession, serverDeps, sessionCookie, spenderOf } from './server';
@@ -77,6 +77,7 @@ async function save(jobs: HostedJobs, req: Request, id: string, sessionId: strin
 export async function postHostedEdit(req: Request, jobs: HostedJobs | 'misconfigured', id: string): Promise<Response> {
   const { sessionId, reply } = replier(req);
   if (jobs === 'misconfigured') return reply({ reason: 'unavailable', message: HOSTED_NOT_CONFIGURED_COPY }, 503);
+  if (!isOwnedId(id, sessionId)) return reply({ error: 'model not found' }, 404);
   const read = await readBody(req, reply);
   if ('response' in read) return read.response;
   if (!Number.isInteger(read.body.baseRevision) || Number(read.body.baseRevision) < 1) return reply({ error: 'baseRevision is required' }, 400);
@@ -100,6 +101,7 @@ export async function postHostedEdit(req: Request, jobs: HostedJobs | 'misconfig
 export async function postHostedUndo(req: Request, jobs: HostedJobs | 'misconfigured', id: string): Promise<Response> {
   const { sessionId, reply } = replier(req);
   if (jobs === 'misconfigured') return reply({ reason: 'unavailable', message: HOSTED_NOT_CONFIGURED_COPY }, 503);
+  if (!isOwnedId(id, sessionId)) return reply({ error: 'model not found' }, 404);
   const read = await readBody(req, reply, MAX_COPY_BYTES + 4096);
   if ('response' in read) return read.response;
   const { prevRevision, baseRevision, previous } = read.body;
@@ -136,7 +138,8 @@ export async function putRestoredModel(req: Request, jobs: HostedJobs | 'misconf
   const { sessionId, reply } = replier(req);
   if (jobs === null) return reply({ error: 'This deployment keeps diagrams on the server; there is nothing to restore.' }, 404);
   if (jobs === 'misconfigured') return reply({ reason: 'unavailable', message: HOSTED_NOT_CONFIGURED_COPY }, 503);
-  if (!/^[0-9a-f-]{36}$/.test(id)) return reply({ error: 'A diagram id is required.' }, 400);
+  // Only the session that created a diagram id may restore it, so an expired id cannot be claimed by anyone else.
+  if (!isOwnedId(id, sessionId)) return reply({ error: 'model not found' }, 404);
   const read = await readCopy(req, reply);
   if ('response' in read) return read.response;
   try {
@@ -163,7 +166,7 @@ export async function postImportedModel(req: Request, jobs: HostedJobs | 'miscon
   if (jobs === null && deployMode() !== 'local') return reply({ reason: 'unavailable', message: 'Opening JSON downloads is not available in this deployment.' }, 503);
   const read = await readCopy(req, reply);
   if ('response' in read) return read.response;
-  const id = randomUUID();
+  const id = jobs === null ? crypto.randomUUID() : ownedId(sessionId);
   if (jobs === null) {
     serverDeps.store.saveRevision(id, read.model, sessionId);
     return reply({ id, model: read.model }, 201);

@@ -1,4 +1,5 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
+import { isOwnedId, ownedId } from '../../lib/owned-ids';
 import { taskReport, type HostedJobs } from '@archwoven/jobs';
 import { validateModel, type ViewType } from '@archwoven/model';
 import { ClarificationSchema } from '@archwoven/llm';
@@ -36,6 +37,8 @@ export async function postHostedGenerate(req: Request, jobs: HostedJobs | 'misco
     if (body.clarification !== undefined) {
       const raw = body.clarification as { jobId?: unknown; answers?: unknown } | null;
       if (!raw || typeof raw.jobId !== 'string') return Response.json({ error: 'A clarification job is required.' }, { status: 400, headers });
+      // A job id this session did not create is refused without a Redis command.
+      if (!isOwnedId(raw.jobId, sessionId)) return Response.json({ error: 'clarification not found' }, { status: 404, headers });
       const previous = await jobs.read(raw.jobId, sessionId);
       if (!previous) return Response.json({ error: 'clarification not found' }, { status: 404, headers });
       const stored = previous.clarification as StoredClarification | null;
@@ -58,7 +61,7 @@ export async function postHostedGenerate(req: Request, jobs: HostedJobs | 'misco
     if (llmNotConfigured()) return Response.json({ reason: 'llm-not-configured', message: LLM_NOT_CONFIGURED_COPY }, { status: 503, headers });
 
     const key = reply ? replyKey(reply) : typeof body.idempotencyKey === 'string' && /^[\w:.-]{1,128}$/.test(body.idempotencyKey) ? body.idempotencyKey : undefined;
-    const jobId = randomUUID(), limits = hostedJobLimits();
+    const jobId = ownedId(sessionId), limits = hostedJobLimits();
     const spender = spenderOf(req.headers, sessionId);
     const admitted = await jobs.admit(jobId, sessionId, 'generate', key, limits, spender.network);
     if (admitted.kind === 'replay') return accepted(admitted.jobId);

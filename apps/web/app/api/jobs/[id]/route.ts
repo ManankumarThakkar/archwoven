@@ -2,6 +2,7 @@ import { TIERS } from '@archwoven/jobs';
 import { serverDeps, readOrCreateSession, tierOf } from '../../../lib/server';
 import { slotPosition } from '../../../lib/llm-limiter';
 import { jobRegistry } from '../../../lib/job-registry';
+import { isOwnedId } from '../../../lib/owned-ids';
 import { hostedJobs, HOSTED_NOT_CONFIGURED_COPY, HOSTED_UNAVAILABLE_COPY } from '../../../lib/hosted-runner';
 
 export const runtime = 'nodejs';
@@ -12,6 +13,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   const jobs = hostedJobs();
   if (jobs === 'misconfigured') return Response.json({ error: HOSTED_NOT_CONFIGURED_COPY }, { status: 503 });
   if (jobs) {
+    // An id this session did not create is refused without a Redis command.
+    if (!isOwnedId(id, sessionId)) return Response.json({ error: 'job not found' }, { status: 404 });
     let hosted;
     try { hosted = await jobs.read(id, sessionId); }
     catch { return Response.json({ error: HOSTED_UNAVAILABLE_COPY }, { status: 503 }); }

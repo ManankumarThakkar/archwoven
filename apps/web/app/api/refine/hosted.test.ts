@@ -13,6 +13,7 @@ import { GET as getQuota } from '../quota/route';
 import { POST as editModel } from '../models/[id]/edit/route';
 import { POST as undoModel } from '../models/[id]/undo/route';
 import { hostedJobs } from '../../lib/hosted-runner';
+import { ownedId } from '../../lib/owned-ids';
 import { NO_CHANGE_COPY, STALE_COPY } from './hosted';
 
 const redis = await startTestRedis();
@@ -117,7 +118,7 @@ describe.skipIf(!redis)('hosted refinement jobs (real Redis)', () => {
   });
 
   it('refuses a refinement of an outdated revision before any paid work, returning the latest diagram', async () => {
-    const owner = await stranger(), modelId = crypto.randomUUID();
+    const owner = await stranger(), modelId = ownedId(owner.split('=')[1]!.split('.')[0]!);
     const jobs = hostedJobs(); if (!jobs || jobs === 'misconfigured') throw new Error('hosted jobs unavailable');
     const latest = { ...structuredClone(validFullModel), revision: 3, parentId: 2 };
     await jobs.putModel(modelId, owner.split('=')[1]!.split('.')[0]!, latest, null);
@@ -129,7 +130,7 @@ describe.skipIf(!redis)('hosted refinement jobs (real Redis)', () => {
   });
 
   it('still refines a diagram recorded before revisions were tracked', async () => {
-    const owner = await stranger(), modelId = crypto.randomUUID();
+    const owner = await stranger(), modelId = ownedId(owner.split('=')[1]!.split('.')[0]!);
     const jobs = hostedJobs(); if (!jobs || jobs === 'misconfigured') throw new Error('hosted jobs unavailable');
     await jobs.putOwned('model', modelId, owner.split('=')[1]!.split('.')[0]!, validFullModel);
     const { jobId } = await (await post(refine, '/api/refine', refineBody(modelId), owner)).json();
@@ -189,7 +190,7 @@ describe.skipIf(!redis)('hosted refinement jobs (real Redis)', () => {
   }, 15_000);
 
   it('refuses to refine a diagram whose server copy expired, before any paid work, so the page restores it first', async () => {
-    const owner = await stranger(), modelId = crypto.randomUUID();
+    const owner = await stranger(), modelId = ownedId(owner.split('=')[1]!.split('.')[0]!);
     const refineCall = vi.fn(); serverDeps.generateRefinement = refineCall;
     const response = await post(refine, '/api/refine', refineBody(modelId), owner);
     expect(response.status).toBe(404);

@@ -4,6 +4,7 @@ import { validFullModel, type SystemModel, type TaskUsage } from '@archwoven/mod
 import { startTestRedis } from '../../../../../../../packages/jobs/src/redis-test-server';
 import { serverDeps } from '../../../../lib/server';
 import { hostedJobs } from '../../../../lib/hosted-runner';
+import { ownedId } from '../../../../lib/owned-ids';
 import { POST as generate } from '../../../generate/route';
 import { GET as getModel } from '../route';
 import { GET as getQuota } from '../../../quota/route';
@@ -91,7 +92,7 @@ describe.skipIf(!redis)('hosted direct edits and undo (real Redis)', () => {
     const stranger = cookieOf(await getQuota(new Request('http://x')));
     expect((await editReq(id, stranger, rename(1, 'Stolen'))).status).toBe(404);
     expect((await undoReq(id, stranger, { prevRevision: 1, baseRevision: 1, previous: validFullModel })).status).toBe(404);
-    const missing = crypto.randomUUID();
+    const missing = ownedId(sessionOf(owner));
     const expired = await editReq(missing, owner, rename(1, 'Gone'));
     expect(expired.status).toBe(404);
     expect(await expired.json()).toMatchObject({ reason: 'expired' });

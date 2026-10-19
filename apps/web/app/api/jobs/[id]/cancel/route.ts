@@ -1,6 +1,7 @@
 import { refundCredits, WEIGHTS, type Action } from '@archwoven/jobs';
 import { serverDeps, readOrCreateSession } from '../../../../lib/server';
 import { repoJobRegistry } from '../../../../lib/repo-registry';
+import { isOwnedId } from '../../../../lib/owned-ids';
 import { hostedJobs, HOSTED_NOT_CONFIGURED_COPY, HOSTED_UNAVAILABLE_COPY } from '../../../../lib/hosted-runner';
 
 export const runtime = 'nodejs';
@@ -13,6 +14,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const jobs = hostedJobs();
   if (jobs === 'misconfigured') return Response.json({ error: HOSTED_NOT_CONFIGURED_COPY }, { status: 503 });
   if (jobs) {
+    if (!isOwnedId(id, sessionId)) return Response.json({ error: 'job not found' }, { status: 404 });
     // Hosted cancellation stops the executor at its next check; usage already spent stays recorded.
     let status;
     try { status = await jobs.cancel(id, sessionId); }
