@@ -6,36 +6,38 @@ import { createHmac } from 'node:crypto';
  *
  *   settled + held + next hold <= cap, for every applicable scope
  *
- * Scopes: the annual window, the UTC calendar month, the visitor's UTC day and
- * the network's UTC day. Amounts are integer nano-USD. Reservation and
+ * Scopes: the annual window, the UTC calendar month, the UTC day for everyone
+ * together, the visitor's UTC day and the network's UTC day. Amounts are integer nano-USD. Reservation and
  * settlement are single atomic scripts, idempotent by attempt id. An attempt
  * records the exact scope keys it reserved against, so settlement after a
  * month or year boundary lands in the period that admitted it. Ledger,
- * period and attempt records never expire; only per-day visitor and network
- * totals do, after 35 days, as they only limit that day.
+ * period and attempt records never expire; only per-day totals do, after
+ * 35 days, as they only limit that day. Ledgers created before the daily
+ * total existed have no daily cap until one is set.
  */
 
-export type SpendScope = 'year' | 'month' | 'visitor' | 'network';
+export type SpendScope = 'year' | 'month' | 'day' | 'visitor' | 'network';
 export type ReserveResult =
   | { ok: true }
   | { ok: false; reason: `${SpendScope}-exhausted` | 'paused' | 'ledger-missing' | 'ledger-expired' | 'duplicate' };
 export type SettleResult = 'settled' | 'settled-over-hold' | 'unknown' | 'missing' | `already-${'settled' | 'unknown'}`;
-export interface SpendingCaps { annualNanos: number; monthNanos: number; visitorDayNanos: number; networkDayNanos: number }
+export interface SpendingCaps { annualNanos: number; monthNanos: number; dayNanos: number; visitorDayNanos: number; networkDayNanos: number }
 export interface SpendingStatus {
-  paused: boolean; pausedReason: string | null; start: number; end: number; caps: SpendingCaps;
-  year: { settledNanos: number; heldNanos: number }; month: { id: string; settledNanos: number; heldNanos: number };
+  paused: boolean; pausedReason: string | null; start: number; end: number; caps: Omit<SpendingCaps, 'dayNanos'> & { dayNanos: number | null };
+  year: { settledNanos: number; heldNanos: number }; month: { id: string; settledNanos: number; heldNanos: number }; day: { id: string; settledNanos: number; heldNanos: number };
   unknownAttempts: number;
 }
 
 const RESERVE = `
 local state = redis.call('HGET', KEYS[2], 'state')
 if state then return {'duplicate'} end
-local c = redis.call('HMGET', KEYS[1], 'version', 'start', 'end', 'annual', 'month', 'visitor', 'network', 'paused')
+local c = redis.call('HMGET', KEYS[1], 'version', 'start', 'end', 'annual', 'month', 'visitor', 'network', 'paused', 'day')
 if not c[1] then return {'ledger-missing'} end
 if c[8] == '1' then return {'paused'} end
 local now, amount, p = tonumber(ARGV[2]), tonumber(ARGV[3]), ARGV[1]
 if now < tonumber(c[2]) or now >= tonumber(c[3]) then return {'ledger-expired'} end
 local scopes = {{'year', p .. 'totals:year:' .. c[2], tonumber(c[4])}, {'month', p .. 'totals:month:' .. ARGV[8], tonumber(c[5])}}
+if c[9] then table.insert(scopes, {'day', p .. 'totals:day:' .. ARGV[9], tonumber(c[9])}) end
 if ARGV[4] ~= '' then table.insert(scopes, {'visitor', p .. 'totals:visitor:' .. ARGV[9] .. ':' .. ARGV[4], tonumber(c[6])}) end
 if ARGV[5] ~= '' then table.insert(scopes, {'network', p .. 'totals:network:' .. ARGV[9] .. ':' .. ARGV[5], tonumber(c[7])}) end
 for _, s in ipairs(scopes) do
@@ -45,7 +47,7 @@ end
 local keys = {}
 for _, s in ipairs(scopes) do
   redis.call('HINCRBY', s[2], 'held', amount)
-  if s[1] == 'visitor' or s[1] == 'network' then redis.call('EXPIRE', s[2], 3024000) end
+  if s[1] == 'day' or s[1] == 'visitor' or s[1] == 'network' then redis.call('EXPIRE', s[2], 3024000) end
   table.insert(keys, s[2])
 end
 redis.call('HSET', KEYS[2], 'state', 'held', 'reserved', amount, 'model', ARGV[6], 'basis', ARGV[7], 'scopes', table.concat(keys, ' '), 'reservedAt', ARGV[2])
@@ -76,15 +78,22 @@ return 'settled'`;
 
 const INIT = `
 if redis.call('EXISTS', KEYS[1]) == 1 then return 'exists' end
-redis.call('HSET', KEYS[1], 'version', 1, 'start', ARGV[1], 'end', ARGV[2], 'annual', ARGV[3], 'month', ARGV[4], 'visitor', ARGV[5], 'network', ARGV[6], 'paused', 0)
+redis.call('HSET', KEYS[1], 'version', 1, 'start', ARGV[1], 'end', ARGV[2], 'annual', ARGV[3], 'month', ARGV[4], 'visitor', ARGV[5], 'network', ARGV[6], 'day', ARGV[7], 'paused', 0)
 return 'initialized'`;
 
+// Caps apply to holds made from now on; settled and held totals are kept as they are.
+const SET_CAPS = `
+if redis.call('EXISTS', KEYS[1]) == 0 then return 'ledger-missing' end
+redis.call('HSET', KEYS[1], 'annual', ARGV[1], 'month', ARGV[2], 'day', ARGV[3], 'visitor', ARGV[4], 'network', ARGV[5], 'capsChangedAt', ARGV[6])
+return 'updated'`;
+
 const STATUS = `
-local c = redis.call('HMGET', KEYS[1], 'version', 'start', 'end', 'annual', 'month', 'visitor', 'network', 'paused', 'pausedReason')
+local c = redis.call('HMGET', KEYS[1], 'version', 'start', 'end', 'annual', 'month', 'visitor', 'network', 'paused', 'pausedReason', 'day')
 if not c[1] then return {} end
 local y = redis.call('HMGET', ARGV[1] .. 'totals:year:' .. c[2], 'settled', 'held')
 local m = redis.call('HMGET', ARGV[1] .. 'totals:month:' .. ARGV[2], 'settled', 'held')
-return {c[2], c[3], c[4], c[5], c[6], c[7], c[8], c[9] or '', y[1] or '0', y[2] or '0', m[1] or '0', m[2] or '0', redis.call('SCARD', KEYS[2])}`;
+local d = redis.call('HMGET', ARGV[1] .. 'totals:day:' .. ARGV[3], 'settled', 'held')
+return {c[2], c[3], c[4], c[5], c[6], c[7], c[8], c[9] or '', y[1] or '0', y[2] or '0', m[1] or '0', m[2] or '0', redis.call('SCARD', KEYS[2]), c[10] or '', d[1] or '0', d[2] or '0'}`;
 
 const RESOLVE = `
 local a = redis.call('HMGET', KEYS[1], 'state', 'reserved', 'scopes')
@@ -145,6 +154,12 @@ const amount = (value: number, zero = false) => {
 const utc = (ms: number) => new Date(ms).toISOString();
 export const monthId = (ms: number) => utc(ms).slice(0, 7);
 export const dayId = (ms: number) => utc(ms).slice(0, 10);
+/** Visitor and network days within the overall day, the day within a month, a month within the year. */
+function checkCaps(caps: SpendingCaps) {
+  for (const value of Object.values(caps)) amount(value);
+  if (caps.monthNanos > caps.annualNanos || caps.dayNanos > caps.monthNanos || caps.visitorDayNanos > caps.dayNanos || caps.networkDayNanos > caps.dayNanos)
+    throw new Error('Caps must nest: visitor and network days within the overall day, the day within a month, a month within the year.');
+}
 
 /** Redis operations for one ledger prefix, such as `archwoven:` or `archwoven-preview:`. */
 export function openSpendingLedger({ url, token, prefix, now = () => Date.now(), call = redisRest(url, token) }: {
@@ -165,9 +180,13 @@ export function openSpendingLedger({ url, token, prefix, now = () => Date.now(),
     /** Explicit operator action. An existing ledger is never replaced. */
     async initialize(window: { start: number; end: number }, caps: SpendingCaps): Promise<'initialized' | 'exists'> {
       if (!(window.start < window.end)) throw new Error('The annual window must end after it starts.');
-      for (const value of Object.values(caps)) amount(value);
-      if (caps.monthNanos > caps.annualNanos || caps.visitorDayNanos > caps.monthNanos || caps.networkDayNanos > caps.monthNanos) throw new Error('Caps must nest: visitor and network days within a month, a month within the year.');
-      return await eval_(INIT, [config], [window.start, window.end, caps.annualNanos, caps.monthNanos, caps.visitorDayNanos, caps.networkDayNanos]) as 'initialized' | 'exists';
+      checkCaps(caps);
+      return await eval_(INIT, [config], [window.start, window.end, caps.annualNanos, caps.monthNanos, caps.visitorDayNanos, caps.networkDayNanos, caps.dayNanos]) as 'initialized' | 'exists';
+    },
+    /** Explicit operator action: new caps for holds made from now on. Records are kept. */
+    async setCaps(caps: SpendingCaps): Promise<'updated' | 'ledger-missing'> {
+      checkCaps(caps);
+      return await eval_(SET_CAPS, [config], [caps.annualNanos, caps.monthNanos, caps.dayNanos, caps.visitorDayNanos, caps.networkDayNanos, now()]) as 'updated' | 'ledger-missing';
     },
     /** Hold `nanos` for one attempt against every applicable cap. Idempotent by id. */
     async reserve(id: string, nanos: number, who: { visitor: string; network: string | null }, identity: { model: string; basis: string }): Promise<ReserveResult> {
@@ -204,13 +223,13 @@ export function openSpendingLedger({ url, token, prefix, now = () => Date.now(),
     },
     async status(): Promise<SpendingStatus | null> {
       const at = now();
-      const row = await eval_(STATUS, [config, unknownSet], [p, monthId(at)]) as (string | number)[];
+      const row = await eval_(STATUS, [config, unknownSet], [p, monthId(at), dayId(at)]) as (string | number)[];
       if (!row.length) return null;
       const n = (i: number) => Number(row[i]);
       return {
-        start: n(0), end: n(1), caps: { annualNanos: n(2), monthNanos: n(3), visitorDayNanos: n(4), networkDayNanos: n(5) },
+        start: n(0), end: n(1), caps: { annualNanos: n(2), monthNanos: n(3), dayNanos: row[13] === '' ? null : n(13), visitorDayNanos: n(4), networkDayNanos: n(5) },
         paused: String(row[6]) === '1', pausedReason: String(row[7]) || null,
-        year: { settledNanos: n(8), heldNanos: n(9) }, month: { id: monthId(at), settledNanos: n(10), heldNanos: n(11) },
+        year: { settledNanos: n(8), heldNanos: n(9) }, month: { id: monthId(at), settledNanos: n(10), heldNanos: n(11) }, day: { id: dayId(at), settledNanos: n(14), heldNanos: n(15) },
         unknownAttempts: n(12),
       };
     },

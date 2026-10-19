@@ -5,7 +5,8 @@
  * (for example `node --env-file=<private file> scripts/spending-ledger.mjs status`)
  * and never prints them.
  *
- *   init --start YYYY-MM-DD --annual <usd> --month <usd> --visitor-day <usd> --network-day <usd>
+ *   init --start YYYY-MM-DD --annual <usd> --month <usd> --day <usd> --visitor-day <usd> --network-day <usd>
+ *   caps --annual <usd> --month <usd> --day <usd> --visitor-day <usd> --network-day <usd>   (change an existing ledger's caps)
  *   status | pause "<reason>" | resume | unknown
  *   resolve <attempt-id> <usd> --evidence "<what the provider console showed>"   (owner, interactive)
  *   renew --start YYYY-MM-DD   (after the current annual window has ended)
@@ -16,7 +17,7 @@ import { parseUsd } from '../packages/jobs/src/evaluation-budget.ts';
 
 const [command, ...rest] = process.argv.slice(2);
 const flag = name => { const i = rest.indexOf(name); return i >= 0 ? rest[i + 1] : undefined; };
-const usage = 'Usage: spending-ledger.mjs init --start YYYY-MM-DD --annual <usd> --month <usd> --visitor-day <usd> --network-day <usd> | status | pause "<reason>" | resume | unknown | resolve <attempt-id> <usd> --evidence "<text>" | renew --start YYYY-MM-DD';
+const usage = 'Usage: spending-ledger.mjs init --start YYYY-MM-DD --annual <usd> --month <usd> --day <usd> --visitor-day <usd> --network-day <usd> | caps --annual <usd> --month <usd> --day <usd> --visitor-day <usd> --network-day <usd> | status | pause "<reason>" | resume | unknown | resolve <attempt-id> <usd> --evidence "<text>" | renew --start YYYY-MM-DD';
 const { UPSTASH_REDIS_REST_URL: url, UPSTASH_REDIS_REST_TOKEN: token, ARCHWOVEN_REDIS_PREFIX: prefix } = process.env;
 if (!url || !token || !prefix) throw new Error('Set UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN and ARCHWOVEN_REDIS_PREFIX first.');
 const ledger = openSpendingLedger({ url, token, prefix });
@@ -30,12 +31,20 @@ const annualWindow = () => {
   return { start, from, to };
 };
 
+const amount = name => { const value = flag(name); if (!value) throw new Error(usage); return parseUsd(value); };
+const capsFromFlags = () => ({ annualNanos: amount('--annual'), monthNanos: amount('--month'), dayNanos: amount('--day'), visitorDayNanos: amount('--visitor-day'), networkDayNanos: amount('--network-day') });
+
 if (command === 'init') {
   const { start, from, to } = annualWindow();
-  const amount = name => { const value = flag(name); if (!value) throw new Error(usage); return parseUsd(value); };
-  const result = await ledger.initialize({ start: from.getTime(), end: to.getTime() },
-    { annualNanos: amount('--annual'), monthNanos: amount('--month'), visitorDayNanos: amount('--visitor-day'), networkDayNanos: amount('--network-day') });
-  console.log(result === 'initialized' ? `Initialized ${prefix} for ${start} to ${to.toISOString().slice(0, 10)}.` : `A ledger already exists under ${prefix}; nothing was changed.`);
+  const result = await ledger.initialize({ start: from.getTime(), end: to.getTime() }, capsFromFlags());
+  console.log(result === 'initialized' ? `Initialized ${prefix} for ${start} to ${to.toISOString().slice(0, 10)}.` : `A ledger already exists under ${prefix}; nothing was changed. Use caps to change its caps.`);
+} else if (command === 'caps') {
+  const caps = capsFromFlags();
+  const before = await ledger.status();
+  if (!before) throw new Error(`No ledger exists under ${prefix}; use init.`);
+  await ledger.setCaps(caps);
+  const show = c => ({ annual: usd(c.annualNanos), month: usd(c.monthNanos), day: c.dayNanos === null ? 'none' : usd(c.dayNanos), visitorDay: usd(c.visitorDayNanos), networkDay: usd(c.networkDayNanos) });
+  console.log(JSON.stringify({ prefix, before: show(before.caps), after: show(caps), note: 'New caps apply to holds made from now on; settled and held amounts are unchanged.' }, null, 2));
 } else if (command === 'pause' || command === 'resume') {
   const result = await ledger.setPaused(command === 'pause', command === 'pause' ? (rest[0] ?? 'Paused by the operator.') : '');
   console.log(result === 'ok' ? `${command === 'pause' ? 'Paused' : 'Resumed'} paid AI requests under ${prefix}.` : 'No ledger exists under this prefix.');
@@ -63,9 +72,10 @@ if (command === 'init') {
   else console.log(JSON.stringify({
     prefix, window: [new Date(status.start).toISOString().slice(0, 10), new Date(status.end).toISOString().slice(0, 10)],
     paused: status.paused, pausedReason: status.pausedReason,
-    caps: { annual: usd(status.caps.annualNanos), month: usd(status.caps.monthNanos), visitorDay: usd(status.caps.visitorDayNanos), networkDay: usd(status.caps.networkDayNanos) },
+    caps: { annual: usd(status.caps.annualNanos), month: usd(status.caps.monthNanos), day: status.caps.dayNanos === null ? 'none' : usd(status.caps.dayNanos), visitorDay: usd(status.caps.visitorDayNanos), networkDay: usd(status.caps.networkDayNanos) },
     year: { settled: usd(status.year.settledNanos), held: usd(status.year.heldNanos) },
     month: { id: status.month.id, settled: usd(status.month.settledNanos), held: usd(status.month.heldNanos) },
+    day: { id: status.day.id, settled: usd(status.day.settledNanos), held: usd(status.day.heldNanos) },
     unknownAttempts: status.unknownAttempts,
   }, null, 2));
 } else throw new Error(usage);

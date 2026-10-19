@@ -12,7 +12,7 @@ beforeEach(async () => { await redis?.flush(); redis?.setDown(false); });
 const OCT_31_LATE = Date.UTC(2026, 9, 31, 23, 59, 59, 900);
 const NOV_1 = Date.UTC(2026, 10, 1, 0, 0, 1);
 const window = { start: Date.UTC(2026, 9, 1), end: Date.UTC(2027, 9, 1) };
-const caps: SpendingCaps = { annualNanos: 10_000, monthNanos: 1_000, visitorDayNanos: 300, networkDayNanos: 500 };
+const caps: SpendingCaps = { annualNanos: 10_000, monthNanos: 1_000, dayNanos: 1_000, visitorDayNanos: 300, networkDayNanos: 500 };
 const identity = { model: 'claude-opus-5-5', basis: 'test' };
 let clock = Date.UTC(2026, 9, 18, 12);
 function ledger(prefix = 'archwoven-test:') {
@@ -55,6 +55,38 @@ describe.skipIf(!redis)('hosted spending ledger (real Redis)', () => {
     expect(await spend.reserve(id(), 1, who('v5', 'net-d'), identity)).toEqual({ ok: false, reason: 'month-exhausted' });
     // A visitor without a verified network is limited by its own and the shared caps only.
     expect(await spend.reserve(id(), 1, who('v6', null), identity)).toEqual({ ok: false, reason: 'month-exhausted' });
+  });
+
+  it('limits everyone together to the overall daily cap, starting fresh the next UTC day', async () => {
+    const spend = ledger(); await spend.initialize(window, { ...caps, dayNanos: 400, networkDayNanos: 400 });
+    expect(await spend.reserve(id(), 300, who('v1', 'net-a'), identity)).toEqual({ ok: true });
+    expect(await spend.reserve(id(), 200, who('v2', 'net-b'), identity)).toEqual({ ok: false, reason: 'day-exhausted' });
+    expect((await spend.status())!.day).toMatchObject({ id: '2026-10-18', heldNanos: 300 });
+    clock = Date.UTC(2026, 9, 19, 0, 0, 1);
+    expect(await spend.reserve(id(), 200, who('v2', 'net-b'), identity)).toEqual({ ok: true });
+    expect(await raw()(['TTL', 'archwoven-test:spend:totals:day:2026-10-19'])).toBeGreaterThan(30 * 86_400);
+    clock = Date.UTC(2026, 9, 18, 12);
+  });
+
+  it('keeps admitting under a ledger created before the daily cap existed', async () => {
+    const spend = ledger(); await spend.initialize(window, caps);
+    await raw()(['HDEL', 'archwoven-test:spend:config', 'day']);
+    expect(await spend.reserve(id(), 300, who('v1'), identity)).toEqual({ ok: true });
+    expect((await spend.status())!.caps.dayNanos).toBeNull();
+  });
+
+  it('changes the caps of an existing ledger, keeping them nested and its records intact', async () => {
+    const spend = ledger(); await spend.initialize(window, caps);
+    expect(await spend.reserve(id(), 300, who('v1'), identity)).toEqual({ ok: true });
+    const next = { annualNanos: 20_000, monthNanos: 2_000, dayNanos: 600, visitorDayNanos: 400, networkDayNanos: 600 };
+    expect(await spend.setCaps(next)).toBe('updated');
+    const status = (await spend.status())!;
+    expect(status.caps).toEqual(next);
+    expect(status.month.heldNanos).toBe(300);
+    expect(await spend.reserve(id(), 100, who('v1'), identity)).toEqual({ ok: true });
+    await expect(spend.setCaps({ ...next, dayNanos: 5_000 })).rejects.toThrow(/nest/);
+    await expect(spend.setCaps({ ...next, visitorDayNanos: 700 })).rejects.toThrow(/nest/);
+    expect(await ledger('archwoven-other:').setCaps(next)).toBe('ledger-missing');
   });
 
   it('admits exactly what fits when many instances reserve at once', async () => {
@@ -115,7 +147,7 @@ describe.skipIf(!redis)('hosted spending ledger (real Redis)', () => {
     expect(keys.join(' ')).not.toMatch(/visitor-raw-id|203\.0\.113\.9/);
     for (const key of keys) {
       const ttl = await call(['TTL', key]) as number;
-      if (/totals:(visitor|network):/.test(key)) expect(ttl).toBeGreaterThan(30 * 86_400);
+      if (/totals:(day|visitor|network):/.test(key)) expect(ttl).toBeGreaterThan(30 * 86_400);
       else expect(ttl).toBe(-1);
     }
     expect(keys).toContain(`archwoven-test:spend:attempt:${attempt}`);

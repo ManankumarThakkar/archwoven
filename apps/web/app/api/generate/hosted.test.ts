@@ -156,7 +156,7 @@ describe.skipIf(!redis)('hosted description jobs (real Redis)', () => {
     redis!.setDown(true);
     const down = await post(prompt);
     expect(down.status).toBe(503);
-    expect((await down.json()).message).toMatch(/temporarily unavailable.*You can still view, edit and download/);
+    expect((await down.json()).message).toMatch(/temporarily unavailable\. You can still view and download/);
     redis!.setDown(false);
     vi.stubEnv('ARCHWOVEN_SESSION_SECRET', 'short');
     const misconfigured = await post(prompt);

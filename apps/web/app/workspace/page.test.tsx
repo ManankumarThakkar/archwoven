@@ -1526,6 +1526,16 @@ describe('diagrams kept in this browser', () => {
     expect(localStorage.getItem(copyKey('m7'))).not.toBeNull();
   });
 
+  it("shows this browser's copy when the server cannot be reached, saying what is paused", async () => {
+    window.history.replaceState(null, '', '/workspace#model=m1');
+    keep('m1');
+    transport = input => hostedQuota(input) ?? (input === '/api/models/m1' ? Response.json({ error: 'AI generation and saving changes are temporarily unavailable.' }, { status: 503 }) : undefined);
+    await mount(); await settle();
+    expect(rendered()).not.toBeNull();
+    expect(container.textContent).toContain("Showing this browser's copy because the server is unavailable");
+    expect(container.textContent).toContain('Downloads still work');
+  });
+
   it('explains when neither the server nor this browser has the diagram', async () => {
     window.history.replaceState(null, '', '/workspace#model=m1');
     transport = input => hostedQuota(input) ?? (input === '/api/models/m1' ? gone() : undefined);

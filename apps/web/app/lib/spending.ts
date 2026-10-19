@@ -11,6 +11,8 @@ export interface Spender { visitor: string; network: string | null }
 export const inputCeiling = (counted: number) => Math.ceil(counted * 1.1) + 512;
 
 const STILL_FREE = 'You can still view, edit and download your diagrams.';
+/** Editing needs the same storage as the ledger, so an outage leaves only what the browser holds. */
+const STILL_LOCAL = 'You can still view and download your diagrams.';
 const nextMonth = (now: number) => new Date(Date.UTC(new Date(now).getUTCFullYear(), new Date(now).getUTCMonth() + 1, 1))
   .toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
 
@@ -19,12 +21,13 @@ export function refusalCopy(reason: Exclude<ReserveResult, { ok: true }>['reason
   const message = {
     'visitor-exhausted': "You've reached today's AI limit for this browser. It resets at 00:00 UTC.",
     'network-exhausted': "Today's AI limit for your network is used up. It resets at 00:00 UTC.",
+    'day-exhausted': "Today's free AI budget is used up. It resets at 00:00 UTC.",
     'month-exhausted': `This month's free AI budget is used up. It resets on ${nextMonth(now)}.`,
     'year-exhausted': "The free AI budget for this year is used up.",
     'ledger-expired': "The free AI budget for this year is used up.",
     paused: 'AI generation is paused while spending is reviewed.',
   }[reason as string] ?? 'AI generation is temporarily unavailable. No further AI request was sent.';
-  return `${message} ${STILL_FREE}`;
+  return `${message} ${reason === 'unavailable' ? STILL_LOCAL : STILL_FREE}`;
 }
 
 const notSent = (message: string) => new ProviderRequestNotSentError(message);
@@ -88,7 +91,9 @@ export function spendingClient(who: Spender | undefined): StructuredClient | und
   const loopback = /^http:\/\/(127\.0\.0\.1|localhost):\d+\/?$/.test(url ?? '');
   if (!url || !token || !prefix || !(/^https:\/\/[a-z0-9.-]+\.upstash\.io\/?$/.test(url) || (loopback && !onVercel))) return refusing(NOT_CONFIGURED);
   // On Vercel every request carries a platform-set address; without one the network cap cannot apply.
-  if (!who?.visitor || (onVercel && !who.network)) return refusing(refusalCopy('unavailable'));
+  // Storage is fine here: only paid work needs the verified address, so editing still works.
+  if (!who?.visitor) return refusing(refusalCopy('ledger-missing'));
+  if (onVercel && !who.network) return refusing(`AI generation needs a verified network address, which this request did not include. No further AI request was sent. ${STILL_FREE}`);
   const key = `${url}|${prefix}|${createHash('sha256').update(token).digest('hex')}`;
   try { if (ledgers?.key !== key) ledgers = { key, ledger: openSpendingLedger({ url, token, prefix }) }; }
   catch { return refusing(NOT_CONFIGURED); }
