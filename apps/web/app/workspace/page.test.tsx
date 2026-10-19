@@ -115,6 +115,75 @@ describe('hosted money limits in the header', () => {
   });
 });
 
+describe('hosted refinement jobs', () => {
+  const settle = async () => { for (let i = 0; i < 40; i++) await act(async () => { await new Promise(r => setTimeout(r, 20)); }); };
+  const submitRefine = async () => {
+    const button = [...container.querySelectorAll('button')].find(b => b.textContent === 'Refine')!;
+    await act(async () => { button.click(); });
+    await settle();
+  };
+  const refineIn = async (text: string) => {
+    const box = container.querySelector<HTMLInputElement>('input[placeholder^="Refine:"]')!;
+    await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(box, text); box.dispatchEvent(new Event('input', { bubbles: true })); });
+    await submitRefine();
+    return box;
+  };
+  it('sends the diagram it holds, waits for the job and applies the result', async () => {
+    window.history.replaceState(null, '', '/workspace#model=m1');
+    let sent: { model?: { revision?: number }; baseRevision?: number } | undefined;
+    const refined = structuredClone(validFullModelExtended); refined.revision = validFullModelExtended.revision + 1; refined.nodes.find(n => n.id === 'gateway.api')!.label = 'Edge Gateway';
+    let polls = 0;
+    transport = (input, init) => {
+      if (input === '/api/refine') { sent = JSON.parse(String(init?.body)); return Response.json({ jobId: 'refine-job', remaining: null, resumable: true }, { status: 202 }); }
+      if (input === '/api/jobs/refine-job') return Response.json(++polls < 2 ? { status: 'running', pollAfterMs: 200 } : { status: 'succeeded', modelId: 'm1', revision: refined.revision });
+      if (input === '/api/jobs/refine-job/result') return Response.json({ ops: [{ op: 'update', target: 'gateway.api', patch: { label: 'Edge Gateway' }, baseRevision: 1, summary: 'Rename the gateway' }], model: refined });
+      return undefined;
+    };
+    await mount(); await settle();
+    const box = await refineIn('Rename the gateway to Edge Gateway');
+    expect(sent).toMatchObject({ baseRevision: validFullModelExtended.revision, model: { revision: validFullModelExtended.revision } });
+    expect(requests).toContain('/api/jobs/refine-job/result');
+    expect(container.textContent).toContain('Edge Gateway');
+    expect(box.value).toBe('');
+  });
+  it('shows the latest saved diagram when a failed refinement left the server copy newer than this page', async () => {
+    window.history.replaceState(null, '', '/workspace#model=m1');
+    const newer = structuredClone(validFullModelExtended); newer.revision = validFullModelExtended.revision + 1; newer.nodes.find(n => n.id === 'gateway.api')!.label = 'Saved Elsewhere';
+    let loads = 0;
+    transport = (input) => {
+      if (input === '/api/models/m1') return Response.json({ model: ++loads === 1 ? validFullModelExtended : newer });
+      if (input === '/api/refine') return Response.json({ jobId: 'refine-late', remaining: null, resumable: true }, { status: 202 });
+      if (input === '/api/jobs/refine-late') return Response.json({ status: 'failed', error: 'The diagram changed while refining, so this result was not applied. Your current diagram is unchanged; try again.' });
+      return undefined;
+    };
+    await mount(); await settle();
+    const box = await refineIn('Add a cache');
+    expect(container.textContent).toContain('Saved Elsewhere');
+    expect(container.textContent).toContain('latest saved version');
+    expect(box.value).toBe('Add a cache');
+  });
+  it('keeps the instruction and the diagram when the job fails, and explains a busy refusal', async () => {
+    window.history.replaceState(null, '', '/workspace#model=m1');
+    let attempt = 0;
+    transport = (input) => {
+      if (input === '/api/refine') return ++attempt === 1
+        ? Response.json({ jobId: 'refine-fail', remaining: null, resumable: true }, { status: 202 })
+        : Response.json({ reason: 'busy', jobId: 'other', message: 'You already have a request running. Wait for it to finish, then try again.' }, { status: 409 });
+      if (input === '/api/jobs/refine-fail') return Response.json({ status: 'failed', error: 'The diagram changed while refining, so this result was not applied. Your current diagram is unchanged; try again.' });
+      return undefined;
+    };
+    await mount(); await settle();
+    const box = await refineIn('Add a cache');
+    expect(container.textContent).toContain('The diagram changed while refining');
+    expect(box.value).toBe('Add a cache');
+    expect(container.querySelector('[aria-label="Rendered view"]')).toBeTruthy();
+    await submitRefine();
+    expect(container.textContent).toContain('You already have a request running');
+    expect(container.textContent).not.toContain('changed elsewhere');
+    expect(box.value).toBe('Add a cache');
+  });
+});
+
 describe('reconnecting to a job after the tab closes', () => {
   const settle = async () => { for (let i = 0; i < 50; i++) await act(async () => { await new Promise(r => setTimeout(r, 20)); }); };
   it('remembers the running job, resumes it on the next visit, and forgets it once it finishes', async () => {

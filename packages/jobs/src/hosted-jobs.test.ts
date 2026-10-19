@@ -173,6 +173,21 @@ describe.skipIf(!redis)('hosted job lifecycle (real Redis)', () => {
     expect(await queue.read(job, 'a')).toMatchObject({ status: 'clarifying', clarification: null, questions: [] });
   });
 
+  it('saves a refined model only over the revision it was based on, and only for its owner', async () => {
+    const queue = jobs(), model = id();
+    expect(await queue.putModel(model, 'a', { revision: 1, title: 'v1' }, null)).toBe('ok');
+    expect(await queue.putModel(model, 'b', { revision: 2, title: 'stolen' }, 1)).toBe('not-owner');
+    expect(await queue.putModel(model, 'a', { revision: 3, title: 'late' }, 2)).toBe('stale');
+    expect(await queue.putModel(model, 'a', { revision: 2, title: 'v2' }, 1)).toBe('ok');
+    expect(await queue.getOwned('model', model, 'a')).toEqual({ revision: 2, title: 'v2' });
+    // A model the server no longer holds (expired) is recorded again from its owner's refinement.
+    const fresh = id();
+    expect(await queue.putModel(fresh, 'a', { revision: 5 }, 4)).toBe('ok');
+    await queue.putOwned('result', fresh, 'a', { ops: [] });
+    expect(await queue.getOwned('result', fresh, 'a')).toEqual({ ops: [] });
+    expect(await queue.getOwned('result', fresh, 'b')).toBeNull();
+  });
+
   it('expires job state and owned results after 24 hours, keyed without raw session ids', async () => {
     const queue = jobs(), job = id();
     await queue.admit(job, 'session-secret-value', 'generate', 'k1', limits);

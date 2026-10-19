@@ -375,6 +375,50 @@ export default function WorkspacePage() {
     // the poll observes `cancelled` and dispatches CANCEL — no double transition here
   };
 
+  /** Poll a hosted job until it ends; null when the connection keeps failing. */
+  const waitForJob = async (jobId: string): Promise<{ status: string; error?: string | null } | null> => {
+    let misses = 0;
+    for (;;) {
+      try {
+        const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}`);
+        if (res.status === 404) return { status: 'failed', error: 'This request no longer exists. Try again.' };
+        if (!res.ok) throw new Error('job status unavailable');
+        const job = await res.json() as { status: string; error?: string | null; pollAfterMs?: number };
+        misses = 0;
+        if (job.status !== 'queued' && job.status !== 'running') return job;
+        await new Promise((r) => setTimeout(r, pollAfter(job)));
+      } catch {
+        if (++misses >= 5) return null;
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+    }
+  };
+
+  /** A hosted refinement: wait for its job, then apply the result. Failures keep the typed instruction. */
+  const finishRefineJob = async (jobId: string, diagramId: string, baseRevision: number): Promise<boolean> => {
+    const job = await waitForJob(jobId);
+    if (!job) { setSummary('Connection lost. The refinement may still finish; reload this page to see the latest diagram.'); return false; }
+    if (job.status !== 'succeeded') {
+      const reason = job.status === 'cancelled' ? 'Refinement cancelled.' : job.error || 'Refinement failed. Please try again.';
+      // The saved copy may have moved on (another tab, or a save that landed as the job ended): show it rather than a stale page.
+      const latest = await fetch(`/api/models/${encodeURIComponent(diagramId)}`).then(r => r.ok ? r.json() : null).catch(() => null) as { model?: unknown } | null;
+      const parsed = SystemModelSchema.safeParse(latest?.model);
+      if (parsed.success && parsed.data.revision !== baseRevision) {
+        setModel(parsed.data); setHistory([parsed.data]);
+        setSummary(`${reason} The latest saved version is now shown.`);
+      } else setSummary(reason);
+      return false;
+    }
+    const response = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/result`);
+    const result = (response.ok ? await response.json().catch(() => ({})) : {}) as { model?: unknown; ops?: EditOp[] };
+    const parsed = SystemModelSchema.safeParse(result.model);
+    if (!parsed.success) { setSummary('The refinement finished, but its result could not be read. Reload this page to see the latest diagram.'); return false; }
+    setHistory((h) => pushHistory(h, parsed.data));
+    setModel(parsed.data);
+    setSummary(Array.isArray(result.ops) ? summarizeOps(result.ops) : 'Refined.');
+    return true;
+  };
+
   /** Resolves true only when a revision was saved, so the bar keeps the instruction otherwise. */
   const refine = async (instruction: string): Promise<boolean> => {
     if (!model || !modelId || mutationRef.current) return false;
@@ -383,10 +427,13 @@ export default function WorkspacePage() {
     try {
       const res = await fetch('/api/refine', {
         method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ modelId, baseRevision: model.revision, instruction, view: (model.views.find((v) => v.id === activeView) ?? model.views[0])?.type ?? 'architecture' }),
+        // Hosted servers refine the diagram this page holds; the server keeps it only for 24 hours.
+        body: JSON.stringify({ modelId, baseRevision: model.revision, instruction, view: (model.views.find((v) => v.id === activeView) ?? model.views[0])?.type ?? 'architecture', model }),
       });
+      if (res.status === 202) return await finishRefineJob((await res.json() as { jobId: string }).jobId, modelId, model.revision);
       if (res.status === 409) {
-        const b = (await res.json()) as { model: SystemModel };
+        const b = (await res.json()) as { model: SystemModel; reason?: string; message?: string };
+        if (b.reason === 'busy') { setSummary(b.message ?? 'Another request is still running. Try again when it finishes.'); return false; }
         setModel(b.model);
         setHistory([b.model]);
         setSummary('The diagram changed elsewhere — showing the latest version.');
