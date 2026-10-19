@@ -1,5 +1,6 @@
 import { undoTo } from '@archwoven/model';
 import { serverDeps, readOrCreateSession, sessionCookie } from '../../../../lib/server';
+import { editsUnavailable, EDITS_UNAVAILABLE_COPY } from '../../../../lib/hosted-runner';
 
 export const runtime = 'nodejs';
 
@@ -9,6 +10,7 @@ export const runtime = 'nodejs';
  * the pre-undo state. Ownership-checked like every other model route.
  */
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  if (editsUnavailable()) return Response.json({ error: EDITS_UNAVAILABLE_COPY }, { status: 503 });
   const { sessionId, minted } = readOrCreateSession(req);
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (minted) headers['set-cookie'] = sessionCookie(sessionId);

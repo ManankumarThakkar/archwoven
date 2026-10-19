@@ -46,6 +46,13 @@ describe('POST /api/models/:id/expand', () => {
     expect(serverDeps.store.listCalls('owner')).toHaveLength(1);
   });
 
+  it('accepts the body the workspace sends, a diagram of any allowed size included, and expands its own saved copy', async () => {
+    const sent = { ...structuredClone(validFullModelExtended), title: 'x'.repeat(100_000) };
+    const res = await POST(request({ baseRevision: 1, target: 'svc.orders', hint: 'payments first', model: sent }), ctx);
+    expect(res.status).toBe(200);
+    expect(calls).toEqual([{ model: validFullModelExtended, target: 'svc.orders', hint: 'payments first' }]);
+  });
+
   it.each([
     ['not JSON', '{'],
     ['no target', { baseRevision: 1 }],

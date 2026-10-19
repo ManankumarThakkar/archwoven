@@ -7,12 +7,18 @@ import {
 } from '../../lib/server';
 import { withSlot } from '../../lib/llm-limiter';
 import { secretGate } from '../../../lib/secret-gate';
+import { hostedJobs } from '../../lib/hosted-runner';
+import { postHostedRefine } from './hosted';
 
 export const runtime = 'nodejs';
+// Hosted refinements run inside this invocation via after().
+export const maxDuration = 300;
 
 const VALID_VIEWS: ViewType[] = ['architecture', 'sequence', 'er', 'component-detail'];
 
 export async function POST(req: Request) {
+  const jobs = hostedJobs();
+  if (jobs) return postHostedRefine(req, jobs);
   const { sessionId, minted } = readOrCreateSession(req);
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (minted) headers['set-cookie'] = sessionCookie(sessionId);

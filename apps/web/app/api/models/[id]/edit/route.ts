@@ -1,12 +1,14 @@
 import { applyEditOps, closeDetailView, openDetailView, orientArchitecture } from '@archwoven/model';
 import { serverDeps, readOrCreateSession } from '../../../../lib/server';
 import { detailEdit, directEditOps, orientationEdit, readDirectEdit } from '../../../../../lib/direct-edit';
+import { editsUnavailable, EDITS_UNAVAILABLE_COPY } from '../../../../lib/hosted-runner';
 export const runtime = 'nodejs';
 export async function POST(req: Request, ctx: {
     params: Promise<{
         id: string;
     }>;
 }) {
+    if (editsUnavailable()) return Response.json({ error: EDITS_UNAVAILABLE_COPY }, { status: 503 });
     const { sessionId } = readOrCreateSession(req), { id } = await ctx.params;
     if (serverDeps.store.getRevisionOwner(id) !== sessionId)
         return Response.json({ error: 'model not found' }, { status: 404 });
