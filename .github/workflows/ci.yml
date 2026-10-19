@@ -28,6 +28,8 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Audit production dependencies
+        run: pnpm audit --prod
       - run: pnpm -r build
       - name: Exercise isolated serverless dependency bundle (no provider calls)
         run: pnpm hosting:preflight
