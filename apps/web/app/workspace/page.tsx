@@ -634,7 +634,7 @@ export default function WorkspacePage() {
   return (
     <div className="aw-workspace">
       <header className="aw-header">
-        <a className="aw-brand" href="/workspace" aria-label="Archwoven workspace"><span className="aw-brand-mark" aria-hidden="true">⌘</span>Arch<span>woven</span></a>
+        <a className="aw-brand" href="/" aria-label="Archwoven home"><span className="aw-brand-mark" aria-hidden="true">⌘</span>Arch<span>woven</span></a>
         <CreatorLinks />
         <div className="aw-header-status">
         <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 6, background: '#111a2e', color: '#93c5fd' }}>{privacy}</span>
