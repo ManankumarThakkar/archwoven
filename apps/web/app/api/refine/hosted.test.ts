@@ -15,6 +15,7 @@ import { POST as undoModel } from '../models/[id]/undo/route';
 import { hostedJobs } from '../../lib/hosted-runner';
 import { ownedId } from '../../lib/owned-ids';
 import { NO_CHANGE_COPY, STALE_COPY } from './hosted';
+import { postHostedDiagramJob } from '../../lib/hosted-diagram-job';
 
 const redis = await startTestRedis();
 if (!redis && process.env.CI) throw new Error('CI must provide Redis for the hosted refinement tests.');
@@ -53,6 +54,20 @@ describe.skipIf(!redis)('hosted refinement jobs (real Redis)', () => {
     scheduled.length = 0;
   });
   afterEach(() => vi.unstubAllEnvs());
+
+  it('rejects an oversized result wrapper before changing the diagram', async () => {
+    const { owner, modelId } = await diagram();
+    const original = await savedModel(owner, modelId);
+    const accepted = await postHostedDiagramJob(new Request('http://localhost/api/refine', { method: 'POST', ...as(owner) }), hostedJobs()!, {
+      kind: 'refine', view: 'architecture', modelId, baseRevision: original.revision, rawModel: original,
+      request: ['large result'], texts: [{ label: 'instruction', text: 'Rename it' }],
+      run: async () => ({ ok: true, model: { ...original, revision: original.revision + 1, title: 'Changed' }, usage, extra: { ops: 'x'.repeat(600 * 1024) } }),
+    });
+    const { jobId } = await accepted.json();
+    await drain();
+    expect((await (await getJob(new Request('http://x', as(owner)), params(jobId))).json()).status).toBe('failed');
+    expect(await savedModel(owner, modelId)).toEqual(original);
+  });
 
   it('refines the diagram the browser holds and returns the result to its owner only', async () => {
     const { owner, modelId } = await diagram();

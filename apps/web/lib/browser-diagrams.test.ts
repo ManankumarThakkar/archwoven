@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { validFullModel, type SystemModel } from '@archwoven/model';
-import { deleteBrowserDiagram, latestBrowserDiagram, loadBrowserDiagram, MAX_BROWSER_DIAGRAMS, saveBrowserDiagram } from './browser-diagrams';
+import { deleteBrowserDiagram, latestBrowserDiagram, loadBrowserDiagram, MAX_BROWSER_DIAGRAMS, MAX_BROWSER_DIAGRAM_BYTES, saveBrowserDiagram } from './browser-diagrams';
 
 class MemoryStorage implements Storage {
   map = new Map<string, string>();
@@ -73,6 +73,13 @@ describe('diagrams kept in this browser', () => {
 
   it('refuses diagrams too large to keep', () => {
     expect(saveBrowserDiagram(id(1), { ...model(), title: 'x'.repeat(600_000) }, storage, now)).toBe('too-large');
+  });
+
+  it('uses the same UTF-8 model limit as the server, excluding the browser envelope', () => {
+    expect(saveBrowserDiagram(id(1), { ...model(), title: '界'.repeat(200_000) }, storage, now)).toBe('too-large');
+    const base = model('');
+    const titleBytes = MAX_BROWSER_DIAGRAM_BYTES - new TextEncoder().encode(JSON.stringify(base)).byteLength;
+    expect(saveBrowserDiagram(id(2), { ...base, title: 'x'.repeat(titleBytes) }, storage, now)).toBe('saved');
   });
 
   it('reports blocked storage instead of failing', () => {

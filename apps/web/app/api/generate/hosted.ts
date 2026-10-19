@@ -8,7 +8,7 @@ import {
   OVERSIZED_COPY, llmNotConfigured, LLM_NOT_CONFIGURED_COPY, spenderOf,
 } from '../../lib/server';
 import { deployMode, privacyForMode } from '../../lib/mode';
-import { hostedJobLimits, runHostedJob, HOSTED_NOT_CONFIGURED_COPY, HOSTED_UNAVAILABLE_COPY, type JobOutcome, type JobRun } from '../../lib/hosted-runner';
+import { hostedJobLimits, runHostedJob, HOSTED_NOT_CONFIGURED_COPY, HOSTED_UNAVAILABLE_COPY, HOSTED_STORAGE_FULL_COPY, HOSTED_STORAGE_OVERSIZED_COPY, type JobOutcome, type JobRun } from '../../lib/hosted-runner';
 import { parseReply, continuationPrompt, preserveClarification, type ClarificationReply } from '../../lib/clarification';
 import { secretGate } from '../../../lib/secret-gate';
 
@@ -67,13 +67,14 @@ export async function postHostedGenerate(req: Request, jobs: HostedJobs | 'misco
     if (admitted.kind === 'replay') return accepted(admitted.jobId);
     if (admitted.kind === 'busy') return Response.json({ reason: 'busy', jobId: admitted.jobId, message: BUSY_COPY }, { status: 409, headers });
     if (admitted.kind === 'queue-full') return Response.json({ reason: 'busy', message: QUEUE_FULL_COPY }, { status: 503, headers });
+    if (admitted.kind === 'storage-full') return Response.json({ reason: 'storage-full', message: HOSTED_STORAGE_FULL_COPY + ' No AI request was started.' }, { status: 503, headers });
     if (admitted.kind === 'network-busy') return Response.json({ reason: 'burst', message: NETWORK_BUSY_COPY, resetAt: Date.now() + 60_000 }, { status: 429, headers });
 
     const answered = reply ? context : undefined, answeredBy = reply;
     const work = async (signal: AbortSignal, { claim }: JobRun): Promise<JobOutcome> => {
       const out = await serverDeps.generateModel(prompt, view, { signal, allowClarification: !context, spender });
       const report = (outcome: 'ok' | 'repaired' | 'failed') => jobs.putOwned('lasttask', jobs.ownerOf(sessionId), sessionId,
-        taskReport({ action: 'generate', view, taskId: jobId, modelId: jobId, usage: out.usage, retries: out.usage.repairs, outcome })).catch(() => undefined);
+        taskReport({ action: 'generate', view, taskId: jobId, modelId: jobId, usage: out.usage, retries: out.usage.repairs, outcome }), claim).catch(() => undefined);
       if (!out.ok) { await report('failed'); return { status: 'failed', error: out.errors.join('; ') }; }
       if ('questions' in out) {
         const questions = ClarificationSchema.safeParse({ clarificationQuestions: out.questions });
@@ -88,7 +89,8 @@ export async function postHostedGenerate(req: Request, jobs: HostedJobs | 'misco
       // Privacy is server-stamped from deploy mode — model self-report never wins.
       const stamped = { ...checked.model, privacy: privacyForMode(deployMode()) };
       // Saved only while this instance still runs the job: a cancel that landed meanwhile keeps nothing.
-      if (await jobs.putModel(jobId, sessionId, stamped, null, claim) !== 'ok') { await report('failed'); return { status: 'failed', error: 'Cancelled.' }; }
+      const saved = await jobs.putModel(jobId, sessionId, stamped, null, claim);
+      if (saved !== 'ok') { await report('failed'); return { status: 'failed', error: saved === 'storage-full' ? HOSTED_STORAGE_FULL_COPY : saved === 'too-large' ? HOSTED_STORAGE_OVERSIZED_COPY : 'Cancelled.' }; }
       await report(out.usage.repairs > 0 ? 'repaired' : 'ok');
       if (answeredBy) await jobs.scrubClarification(answeredBy.jobId).catch(() => undefined);
       return { status: 'succeeded', fields: { modelId: jobId, revision: stamped.revision } };

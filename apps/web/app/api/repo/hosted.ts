@@ -5,7 +5,7 @@ import { parseRepoUrl } from '@archwoven/ingest';
 import { maskFragmentSecrets } from '@archwoven/llm';
 import { serverDeps, readOrCreateSession, sessionCookie, llmNotConfigured, LLM_NOT_CONFIGURED_COPY, spenderOf } from '../../lib/server';
 import { deployMode, privacyForMode } from '../../lib/mode';
-import { hostedJobLimits, runHostedJob, HOSTED_NOT_CONFIGURED_COPY, HOSTED_UNAVAILABLE_COPY, type JobOutcome, type JobRun } from '../../lib/hosted-runner';
+import { hostedJobLimits, runHostedJob, HOSTED_NOT_CONFIGURED_COPY, HOSTED_UNAVAILABLE_COPY, HOSTED_STORAGE_FULL_COPY, HOSTED_STORAGE_OVERSIZED_COPY, type JobOutcome, type JobRun } from '../../lib/hosted-runner';
 import { readDirectEdit, RequestTooLarge } from '../../../lib/direct-edit';
 
 const BUSY_COPY = 'You already have a request running. Wait for it to finish or cancel it, then try again.';
@@ -49,6 +49,7 @@ export async function postHostedRepo(req: Request, jobs: HostedJobs | 'misconfig
     if (admitted.kind === 'replay') return Response.json({ jobId: admitted.jobId, remaining: null, resumable: true }, { status: 202, headers });
     if (admitted.kind === 'busy') return Response.json({ reason: 'busy', jobId: admitted.jobId, message: BUSY_COPY }, { status: 409, headers });
     if (admitted.kind === 'queue-full') return Response.json({ reason: 'busy', message: QUEUE_FULL_COPY }, { status: 503, headers });
+    if (admitted.kind === 'storage-full') return Response.json({ reason: 'storage-full', message: HOSTED_STORAGE_FULL_COPY + ' No AI request was started.' }, { status: 503, headers });
     if (admitted.kind === 'network-busy') return Response.json({ reason: 'burst', message: NETWORK_BUSY_COPY, resetAt: Date.now() + 60_000 }, { status: 429, headers });
 
     const work = async (signal: AbortSignal, { stage, claim }: JobRun): Promise<JobOutcome> => {
@@ -63,7 +64,7 @@ export async function postHostedRepo(req: Request, jobs: HostedJobs | 'misconfig
       await stage('designing');
       const out = await serverDeps.assembleRepoModel(masked.fragment, { owner: parsed.owner, repo: parsed.repo, sha: ingest.sha, framework: ingest.framework }, { signal, spender });
       const report = (outcome: 'ok' | 'repaired' | 'failed') => jobs.putOwned('lasttask', jobs.ownerOf(sessionId), sessionId,
-        taskReport({ action: 'repo', view: 'architecture', taskId: jobId, modelId: jobId, usage: out.usage, retries: out.usage.repairs, outcome })).catch(() => undefined);
+        taskReport({ action: 'repo', view: 'architecture', taskId: jobId, modelId: jobId, usage: out.usage, retries: out.usage.repairs, outcome }), claim).catch(() => undefined);
       if (!out.ok) { await report('failed'); return { status: 'failed', error: out.errors.join('; ') }; }
       await stage('validating-output');
       const checked = validateModel(out.model);
@@ -73,7 +74,8 @@ export async function postHostedRepo(req: Request, jobs: HostedJobs | 'misconfig
       // Ingest disclosures live with the model, so a reload shows exactly what the first load did; privacy is server-stamped.
       const stamped = { ...appendDisclosures(checked.model, disclosures), privacy: privacyForMode(deployMode()) };
       // Saved only while this instance still runs the job: a cancel that landed meanwhile keeps nothing.
-      if (await jobs.putModel(jobId, sessionId, stamped, null, claim) !== 'ok') { await report('failed'); return { status: 'failed', error: 'Cancelled.' }; }
+      const saved = await jobs.putModel(jobId, sessionId, stamped, null, claim);
+      if (saved !== 'ok') { await report('failed'); return { status: 'failed', error: saved === 'storage-full' ? HOSTED_STORAGE_FULL_COPY : saved === 'too-large' ? HOSTED_STORAGE_OVERSIZED_COPY : 'Cancelled.' }; }
       await report(out.usage.repairs > 0 ? 'repaired' : 'ok');
       return { status: 'succeeded', fields: { modelId: jobId, revision: stamped.revision } };
     };

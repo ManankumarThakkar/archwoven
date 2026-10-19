@@ -31,8 +31,9 @@ describe.skipIf(!redis)('hosted job lifecycle (real Redis)', () => {
     await queue.admit(first, 'session-a', 'generate', 'k1', limits);
     expect(await queue.admit(id(), 'session-a', 'generate', 'k1', limits)).toEqual({ kind: 'replay', jobId: first });
     expect(await queue.admit(id(), 'session-a', 'generate', 'k2', limits)).toEqual({ kind: 'busy', jobId: first });
+    clock += 1; // Distinct arrival times: equal-score Redis members are ordered by id, not admission order.
     expect(await queue.admit(id(), 'session-b', 'generate', 'k1', limits)).toEqual({ kind: 'admitted' });
-    await queue.claim(first, 'worker-1', limits);
+    expect(await queue.claim(first, 'worker-1', limits)).toEqual({ kind: 'claimed' });
     await queue.finish(first, 'worker-1', 'succeeded', '', { modelId: first, revision: 1 });
     expect(await queue.admit(id(), 'session-a', 'generate', 'k2', limits)).toEqual({ kind: 'admitted' });
   });

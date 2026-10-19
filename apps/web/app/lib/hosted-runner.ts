@@ -18,6 +18,8 @@ export function hostedJobLimits(): HostedJobLimits {
   };
 }
 
+export const HOSTED_STORAGE_FULL_COPY = 'Archwoven’s temporary diagram storage is full. Download diagrams you want to keep, delete unneeded diagrams or try again later. Viewing and downloads remain available.';
+export const HOSTED_STORAGE_OVERSIZED_COPY = 'This diagram is too large to save here (512 KB maximum). Try a smaller system or run locally.';
 export const HOSTED_UNAVAILABLE_COPY = 'AI generation and saving changes are temporarily unavailable. You can still view and download your diagrams.';
 /** For operators: what hosted job storage needs (names only, never values). */
 export const HOSTED_STORAGE_VARIABLES = 'UPSTASH_REDIS_REST_URL (an https://…upstash.io address), UPSTASH_REDIS_REST_TOKEN, ARCHWOVEN_REDIS_PREFIX (lowercase, ending in a colon) and ARCHWOVEN_SESSION_SECRET (at least 32 characters)';
@@ -61,6 +63,7 @@ export async function runHostedJob(jobs: HostedJobs, jobId: string, work: (signa
       const claim = await jobs.claim(jobId, claimant, limits);
       if (claim.kind === 'claimed') break;
       if (claim.kind === 'wait') { await new Promise(resolve => setTimeout(resolve, pollMs)); continue; }
+      if (claim.kind === 'not-queued') return;
       await jobs.abandon(jobId, WAIT_COPY);
       return;
     }
