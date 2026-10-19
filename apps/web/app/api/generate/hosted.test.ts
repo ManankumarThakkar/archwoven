@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { openStore, EXPIRED_COPY } from '@archwoven/jobs';
+import { openStore, EXPIRED_COPY, openHostedJobs } from '@archwoven/jobs';
 import { validFullModel, type TaskUsage } from '@archwoven/model';
 import { startTestRedis } from '../../../../../packages/jobs/src/redis-test-server';
 import { serverDeps } from '../../lib/server';
@@ -9,6 +9,7 @@ import { GET as getJob } from '../jobs/[id]/route';
 import { POST as cancelJob } from '../jobs/[id]/cancel/route';
 import { GET as getModel } from '../models/[id]/route';
 import { GET as getQuota } from '../quota/route';
+import { postHostedGenerate } from './hosted';
 
 const redis = await startTestRedis();
 if (!redis && process.env.CI) throw new Error('CI must provide Redis for the hosted job route tests.');
@@ -33,6 +34,17 @@ describe.skipIf(!redis)('hosted description jobs (real Redis)', () => {
     scheduled.length = 0;
   });
   afterEach(() => { vi.unstubAllEnvs(); vi.useRealTimers(); });
+
+  it('refuses full temporary storage before scheduling or calling a provider', async () => {
+    const generate = vi.fn(serverDeps.generateModel);
+    serverDeps.generateModel = generate;
+    const full = openHostedJobs({ url: redis!.url, token: redis!.token, prefix: 'full:', storageLimits: { bytes: 1024, records: 2 } });
+    const res = await postHostedGenerate(new Request('http://localhost/api/generate', { method: 'POST', body: JSON.stringify(prompt) }), full);
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ reason: 'storage-full', message: expect.stringContaining('No AI request was started') });
+    expect(scheduled).toHaveLength(0);
+    expect(generate).not.toHaveBeenCalled();
+  });
 
   it('answers promptly with an owner-bound job, runs it after the response, and shows the result only to its owner', async () => {
     const started = await post({ ...prompt, idempotencyKey: 'k1' });

@@ -394,6 +394,37 @@ describe('saved diagram restoration', () => {
 });
 
 describe('generation request failures', () => {
+  it.each([{ code: 503, initialDiagram: true }, { code: 429, initialDiagram: true }, { code: 503, initialDiagram: false }, { code: 429, initialDiagram: false }])('ignores a delayed refusal after navigation ($code, initial diagram $initialDiagram)', async ({ code, initialDiagram }) => {
+    if (initialDiagram) window.history.replaceState(null, '', '/workspace#model=m1');
+    let resolve!: (r: Response) => void;
+    const response = new Promise<Response>(r => { resolve = r; });
+    const destination = { ...validFullModelExtended, nodes: validFullModelExtended.nodes.map(n => n.id === 'gateway.api' ? { ...n, label: 'Destination Gateway' } : n) };
+    transport = input => input === '/api/generate' ? response : input === '/api/models/m2' ? Response.json({ model: destination }) : undefined;
+    await mount();
+    await fill('#system-description', 'Another system with an API and database');
+    await click('Generate diagram');
+    await act(async () => { window.location.hash = '#model=m2'; window.dispatchEvent(new HashChangeEvent('hashchange')); await new Promise(r => setTimeout(r, 0)); });
+    for (let i = 0; i < 50 && container.querySelector('[aria-label="Rendered API"]')?.textContent !== 'Destination Gateway'; i++) await act(async () => { await new Promise(r => setTimeout(r, 10)); });
+    expect(container.querySelector('[aria-label="Rendered API"]')?.textContent).toBe('Destination Gateway');
+    await act(async () => { resolve(Response.json({ reason: 'storage-full', message: 'Refusal for the old request' }, { status: code })); await new Promise(r => setTimeout(r, 0)); });
+    expect(canRefine()).toBe(true);
+    expect(container.querySelector('[aria-label="Rendered API"]')?.textContent).toBe('Destination Gateway');
+    expect(container.textContent).not.toContain('Refusal for the old request');
+  });
+  it.each([503, 429])('keeps an existing diagram and its downloads when new generation is refused (%s)', async (code) => {
+    window.history.replaceState(null, '', '/workspace#model=m1');
+    const message = 'Temporary diagram storage is full. Viewing and downloads remain available.';
+    transport = input => input === '/api/generate' ? Response.json({ reason: 'storage-full', message }, { status: code }) : undefined;
+    await mount();
+    await act(async () => { await vi.waitFor(() => expect(canRefine()).toBe(true)); });
+    await fill('#system-description', 'Another system with an API and database');
+    await click('Generate diagram');
+    await act(async () => { await vi.waitFor(() => expect(container.textContent).toContain(message)); });
+    expect(canRefine()).toBe(true);
+    expect(container.querySelector('[aria-label="Rendered view"]')).not.toBeNull();
+    expect(container.querySelector<HTMLTextAreaElement>('#system-description')?.value).toBe('Another system with an API and database');
+    expect([...container.querySelectorAll('button')].some(b => b.textContent === 'JSON')).toBe(true);
+  });
   it.each(['description', 'repository'])('recovers from a rejected %s request instead of staying busy', async (kind) => {
     transport = (input) => {
       if (input === '/api/generate' || input === '/api/repo') return Promise.reject(new TypeError('Failed to fetch'));

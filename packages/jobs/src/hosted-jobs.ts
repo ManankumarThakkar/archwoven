@@ -1,5 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { redisRest } from './spending-ledger';
+import { STORAGE_LUA, STORAGE_USAGE_LUA, HOSTED_STORAGE_LIMITS, HOSTED_MODEL_BYTES, HOSTED_RESULT_BYTES, HOSTED_REPORT_BYTES, HOSTED_JOB_STORAGE_BYTES, HOSTED_JOB_STORAGE_RECORDS, type HostedStorageLimits, type StorageWrite } from './hosted-storage';
 
 /**
  * Shared hosted job lifecycle in Redis (Upstash REST), for serverless
@@ -27,14 +28,14 @@ export interface HostedJobView {
 }
 /** The running instance's claim on a job: writes made for the job land only while it holds it. */
 export interface JobClaim { jobId: string; claimant: string }
-export type AdmitResult = { kind: 'admitted' } | { kind: 'replay'; jobId: string } | { kind: 'busy'; jobId: string } | { kind: 'queue-full' } | { kind: 'network-busy' };
+export type AdmitResult = { kind: 'admitted' } | { kind: 'replay'; jobId: string } | { kind: 'busy'; jobId: string } | { kind: 'queue-full' } | { kind: 'network-busy' } | { kind: 'storage-full' };
 export type ClaimResult = { kind: 'claimed' } | { kind: 'wait'; position: number } | { kind: 'expired' | 'gone' } | { kind: 'not-queued'; status: string };
 
 export const RESULT_TTL_SECONDS = 86_400;
 export const EXPIRED_COPY = 'This job stopped before it finished, so it was not completed. You can retry it.';
 export const WAIT_COPY = 'The service was busy for too long, so this request did not start. Nothing was charged. You can retry it.';
 
-const ADMIT = `
+const ADMIT = STORAGE_LUA + `
 local p, now = ARGV[1], tonumber(ARGV[2])
 local id, owner, idem = ARGV[3], ARGV[4], ARGV[5]
 local waitMs, runMs, ttl = tonumber(ARGV[8]), tonumber(ARGV[9]), tonumber(ARGV[10])
@@ -61,6 +62,8 @@ if net ~= '' then
 end
 redis.call('ZREMRANGEBYSCORE', p .. 'jobs:waiting', '-inf', now - waitMs)
 if redis.call('ZCARD', p .. 'jobs:waiting') >= tonumber(ARGV[7]) then return {'queue-full'} end
+local budget = storageBudget(p, tonumber(ARGV[13]), tonumber(ARGV[14]))
+if not budget.take(p .. 'storage:hold:' .. id, tonumber(ARGV[15]), tonumber(ARGV[16]), waitMs + runMs + 60000) then return {'storage-full'} end
 local key = p .. 'job:' .. id
 local deadline = now + waitMs + runMs
 redis.call('HSET', key, 'owner', owner, 'net', net, 'kind', ARGV[6], 'status', 'queued', 'createdAt', now, 'deadlineAt', deadline, 'usagePending', '1')
@@ -92,8 +95,9 @@ redis.call('ZADD', p .. 'jobs:running', now + runMs, id)
 redis.call('HSET', key, 'status', 'running', 'claimedBy', ARGV[6], 'stage', 'generating')
 return {'claimed'}`;
 
-const RELEASE = `
+const RELEASE = STORAGE_LUA + `
 local function release(p, id, owner)
+  storageBudget(p, 0, 0).drop(p .. 'storage:hold:' .. id)
   redis.call('ZREM', p .. 'jobs:running', id)
   redis.call('ZREM', p .. 'jobs:waiting', id)
   local net = redis.call('HGET', p .. 'job:' .. id, 'net')
@@ -106,6 +110,7 @@ local p, id = ARGV[1], ARGV[2]
 local key = p .. 'job:' .. id
 local s = redis.call('HMGET', key, 'status', 'claimedBy', 'owner')
 if not s[1] then return 'gone' end
+if s[2] ~= ARGV[3] then return 'stale' end
 release(p, id, s[3])
 redis.call('HSET', key, 'usagePending', '0')
 if s[1] ~= 'running' or s[2] ~= ARGV[3] then return 'stale' end
@@ -118,9 +123,9 @@ local p, id = ARGV[1], ARGV[2]
 local key = p .. 'job:' .. id
 local s = redis.call('HMGET', key, 'status', 'owner')
 if not s[1] then return 'gone' end
-release(p, id, s[2])
-if s[1] == 'queued' then redis.call('HSET', key, 'status', 'failed', 'error', ARGV[3], 'usagePending', '0') return 'failed' end
-redis.call('HSET', key, 'usagePending', '0')
+if s[1] == 'queued' then
+  release(p, id, s[2])
+  redis.call('HSET', key, 'status', 'failed', 'error', ARGV[3], 'usagePending', '0') return 'failed' end
 return s[1]`;
 
 const CANCEL = RELEASE + `
@@ -154,6 +159,7 @@ if (f[2] == 'queued' or f[2] == 'running') and now > tonumber(f[6]) then
   f[2], f[5], f[7] = 'failed', ARGV[5], '0'
 elseif f[2] == 'cancelled' and f[7] == '1' and now > tonumber(f[6]) then
   -- Its executor never reported back; nothing more will settle.
+  release(p, id, f[1])
   redis.call('HSET', key, 'usagePending', '0')
   f[7] = '0'
 end
@@ -171,11 +177,16 @@ if s[1] ~= 'running' or s[2] ~= ARGV[1] then return 0 end
 redis.call('HSET', KEYS[1], 'stage', ARGV[2])
 return 1`;
 const CANCELLED = `return redis.call('HGET', KEYS[1], 'cancel') == '1' and 1 or 0`;
-const PUT_OWNED = `redis.call('HSET', KEYS[1], 'owner', ARGV[1], 'value', ARGV[2]) redis.call('EXPIRE', KEYS[1], tonumber(ARGV[3])) return 'ok'`;
+const PUT_OWNED = STORAGE_LUA + `
+local budget = storageBudget(ARGV[4], tonumber(ARGV[5]), tonumber(ARGV[6]))
+if not budget.take(KEYS[1], #ARGV[2], 1, tonumber(ARGV[3]) * 1000, ARGV[7]) then return 'storage-full' end
+redis.call('HSET', KEYS[1], 'owner', ARGV[1], 'value', ARGV[2])
+redis.call('EXPIRE', KEYS[1], tonumber(ARGV[3]))
+return 'ok'`;
 const GET_OWNED = `local v = redis.call('HMGET', KEYS[1], 'owner', 'value') if v[1] ~= ARGV[1] then return false end return v[2]`;
 // A model write lands only for its owner and only over the revision the change was based on.
 // A job's write also lands only while the instance that claimed it is still running it (not cancelled).
-const PUT_MODEL = `
+const PUT_MODEL = STORAGE_LUA + `
 if KEYS[2] then
   local j = redis.call('HMGET', KEYS[2], 'status', 'claimedBy')
   if j[1] ~= 'running' or j[2] ~= ARGV[6] then return 'cancelled' end
@@ -186,13 +197,17 @@ if v[1] and v[1] ~= ARGV[1] then return 'not-owner' end
 if not v[1] and ARGV[3] ~= '' then return 'stale' end
 -- Records saved before revisions were tracked carry no revision field and are not checked.
 if v[1] and ARGV[3] ~= '' and v[2] and v[2] ~= ARGV[3] then return 'stale' end
+local budget = storageBudget(ARGV[7], tonumber(ARGV[8]), tonumber(ARGV[9]))
+if not budget.take(KEYS[1], #ARGV[2], 1, tonumber(ARGV[5]) * 1000, ARGV[10]) then return 'storage-full' end
 redis.call('HSET', KEYS[1], 'owner', ARGV[1], 'value', ARGV[2], 'revision', ARGV[4])
 redis.call('EXPIRE', KEYS[1], tonumber(ARGV[5]))
 return 'ok'`;
 // A diagram restored from the visitor's browser lands only where the server holds no copy.
-const RESTORE_MODEL = `
+const RESTORE_MODEL = STORAGE_LUA + `
 local owner = redis.call('HGET', KEYS[1], 'owner')
 if owner then return owner == ARGV[1] and 'exists' or 'not-owner' end
+local budget = storageBudget(ARGV[5], tonumber(ARGV[6]), tonumber(ARGV[7]))
+if not budget.take(KEYS[1], #ARGV[2], 1, tonumber(ARGV[4]) * 1000) then return 'storage-full' end
 redis.call('HSET', KEYS[1], 'owner', ARGV[1], 'value', ARGV[2], 'revision', ARGV[3])
 redis.call('EXPIRE', KEYS[1], tonumber(ARGV[4]))
 return 'ok'`;
@@ -200,17 +215,21 @@ const ALLOW = `
 local count = redis.call('INCR', KEYS[1])
 if count == 1 then redis.call('EXPIRE', KEYS[1], tonumber(ARGV[2])) end
 return count <= tonumber(ARGV[1]) and 1 or 0`;
-const DELETE_OWNED = `if redis.call('HGET', KEYS[1], 'owner') ~= ARGV[1] then return 0 end return redis.call('DEL', KEYS[1])`;
+const DELETE_OWNED = STORAGE_LUA + `
+if redis.call('HGET', KEYS[1], 'owner') ~= ARGV[1] then return 0 end
+storageBudget(ARGV[2], 0, 0).drop(KEYS[1])
+return redis.call('DEL', KEYS[1])`;
 
 const ID = /^[0-9a-f-]{36}$/;
 /** Owned values: a diagram, a job's result, or the visitor's last task report (keyed by the owner hash). */
 type OwnedKind = 'model' | 'result' | 'lasttask';
 const IDEMPOTENCY = /^[\w:.-]{1,128}$/;
 
-export function openHostedJobs({ url, token, prefix, ownerKey = token, now = () => Date.now(), call = redisRest(url, token) }: {
-  url: string; token: string; prefix: string; ownerKey?: string; now?: () => number; call?: (command: (string | number)[]) => Promise<unknown>;
+export function openHostedJobs({ url, token, prefix, ownerKey = token, now = () => Date.now(), call = redisRest(url, token), storageLimits = HOSTED_STORAGE_LIMITS }: {
+  url: string; token: string; prefix: string; ownerKey?: string; now?: () => number; call?: (command: (string | number)[]) => Promise<unknown>; storageLimits?: HostedStorageLimits;
 }) {
   if (!/^[a-z0-9-]+:$/.test(prefix)) throw new Error('The Redis prefix must be lowercase letters, digits or dashes, ending in a colon.');
+  if (![storageLimits.bytes, storageLimits.records].every(n => Number.isSafeInteger(n) && n > 0)) throw new Error('Invalid storage limits.');
   const id = (value: string) => { if (!ID.test(value)) throw new Error('Invalid job id.'); return value; };
   // A session id is a bearer credential: store only a keyed hash of it.
   const ownerOf = (sessionId: string) => createHmac('sha256', ownerKey).update(`${prefix}owner:${sessionId}`).digest('hex').slice(0, 32);
@@ -221,9 +240,9 @@ export function openHostedJobs({ url, token, prefix, ownerKey = token, now = () 
   return {
     async admit(jobId: string, sessionId: string, kind: string, idempotencyKey: string | undefined, limits: HostedJobLimits, network?: string | null): Promise<AdmitResult> {
       if (idempotencyKey !== undefined && !IDEMPOTENCY.test(idempotencyKey)) throw new Error('Invalid idempotency key.');
-      const [result, other] = await run(ADMIT, [], [p, now(), id(jobId), ownerOf(sessionId), idempotencyKey ?? '', kind, limits.maxWaiting, limits.waitMs, limits.runMs, RESULT_TTL_SECONDS, networkOf(network), limits.maxPerNetwork ?? 2]) as [string, string?];
+      const [result, other] = await run(ADMIT, [], [p, now(), id(jobId), ownerOf(sessionId), idempotencyKey ?? '', kind, limits.maxWaiting, limits.waitMs, limits.runMs, RESULT_TTL_SECONDS, networkOf(network), limits.maxPerNetwork ?? 2, storageLimits.bytes, storageLimits.records, HOSTED_JOB_STORAGE_BYTES, HOSTED_JOB_STORAGE_RECORDS]) as [string, string?];
       if (result === 'replay' || result === 'busy') return { kind: result, jobId: other! };
-      return { kind: result as 'admitted' | 'queue-full' | 'network-busy' };
+      return { kind: result as 'admitted' | 'queue-full' | 'network-busy' | 'storage-full' };
     },
     async claim(jobId: string, claimant: string, limits: HostedJobLimits): Promise<ClaimResult> {
       const [result, detail] = await run(CLAIM, [], [p, id(jobId), now(), limits.maxRunning, limits.runMs, claimant, limits.waitMs]) as [string, string | number | undefined];
@@ -271,15 +290,19 @@ export function openHostedJobs({ url, token, prefix, ownerKey = token, now = () 
     },
     /** Values readable only by the session that owns them, for 24 hours. */
     /** Save a diagram's current revision; `baseRevision` null writes unconditionally (a new diagram). */
-    async putModel(modelId: string, sessionId: string, model: { revision: number; [field: string]: unknown }, baseRevision: number | null, claim?: JobClaim): Promise<'ok' | 'stale' | 'not-owner' | 'cancelled'> {
+    async putModel(modelId: string, sessionId: string, model: { revision: number; [field: string]: unknown }, baseRevision: number | null, claim?: JobClaim): Promise<StorageWrite | 'stale' | 'not-owner' | 'cancelled'> {
       if (!ID.test(modelId)) throw new Error('Invalid key.');
+      const value = JSON.stringify(model);
+      if (Buffer.byteLength(value) > HOSTED_MODEL_BYTES) return 'too-large';
       const keys = [`${p}model:${modelId}`, ...(claim ? [`${p}job:${id(claim.jobId)}`] : [])];
-      return await run(PUT_MODEL, keys, [ownerOf(sessionId), JSON.stringify(model), baseRevision === null ? '' : baseRevision, model.revision, RESULT_TTL_SECONDS, claim?.claimant ?? '']) as 'ok' | 'stale' | 'not-owner' | 'cancelled';
+      return await run(PUT_MODEL, keys, [ownerOf(sessionId), value, baseRevision === null ? '' : baseRevision, model.revision, RESULT_TTL_SECONDS, claim?.claimant ?? '', p, storageLimits.bytes, storageLimits.records, claim ? `${p}storage:hold:${claim.jobId}` : '']) as StorageWrite | 'stale' | 'not-owner' | 'cancelled';
     },
     /** Save a diagram from the visitor's browser where the server copy has expired; an existing copy always wins. */
-    async restoreModel(modelId: string, sessionId: string, model: { revision: number; [field: string]: unknown }): Promise<'ok' | 'exists' | 'not-owner'> {
+    async restoreModel(modelId: string, sessionId: string, model: { revision: number; [field: string]: unknown }): Promise<StorageWrite | 'exists' | 'not-owner'> {
       if (!ID.test(modelId)) throw new Error('Invalid key.');
-      return await run(RESTORE_MODEL, [`${p}model:${modelId}`], [ownerOf(sessionId), JSON.stringify(model), model.revision, RESULT_TTL_SECONDS]) as 'ok' | 'exists' | 'not-owner';
+      const value = JSON.stringify(model);
+      if (Buffer.byteLength(value) > HOSTED_MODEL_BYTES) return 'too-large';
+      return await run(RESTORE_MODEL, [`${p}model:${modelId}`], [ownerOf(sessionId), value, model.revision, RESULT_TTL_SECONDS, p, storageLimits.bytes, storageLimits.records]) as StorageWrite | 'exists' | 'not-owner';
     },
     /** Count one free write for `identity` (stored only as a keyed hash); false once `limit` is reached within the window. */
     async allow(bucket: string, identity: string, limit: number, windowSeconds: number): Promise<boolean> {
@@ -295,9 +318,12 @@ export function openHostedJobs({ url, token, prefix, ownerKey = token, now = () 
       if (owner !== ownerOf(sessionId)) return { owner: 'other', model: null };
       return { owner: 'self', model: value ? JSON.parse(value) as { revision?: unknown } : null };
     },
-    async putOwned(kind: OwnedKind, key: string, sessionId: string, value: unknown): Promise<void> {
+    async putOwned(kind: OwnedKind, key: string, sessionId: string, value: unknown, claim?: JobClaim): Promise<StorageWrite> {
       if (!ownedKey(kind, key)) throw new Error('Invalid key.');
-      await run(PUT_OWNED, [`${p}${kind}:${key}`], [ownerOf(sessionId), JSON.stringify(value), RESULT_TTL_SECONDS]);
+      const encoded = JSON.stringify(value);
+      const max = kind === 'model' ? HOSTED_MODEL_BYTES : kind === 'result' ? HOSTED_RESULT_BYTES : HOSTED_REPORT_BYTES;
+      if (Buffer.byteLength(encoded) > max) return 'too-large';
+      return await run(PUT_OWNED, [`${p}${kind}:${key}`], [ownerOf(sessionId), encoded, RESULT_TTL_SECONDS, p, storageLimits.bytes, storageLimits.records, claim ? `${p}storage:hold:${id(claim.jobId)}` : '']) as StorageWrite;
     },
     async getOwned<T>(kind: OwnedKind, key: string, sessionId: string): Promise<T | null> {
       if (!ownedKey(kind, key)) return null;
@@ -306,7 +332,12 @@ export function openHostedJobs({ url, token, prefix, ownerKey = token, now = () 
     },
     async deleteOwned(kind: OwnedKind, key: string, sessionId: string): Promise<boolean> {
       if (!ownedKey(kind, key)) return false;
-      return await run(DELETE_OWNED, [`${p}${kind}:${key}`], [ownerOf(sessionId)]) === 1;
+      return await run(DELETE_OWNED, [`${p}${kind}:${key}`], [ownerOf(sessionId), p]) === 1;
+    },
+    /** Payload bytes and records, including outstanding job reservations; excludes Redis overhead. */
+    async storageUsage(): Promise<{ bytes: number; records: number }> {
+      const [bytes, records] = await run(STORAGE_USAGE_LUA, [], [p]) as number[];
+      return { bytes: bytes!, records: records! };
     },
     ownerOf,
   };

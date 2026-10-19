@@ -1,15 +1,15 @@
 import { createHash } from 'node:crypto';
 import { isOwnedId, ownedId } from './owned-ids';
-import { taskReport, type HostedJobs } from '@archwoven/jobs';
+import { taskReport, HOSTED_MODEL_BYTES, HOSTED_RESULT_BYTES, type HostedJobs } from '@archwoven/jobs';
 import { sameModelContent, SystemModelSchema, validateModel, type SystemModel, type TaskUsage, type ViewType } from '@archwoven/model';
 import { serverDeps, readOrCreateSession, sessionCookie, llmNotConfigured, LLM_NOT_CONFIGURED_COPY, spenderOf, estimateTokens, PROMPT_TOKEN_LIMIT, OVERSIZED_COPY } from './server';
 import type { Spender } from './spending';
 import { deployMode, privacyForMode } from './mode';
-import { hostedJobLimits, runHostedJob, HOSTED_NOT_CONFIGURED_COPY, HOSTED_UNAVAILABLE_COPY, type JobOutcome, type JobRun } from './hosted-runner';
+import { hostedJobLimits, runHostedJob, HOSTED_NOT_CONFIGURED_COPY, HOSTED_UNAVAILABLE_COPY, HOSTED_STORAGE_FULL_COPY, HOSTED_STORAGE_OVERSIZED_COPY, type JobOutcome, type JobRun } from './hosted-runner';
 import { secretGate } from '../../lib/secret-gate';
 import { readDirectEdit, RequestTooLarge } from '../../lib/direct-edit';
 
-const MAX_MODEL_BYTES = 1_000_000;
+const MAX_MODEL_BYTES = HOSTED_MODEL_BYTES;
 /** A diagram plus the operation's own fields. */
 export const MAX_DIAGRAM_REQUEST_BYTES = MAX_MODEL_BYTES + 64 * 1024;
 export const EXPIRED_MODEL_COPY = 'The server copy of this diagram has expired: it is kept for 24 hours after its last change.';
@@ -117,23 +117,29 @@ export async function postHostedDiagramJob(req: Request, jobs: HostedJobs | 'mis
     if (admitted.kind === 'replay') return Response.json({ jobId: admitted.jobId, remaining: null, resumable: true }, { status: 202, headers });
     if (admitted.kind === 'busy') return Response.json({ reason: 'busy', jobId: admitted.jobId, message: BUSY_COPY }, { status: 409, headers });
     if (admitted.kind === 'queue-full') return Response.json({ reason: 'busy', message: QUEUE_FULL_COPY }, { status: 503, headers });
+    if (admitted.kind === 'storage-full') return Response.json({ reason: 'storage-full', message: HOSTED_STORAGE_FULL_COPY + ' No AI request was started.' }, { status: 503, headers });
     if (admitted.kind === 'network-busy') return Response.json({ reason: 'burst', message: NETWORK_BUSY_COPY, resetAt: Date.now() + 60_000 }, { status: 429, headers });
 
     const work = async (signal: AbortSignal, { claim }: JobRun): Promise<JobOutcome> => {
       const out = await op.run(model, signal, spender);
       const report = (outcome: 'ok' | 'repaired' | 'failed') => jobs.putOwned('lasttask', jobs.ownerOf(sessionId), sessionId,
-        taskReport({ action: op.kind, view: op.view, taskId: jobId, modelId, usage: out.usage, retries: out.usage.repairs, outcome })).catch(() => undefined);
+        taskReport({ action: op.kind, view: op.view, taskId: jobId, modelId, usage: out.usage, retries: out.usage.repairs, outcome }), claim).catch(() => undefined);
       const fail = async (error: string): Promise<JobOutcome> => { await report('failed'); return { status: 'failed', error }; };
       if (!out.ok) return fail(out.errors.join('; '));
       if (sameModelContent(out.model, model)) return fail(NO_CHANGE_COPY);
       if (signal.aborted) return fail('Cancelled.');
       const changed = { ...out.model, privacy: privacyForMode(deployMode()) };
+      const resultPayload = { ...out.extra, model: changed };
+      if (Buffer.byteLength(JSON.stringify(resultPayload)) > HOSTED_RESULT_BYTES) return fail(HOSTED_STORAGE_OVERSIZED_COPY);
       // A change saved while inference ran (an edit, undo or another tab's result) wins: the result applies only over its base revision.
       const saved = await jobs.putModel(modelId, sessionId, changed, baseRevision, claim);
       if (saved === 'stale') return fail(STALE_COPY);
       if (saved === 'not-owner') return fail('This diagram is not available.');
       if (saved === 'cancelled') return fail('Cancelled.');
-      await jobs.putOwned('result', jobId, sessionId, { ...out.extra, model: changed });
+      if (saved === 'storage-full') return fail(HOSTED_STORAGE_FULL_COPY);
+      if (saved === 'too-large') return fail(HOSTED_STORAGE_OVERSIZED_COPY);
+      const result = await jobs.putOwned('result', jobId, sessionId, resultPayload, claim);
+      if (result !== 'ok') return fail(result === 'too-large' ? HOSTED_STORAGE_OVERSIZED_COPY : HOSTED_STORAGE_FULL_COPY);
       await report(out.usage.repairs > 0 ? 'repaired' : 'ok');
       return { status: 'succeeded', fields: { modelId, revision: changed.revision } };
     };

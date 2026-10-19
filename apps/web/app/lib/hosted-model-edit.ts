@@ -1,9 +1,9 @@
 import { isOwnedId, ownedId } from './owned-ids';
-import type { HostedJobs } from '@archwoven/jobs';
+import { HOSTED_MODEL_BYTES, type HostedJobs } from '@archwoven/jobs';
 import { undoTo, type SystemModel } from '@archwoven/model';
 import { readOrCreateSession, serverDeps, sessionCookie, spenderOf } from './server';
 import { deployMode, privacyForMode } from './mode';
-import { HOSTED_NOT_CONFIGURED_COPY, HOSTED_UNAVAILABLE_COPY } from './hosted-runner';
+import { HOSTED_NOT_CONFIGURED_COPY, HOSTED_UNAVAILABLE_COPY, HOSTED_STORAGE_FULL_COPY } from './hosted-runner';
 import { clientModel, EXPIRED_MODEL_COPY, ownedModel } from './hosted-diagram-job';
 import { applyDirectEdit, readDirectEdit, RequestTooLarge } from '../../lib/direct-edit';
 
@@ -12,7 +12,7 @@ const STALE_EDIT_COPY = 'The diagram changed elsewhere. Review the latest versio
 const STALE_UNDO_COPY = 'The diagram changed elsewhere. Review the latest version before undoing.';
 
 /** Browser copies and JSON downloads are far smaller than this; the bound keeps free writes cheap and every diagram restorable. */
-export const MAX_COPY_BYTES = 512 * 1024;
+export const MAX_COPY_BYTES = HOSTED_MODEL_BYTES;
 type Limits = { visitor: number; network: number; global: number; windowSeconds: number };
 /** Free whole-diagram writes (restores and imports) per day, bounding shared Redis memory. */
 export const COPY_LIMITS: Limits = { visitor: 30, network: 60, global: 200, windowSeconds: 86_400 };
@@ -67,6 +67,8 @@ async function save(jobs: HostedJobs, req: Request, id: string, sessionId: strin
   const limited = await limitReached(jobs, req, sessionId, 'edits', EDIT_LIMITS, EDIT_LIMIT_COPY);
   if (limited) return reply({ reason: 'burst', message: limited }, 429);
   const saved = await jobs.putModel(id, sessionId, next, latest.revision);
+  if (saved === 'storage-full') return reply({ reason: 'storage-full', message: HOSTED_STORAGE_FULL_COPY }, 503);
+  if (saved === 'too-large') return reply({ reason: 'oversized', message: TOO_LARGE_COPY }, 413);
   if (saved === 'ok') return reply({ model: next, revision: next.revision });
   if (saved === 'not-owner') return reply({ error: 'model not found' }, 404);
   const current = await ownedLatest(jobs, id, sessionId, reply);
@@ -150,6 +152,8 @@ export async function putRestoredModel(req: Request, jobs: HostedJobs | 'misconf
     const limited = await limitReached(jobs, req, sessionId, 'copies', COPY_LIMITS, COPY_LIMIT_COPY);
     if (limited) return reply({ reason: 'burst', message: limited }, 429);
     const restored = await jobs.restoreModel(id, sessionId, read.model);
+    if (restored === 'storage-full') return reply({ reason: 'storage-full', message: HOSTED_STORAGE_FULL_COPY }, 503);
+    if (restored === 'too-large') return reply({ reason: 'oversized', message: TOO_LARGE_COPY }, 413);
     if (restored === 'not-owner') return reply({ error: 'model not found' }, 404);
     if (restored === 'exists') return exists((await jobs.modelState(id, sessionId)).model);
     return reply({ model: read.model, revision: read.model.revision });
@@ -174,7 +178,10 @@ export async function postImportedModel(req: Request, jobs: HostedJobs | 'miscon
   try {
     const limited = await limitReached(jobs, req, sessionId, 'copies', COPY_LIMITS, COPY_LIMIT_COPY);
     if (limited) return reply({ reason: 'burst', message: limited }, 429);
-    if (await jobs.restoreModel(id, sessionId, read.model) !== 'ok') return reply({ reason: 'unavailable', message: HOSTED_UNAVAILABLE_COPY }, 503);
+    const saved = await jobs.restoreModel(id, sessionId, read.model);
+    if (saved === 'storage-full') return reply({ reason: 'storage-full', message: HOSTED_STORAGE_FULL_COPY }, 503);
+    if (saved === 'too-large') return reply({ reason: 'oversized', message: TOO_LARGE_COPY }, 413);
+    if (saved !== 'ok') return reply({ reason: 'unavailable', message: HOSTED_UNAVAILABLE_COPY }, 503);
     return reply({ id, model: read.model }, 201);
   } catch {
     return reply({ reason: 'unavailable', message: HOSTED_UNAVAILABLE_COPY }, 503);

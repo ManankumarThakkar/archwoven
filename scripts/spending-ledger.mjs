@@ -12,7 +12,8 @@
  *   renew --start YYYY-MM-DD   (after the current annual window has ended)
  */
 import { createInterface } from 'node:readline/promises';
-import { openSpendingLedger } from '../packages/jobs/src/spending-ledger.ts';
+import { openSpendingLedger, redisRest } from '../packages/jobs/src/spending-ledger.ts';
+import { STORAGE_USAGE_LUA, HOSTED_STORAGE_LIMITS } from '../packages/jobs/src/hosted-storage.ts';
 import { parseUsd } from '../packages/jobs/src/evaluation-budget.ts';
 
 const [command, ...rest] = process.argv.slice(2);
@@ -68,6 +69,7 @@ if (command === 'init') {
   console.log({ resolved: 'Resolved.', 'not-unknown': 'That attempt is not waiting on unknown usage; nothing was changed.', 'over-hold': 'That amount is more than the attempt held; nothing was changed. Inspect the ledger.' }[result]);
 } else if (command === 'status') {
   const status = await ledger.status();
+  const [payloadBytes, payloadRecords] = await redisRest(url, token)(['EVAL', STORAGE_USAGE_LUA, 0, prefix]);
   if (!status) console.log(`No ledger exists under ${prefix}.`);
   else console.log(JSON.stringify({
     prefix, window: [new Date(status.start).toISOString().slice(0, 10), new Date(status.end).toISOString().slice(0, 10)],
@@ -77,5 +79,6 @@ if (command === 'init') {
     month: { id: status.month.id, settled: usd(status.month.settledNanos), held: usd(status.month.heldNanos) },
     day: { id: status.day.id, settled: usd(status.day.settledNanos), held: usd(status.day.heldNanos) },
     unknownAttempts: status.unknownAttempts,
+    temporaryStorage: { payloadBytes, payloadRecords, limits: HOSTED_STORAGE_LIMITS, note: 'Includes outstanding job reservations. Excludes Redis overhead, job metadata, spending records and untouched pre-upgrade copies.' },
   }, null, 2));
 } else throw new Error(usage);

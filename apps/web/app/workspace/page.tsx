@@ -350,20 +350,30 @@ export default function WorkspacePage() {
   };
 
   const submitGeneration = async (url: string, body: object, preferredView?: ViewType) => {
+    const requestSequence = loadSequence.current;
     ++usageWatch.current; setUsagePending(false);
     generationRef.current = true;
     jobIdRef.current = null;
     setCancelError(null);
+    const refuse = (message: string) => {
+      if (loadSequence.current !== requestSequence) return;
+      if (model && modelId && requestedModelRef.current === modelId) {
+        dispatch({ type: 'RESTORED', modelId, revision: model.revision, gaps: [...new Set(model.openQuestions.map(q => q.text))] });
+        setSummary(message);
+      } else dispatch({ type: 'ERROR', message });
+    };
     try {
       const res = await fetch(url, {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
       });
       if (res.status === 429) {
         const q = (await res.json()) as { reason: string; message?: string; resetAt?: number };
-        dispatch({ type: 'QUOTA_BLOCKED', reason: q.reason, resetAt: q.resetAt ?? Date.now() + 60_000, message: q.message ?? '' });
+        if (loadSequence.current !== requestSequence) return;
+        if (model && modelId) refuse(q.message || 'New AI requests are temporarily limited. Your current diagram is unchanged.');
+        else dispatch({ type: 'QUOTA_BLOCKED', reason: q.reason, resetAt: q.resetAt ?? Date.now() + 60_000, message: q.message ?? '' });
         return;
       }
-      if (!res.ok) { dispatch({ type: 'ERROR', message: await responseMessage(res, 'Could not start generation. Please try again.') }); return; }
+      if (!res.ok) { refuse(await responseMessage(res, 'Could not start generation. Please try again.')); return; }
       const { jobId, remaining, resumable } = (await res.json()) as { jobId?: unknown; remaining?: number; resumable?: unknown };
       if (typeof jobId !== 'string' || !jobId) throw new Error('Missing job ID');
       if (typeof remaining === 'number') setRemaining(remaining);
@@ -372,7 +382,7 @@ export default function WorkspacePage() {
       if (resumable === true) rememberJob(jobId, preferredView);
       await poll(jobId, preferredView);
     } catch {
-      dispatch({ type: 'ERROR', message: 'Could not start generation. Check your connection and try again; retrying the same input will reconnect to any job already started.' });
+      refuse('Could not start generation. Check your connection and try again; retrying the same input will reconnect to any job already started.');
     } finally { generationRef.current = false; jobIdRef.current = null; void refreshUsage(); }
   };
 
