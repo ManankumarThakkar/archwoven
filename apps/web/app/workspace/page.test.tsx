@@ -153,7 +153,7 @@ describe('hosted refinement jobs', () => {
     transport = (input) => {
       if (input === '/api/models/m1') return Response.json({ model: ++loads === 1 ? validFullModelExtended : newer });
       if (input === '/api/refine') return Response.json({ jobId: 'refine-late', remaining: null, resumable: true }, { status: 202 });
-      if (input === '/api/jobs/refine-late') return Response.json({ status: 'failed', error: 'The diagram changed while refining, so this result was not applied. Your current diagram is unchanged; try again.' });
+      if (input === '/api/jobs/refine-late') return Response.json({ status: 'failed', error: 'The diagram changed while this request was running, so its result was not applied. Your current diagram is unchanged; try again.' });
       return undefined;
     };
     await mount(); await settle();
@@ -169,12 +169,12 @@ describe('hosted refinement jobs', () => {
       if (input === '/api/refine') return ++attempt === 1
         ? Response.json({ jobId: 'refine-fail', remaining: null, resumable: true }, { status: 202 })
         : Response.json({ reason: 'busy', jobId: 'other', message: 'You already have a request running. Wait for it to finish, then try again.' }, { status: 409 });
-      if (input === '/api/jobs/refine-fail') return Response.json({ status: 'failed', error: 'The diagram changed while refining, so this result was not applied. Your current diagram is unchanged; try again.' });
+      if (input === '/api/jobs/refine-fail') return Response.json({ status: 'failed', error: 'The diagram changed while this request was running, so its result was not applied. Your current diagram is unchanged; try again.' });
       return undefined;
     };
     await mount(); await settle();
     const box = await refineIn('Add a cache');
-    expect(container.textContent).toContain('The diagram changed while refining');
+    expect(container.textContent).toContain('The diagram changed while this request was running');
     expect(box.value).toBe('Add a cache');
     expect(container.querySelector('[aria-label="Rendered view"]')).toBeTruthy();
     await submitRefine();
@@ -912,13 +912,53 @@ describe('expanding internals', () => {
   const hint = () => container.querySelector<HTMLInputElement>('input[aria-label="Optional focus for the expansion"]');
   beforeEach(() => window.history.replaceState(null, '', '/workspace#model=m1&view=detail:gateway.api'));
 
+  it('shows no credit cost where money caps replace credits', async () => {
+    transport = (input, init) => {
+      if (input === '/api/quota') return Response.json({ remaining: null, pool: null, fake: false });
+      if (input === '/api/models/m1' && !init) return Response.json({ model: withDetail() });
+      return undefined;
+    };
+    await mount();
+    for (let i = 0; i < 5; i++) await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+    expect(expandButton()?.textContent).toBe('Expand internals');
+  });
+
+  it('runs a hosted expansion as a job, applying its result or keeping the hint when it fails', async () => {
+    const stored = withDetail();
+    let outcome: 'succeeded' | 'failed' = 'succeeded', expandedModel: SystemModel | null = null;
+    transport = (input, init) => {
+      if (input === '/api/models/m1' && !init) return Response.json({ model: stored });
+      if (input === '/api/models/m1/expand') {
+        const body = JSON.parse(String(init?.body));
+        expandedModel = ok(applyExpansion(body.model, body.target, fakeExpansion(body.model, body.target)));
+        return Response.json({ jobId: 'expand-job', remaining: null, resumable: true }, { status: 202 });
+      }
+      if (input === '/api/jobs/expand-job') return Response.json(outcome === 'succeeded' ? { status: 'succeeded', modelId: 'm1', revision: expandedModel!.revision } : { status: 'failed', error: 'Could not expand: provider unavailable.' });
+      if (input === '/api/jobs/expand-job/result') return Response.json({ model: expandedModel });
+      return undefined;
+    };
+    await mount();
+    outcome = 'failed';
+    await fill('input[aria-label="Optional focus for the expansion"]', 'auth first');
+    await act(async () => expandButton()!.click());
+    for (let i = 0; i < 20; i++) await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+    expect(container.textContent).toContain('Could not expand: provider unavailable.');
+    expect(hint()?.value).toBe('auth first');
+    outcome = 'succeeded';
+    await act(async () => expandButton()!.click());
+    for (let i = 0; i < 20; i++) await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+    expect(container.textContent).toContain('Added 2 inferred internals to API Gateway.');
+    expect(requests).toContain('/api/jobs/expand-job/result');
+  });
+
   it('expands the focus from its detail tab and shows the inferred internals', async () => {
     const server = expandServer(withDetail());
     await mount();
     expect(expandButton()?.textContent).toBe('Expand internals · 0.25 credit');
     await fill('input[aria-label="Optional focus for the expansion"]', 'auth first');
     await act(async () => expandButton()!.click());
-    expect(server.bodies).toEqual([{ baseRevision: 2, target: 'gateway.api', hint: 'auth first' }]);
+    expect(server.bodies.map(({ model, ...rest }) => rest)).toEqual([{ baseRevision: 2, target: 'gateway.api', hint: 'auth first' }]);
+    expect(server.bodies.every(b => (b.model as { revision?: number } | undefined)?.revision === b.baseRevision)).toBe(true);
     expect(caption()).toBe('Inside API Gateway (inferred) · and its direct connections');
     expect(container.querySelector('.aw-detail-source')).toBeNull();
     expect(container.textContent).toContain('Added 2 inferred internals to API Gateway.');
@@ -950,7 +990,8 @@ describe('expanding internals', () => {
     const server = expandServer(withDetail());
     await mount();
     await act(async () => expandButton()!.click());
-    expect(server.bodies).toEqual([{ baseRevision: 2, target: 'gateway.api' }]);
+    expect(server.bodies.map(({ model, ...rest }) => rest)).toEqual([{ baseRevision: 2, target: 'gateway.api' }]);
+    expect(server.bodies.every(b => (b.model as { revision?: number } | undefined)?.revision === b.baseRevision)).toBe(true);
   });
 
   it('offers no expansion for an already expanded component or one of its internals', async () => {

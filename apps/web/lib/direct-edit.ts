@@ -59,7 +59,9 @@ export function detailEdit(raw: unknown, model: SystemModel): Extract<DirectEdit
 }
 
 /** Read a bounded body rather than trusting Content-Length or buffering arbitrary input. */
-export async function readDirectEdit(req: Request): Promise<unknown> {
+export class RequestTooLarge extends Error {}
+
+export async function readDirectEdit(req: Request, maxBytes = 65536): Promise<unknown> {
     const reader = req.body?.getReader();
     if (!reader)
         throw new Error('Missing edit');
@@ -71,9 +73,9 @@ export async function readDirectEdit(req: Request): Promise<unknown> {
             if (done)
                 break;
             size += value.byteLength;
-            if (size > 65536) {
+            if (size > maxBytes) {
                 await reader.cancel();
-                throw new Error('Edit too large');
+                throw new RequestTooLarge('Edit too large');
             }
             text += decoder.decode(value, { stream: true });
         }

@@ -394,12 +394,12 @@ export default function WorkspacePage() {
     }
   };
 
-  /** A hosted refinement: wait for its job, then apply the result. Failures keep the typed instruction. */
-  const finishRefineJob = async (jobId: string, diagramId: string, baseRevision: number): Promise<boolean> => {
+  /** A hosted diagram job (refinement, expansion): wait for it, then apply the result. Failures keep what the user typed. */
+  const finishHostedJob = async (jobId: string, diagramId: string, baseRevision: number, copy: { name: string; failed: string; done: (result: { model: SystemModel; ops?: EditOp[] }) => string }): Promise<boolean> => {
     const job = await waitForJob(jobId);
-    if (!job) { setSummary('Connection lost. The refinement may still finish; reload this page to see the latest diagram.'); return false; }
+    if (!job) { setSummary(`Connection lost. The ${copy.name} may still finish; reload this page to see the latest diagram.`); return false; }
     if (job.status !== 'succeeded') {
-      const reason = job.status === 'cancelled' ? 'Refinement cancelled.' : job.error || 'Refinement failed. Please try again.';
+      const reason = job.status === 'cancelled' ? `${copy.name[0]!.toUpperCase()}${copy.name.slice(1)} cancelled.` : job.error || copy.failed;
       // The saved copy may have moved on (another tab, or a save that landed as the job ended): show it rather than a stale page.
       const latest = await fetch(`/api/models/${encodeURIComponent(diagramId)}`).then(r => r.ok ? r.json() : null).catch(() => null) as { model?: unknown } | null;
       const parsed = SystemModelSchema.safeParse(latest?.model);
@@ -409,13 +409,13 @@ export default function WorkspacePage() {
       } else setSummary(reason);
       return false;
     }
-    const response = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/result`);
-    const result = (response.ok ? await response.json().catch(() => ({})) : {}) as { model?: unknown; ops?: EditOp[] };
+    const response = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/result`).catch(() => null);
+    const result = (response?.ok ? await response.json().catch(() => ({})) : {}) as { model?: unknown; ops?: EditOp[] };
     const parsed = SystemModelSchema.safeParse(result.model);
-    if (!parsed.success) { setSummary('The refinement finished, but its result could not be read. Reload this page to see the latest diagram.'); return false; }
+    if (!parsed.success) { setSummary(`The ${copy.name} finished, but its result could not be read. Reload this page to see the latest diagram.`); return false; }
     setHistory((h) => pushHistory(h, parsed.data));
     setModel(parsed.data);
-    setSummary(Array.isArray(result.ops) ? summarizeOps(result.ops) : 'Refined.');
+    setSummary(copy.done({ model: parsed.data, ops: Array.isArray(result.ops) ? result.ops : undefined }));
     return true;
   };
 
@@ -430,7 +430,8 @@ export default function WorkspacePage() {
         // Hosted servers refine the diagram this page holds; the server keeps it only for 24 hours.
         body: JSON.stringify({ modelId, baseRevision: model.revision, instruction, view: (model.views.find((v) => v.id === activeView) ?? model.views[0])?.type ?? 'architecture', model }),
       });
-      if (res.status === 202) return await finishRefineJob((await res.json() as { jobId: string }).jobId, modelId, model.revision);
+      if (res.status === 202) return await finishHostedJob((await res.json() as { jobId: string }).jobId, modelId, model.revision,
+        { name: 'refinement', failed: 'Refinement failed. Please try again.', done: r => r.ops ? summarizeOps(r.ops) : 'Refined.' });
       if (res.status === 409) {
         const b = (await res.json()) as { model: SystemModel; reason?: string; message?: string };
         if (b.reason === 'busy') { setSummary(b.message ?? 'Another request is still running. Try again when it finishes.'); return false; }
@@ -509,12 +510,21 @@ export default function WorkspacePage() {
     const label = model.nodes.find(n => n.id === target)?.label ?? target;
     setSummary(`Expanding ${label}…`);
     try {
-      const res = await fetch(`/api/models/${modelId}/expand`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ baseRevision: model.revision, target, ...(hint ? { hint } : {}) }) });
+      // Hosted servers expand the diagram this page holds; the server keeps it only for 24 hours.
+      const res = await fetch(`/api/models/${modelId}/expand`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ baseRevision: model.revision, target, ...(hint ? { hint } : {}), model }) });
+      if (res.status === 202) return await finishHostedJob((await res.json() as { jobId: string }).jobId, modelId, model.revision,
+        { name: 'expansion', failed: 'Could not expand this component. Try again.', done: r => `Added ${internalsOf(r.model, target).length} inferred internals to ${label}.` });
       if (res.status === 409) {
         const body = await res.json();
+        if (body.reason === 'busy') { setSummary(typeof body.message === 'string' ? body.message : 'Another request is still running. Try again when it finishes.'); return false; }
         const latest = SystemModelSchema.parse(body.model);
         setModel(latest); setHistory([latest]);
         setSummary(typeof body.message === 'string' ? body.message : 'The diagram changed elsewhere. Review the latest version and try again.');
+        return false;
+      }
+      if (res.status === 429) {
+        const q = (await res.json()) as { reason: string; message?: string; resetAt?: number };
+        dispatch({ type: 'QUOTA_BLOCKED', reason: q.reason, resetAt: q.resetAt ?? Date.now() + 60_000, message: q.message ?? '' });
         return false;
       }
       if (!res.ok) { setSummary(await responseMessage(res, 'Could not expand this component. Try again.')); return false; }
@@ -678,7 +688,7 @@ export default function WorkspacePage() {
             {inDetail && <p role="note" className="aw-detail-caption">{expandedCount ? `Inside ${focusLabel} (inferred) · and its direct connections` : `${focusLabel} and its direct connections · arranged automatically${currentView!.edges.length ? '' : ' · no direct connections'}`}</p>}
             {inDetail && expandedCount > 0 && model.nodes.some(n => n.provenance === 'source-supported') && <p role="note" className="aw-detail-caption aw-detail-source">Internals are inferred, not found in source.</p>}
             {driftLines.length > 0 && <div role="status" className="aw-detail-drift">{driftLines.map(line => <p key={line}>{line}</p>)}</div>}
-            {inDetail && expandBlocker(model, detailFocus) === null && <ExpandInternals key={detailFocus} label={focusLabel} cost={deploy === 'hosted'} busy={refining} onExpand={hint => expand(detailFocus, hint)} />}
+            {inDetail && expandBlocker(model, detailFocus) === null && <ExpandInternals key={detailFocus} label={focusLabel} cost={deploy === 'hosted' && pool !== null} busy={refining} onExpand={hint => expand(detailFocus, hint)} />}
             <div style={{ flex: 1, minHeight: 0 }}><Canvas permalinkVersion={permalinkVersion} model={model} modelId={modelId ?? ''} viewId={currentView?.id ?? ''} busy={refining} onMove={inDetail ? undefined : positions=>directEdit({type:'move',positions})} onSelect={setSelected} onDeselect={() => setSelected(null)} /></div>
             <RefineBar busy={refining} summary={summary} canUndo={history.length > 1} onRefine={refine} onUndo={doUndo} onExport={doExport} sources={exportSources}
               onDelete={() => { void deleteDiagram(); }} retention={deploy === 'local' ? 'Stored on this machine until you delete it.' : 'Kept for 30 days after the last change.'} />

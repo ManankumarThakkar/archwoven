@@ -8,22 +8,30 @@ import {
 import { withSlot } from '../../../../lib/llm-limiter';
 import { readDirectEdit } from '../../../../../lib/direct-edit';
 import { secretGate } from '../../../../../lib/secret-gate';
+import { hostedJobs } from '../../../../lib/hosted-runner';
+import { postHostedExpand } from './hosted';
+import { MAX_DIAGRAM_REQUEST_BYTES } from '../../../../lib/hosted-diagram-job';
 
 export const runtime = 'nodejs';
+// Hosted expansions run inside this invocation via after().
+export const maxDuration = 300;
 const MAX_HINT_CHARS = 300;
 
 /** Infer a component's internals: refinement-weighted, owner- and revision-checked, refunded on any failure. */
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const jobs = hostedJobs();
+  if (jobs) return postHostedExpand(req, jobs, (await ctx.params).id);
   const { sessionId, minted } = readOrCreateSession(req);
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (minted) headers['set-cookie'] = sessionCookie(sessionId);
   const { id } = await ctx.params;
 
   let body: unknown;
-  try { body = await readDirectEdit(req); } catch { return Response.json({ error: 'Invalid request body.' }, { status: 400, headers }); }
+  // The workspace also sends its diagram (used by hosted jobs); this server expands its own saved copy.
+  try { body = await readDirectEdit(req, MAX_DIAGRAM_REQUEST_BYTES); } catch { return Response.json({ error: 'Invalid request body.' }, { status: 400, headers }); }
   const b = body as Record<string, unknown> | null;
   const valid = !!b && typeof b === 'object' && !Array.isArray(b)
-    && Object.keys(b).every(k => ['baseRevision', 'target', 'hint'].includes(k))
+    && Object.keys(b).every(k => ['baseRevision', 'target', 'hint', 'model'].includes(k))
     && Number.isInteger(b.baseRevision) && Number(b.baseRevision) >= 1
     && typeof b.target === 'string' && b.target.length > 0
     && (b.hint === undefined || (typeof b.hint === 'string' && b.hint.length <= MAX_HINT_CHARS));

@@ -35,6 +35,9 @@ async function start(page) {
   ]);
   return { status: response.status(), jobId: (await response.json().catch(() => ({}))).jobId };
 }
+// WebKit reports a polling request cut off by a reload or closed tab as a page error, and a benign
+// ResizeObserver notice from the canvas; neither reaches the visitor.
+const benign = message => /^.*\/api\/jobs\/[0-9a-f-]{36} due to access control checks\.$/.test(message) || message === 'ResizeObserver loop completed with undelivered notifications.';
 const diagram = page => page.locator('.react-flow__node').first().waitFor({ timeout: 30_000 }).then(() => true, () => false);
 
 if (mode === 'flows') {
@@ -45,7 +48,7 @@ if (mode === 'flows') {
         const scope = `${name}/${width}`;
         const context = await browser.newContext({ viewport: { width, height: 900 } });
         const page = await context.newPage();
-        const errors = []; page.on('pageerror', e => errors.push(e.message));
+        const errors = []; page.on('pageerror', e => { if (!benign(e.message)) errors.push(e.message); });
         // 1. Generate, then reload: the finished diagram is still there.
         const before = messages();
         const first = await start(page);
@@ -69,7 +72,7 @@ if (mode === 'flows') {
         await page.close();
         await new Promise(r => setTimeout(r, 1000));
         const reopened = await context.newPage();
-        reopened.on('pageerror', e => errors.push(e.message));
+        reopened.on('pageerror', e => { if (!benign(e.message)) errors.push(e.message); });
         await reopened.goto(`${base}/workspace`);
         check(scope, 'a reopened workspace reconnects to the job started before closing', await diagram(reopened) && reopened.url().includes(third.jobId));
 
@@ -129,14 +132,29 @@ if (mode === 'flows') {
         await editor.getByRole('textbox', { name: 'Element name', exact: true }).fill('Orders API');
         await editor.getByRole('button', { name: 'Save name', exact: true }).click();
         await editor.getByText('Name saved.').first().waitFor();
-        await reopened.getByText(/changed while refining/).first().waitFor({ timeout: 30_000 }).catch(() => undefined);
-        check(scope, 'a late refinement over a newer edit is refused with an explanation', await reopened.getByText(/changed while refining/).first().isVisible());
+        await reopened.getByText(/changed while this request was running/).first().waitFor({ timeout: 30_000 }).catch(() => undefined);
+        check(scope, 'a late refinement over a newer edit is refused with an explanation', await reopened.getByText(/changed while this request was running/).first().isVisible());
         check(scope, 'the refused refinement keeps the typed instruction', await instruction.inputValue() === 'Rename the API gateway to Edge Gateway');
         await reopened.reload();
         check(scope, 'the edit from the other tab is kept', await diagram(reopened) && await reopened.locator('.react-flow__node').filter({ hasText: 'Orders API' }).count() === 1 && await reopened.locator('.react-flow__node').filter({ hasText: 'Edge Gateway' }).count() === 0);
         await editor.close();
 
-        // 8. Another visitor cannot read the job or its diagram.
+        // 8. Expansion as a hosted job: the inferred internals appear and survive a reload.
+        await start(reopened);
+        await diagram(reopened);
+        await reopened.getByRole('button', { name: 'Find node /', exact: true }).click();
+        await reopened.getByRole('textbox', { name: 'Find node', exact: true }).fill('Order Service');
+        await reopened.getByRole('textbox', { name: 'Find node', exact: true }).press('Enter');
+        await reopened.getByRole('button', { name: 'Open detail', exact: true }).click();
+        const hint = reopened.getByRole('textbox', { name: 'Optional focus for the expansion', exact: true });
+        await hint.waitFor(); await hint.fill('validation first');
+        await reopened.getByRole('button', { name: /Expand internals/ }).click();
+        await reopened.getByText(/Added 2 inferred internals/).first().waitFor({ timeout: 30_000 }).catch(() => undefined);
+        check(scope, 'an expansion job adds the inferred internals', await reopened.getByText(/Added 2 inferred internals/).first().isVisible() && await reopened.locator('.react-flow__node').filter({ hasText: 'Request Handler' }).count() === 1);
+        await reopened.reload();
+        check(scope, 'the expansion survives a reload', await diagram(reopened) && await reopened.locator('.react-flow__node').filter({ hasText: 'Core Logic' }).count() === 1);
+
+        // 9. Another visitor cannot read the job or its diagram.
         const stranger = await browser.newContext();
         const peek = await stranger.newPage();
         await peek.goto(`${base}/workspace`);
@@ -144,6 +162,7 @@ if (mode === 'flows') {
         check(scope, 'another visitor gets 404 for the job and its diagram', leaked[0] === 404 && leaked[1] === 404);
         await stranger.close();
         check(scope, 'no browser exceptions', errors.length === 0);
+        if (errors.length) console.log(`  page errors: ${JSON.stringify(errors)}`);
         await context.close();
       }
     } finally { await browser.close(); }
