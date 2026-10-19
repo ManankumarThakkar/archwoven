@@ -2,6 +2,11 @@ packages:
   - apps/*
   - packages/*
 
+# Next.js 15 still pins PostCSS 8.4.31, which has source-map disclosure and
+# CSS stringification advisories. Keep this scoped to Next's dependency.
+overrides:
+  'next@15>postcss': 8.5.29
+
 # Explicit build-script approval (pnpm strict supply-chain policy)
 allowBuilds:
   esbuild: true
