@@ -49,6 +49,7 @@ export const serverDeps: {
 } = {
   get store(): Store {
     if (hostingProbeRequested()) throw new Error('Application storage is unavailable during hosting diagnostics.');
+    if (process.env.VERCEL === '1') throw new Error('Application storage is unavailable: the hosted application keeps no local database on Vercel.');
     return applicationStore ??= openStore(process.env.ARCHWOVEN_DB ?? 'data/archwoven.db');
   },
   set store(value: Store) { applicationStore = value; },

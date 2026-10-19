@@ -22,6 +22,8 @@ export const HOSTED_UNAVAILABLE_COPY = 'AI generation is temporarily unavailable
 /** Direct edits and undo still use the server's SQLite store, which Vercel does not have. */
 export const EDITS_UNAVAILABLE_COPY = 'Editing and undo are not available in this deployment yet. You can still refine with AI, view and download your diagrams.';
 export const editsUnavailable = () => process.env.VERCEL === '1' && hostedJobs() !== null;
+/** For operators: what hosted job storage needs (names only, never values). */
+export const HOSTED_STORAGE_VARIABLES = 'UPSTASH_REDIS_REST_URL (an https://…upstash.io address), UPSTASH_REDIS_REST_TOKEN, ARCHWOVEN_REDIS_PREFIX (lowercase, ending in a colon) and ARCHWOVEN_SESSION_SECRET (at least 32 characters)';
 export const HOSTED_NOT_CONFIGURED_COPY = 'AI generation is unavailable: hosted job storage is not configured. You can still view, edit and download your diagrams.';
 
 let cached: { key: string; jobs: HostedJobs } | undefined;

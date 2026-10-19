@@ -37,6 +37,17 @@ describe('evaluation configuration stays local and explicit', () => {
   });
 });
 
+describe('local mode stays off Vercel', () => {
+  afterEach(() => vi.unstubAllEnvs());
+  it('refuses local mode on Vercel even as an acknowledged demo: it needs a local database Vercel does not keep', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('VERCEL', '1');
+    vi.stubEnv('ARCHWOVEN_MODE', 'local');
+    vi.stubEnv('ARCHWOVEN_DEMO_ACK', '1');
+    expect(() => assertSafeRuntime()).toThrow(/ARCHWOVEN_MODE=local.*Vercel/);
+  });
+});
+
 describe('deployMode', () => {
   const saved = process.env.ARCHWOVEN_MODE;
   afterEach(() => {

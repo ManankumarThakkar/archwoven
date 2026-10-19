@@ -33,6 +33,9 @@ export function assertSafeRuntime(): void {
     throw new Error('Evaluation budgets require a local hosted-mode server with sample data disabled.');
   }
   if (deployMode() === 'hosted' && !fakeMode()) resolveHostedModelId(process.env.ARCHWOVEN_HOSTED_MODEL);
+  if (process.env.VERCEL === '1' && process.env.ARCHWOVEN_MODE === 'local') {
+    throw new Error('refusing to boot ARCHWOVEN_MODE=local on Vercel: local mode needs a local database, which Vercel does not keep. Use hosted mode with Redis job storage.');
+  }
   const prod = process.env.NODE_ENV === 'production';
   if (!prod) return;
   const acked = process.env.ARCHWOVEN_DEMO_ACK === '1';

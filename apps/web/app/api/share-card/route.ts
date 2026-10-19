@@ -32,6 +32,8 @@ export async function POST(req: Request) {
   const { sessionId, minted } = readOrCreateSession(req);
   const headers: Record<string, string> = {};
   if (minted) headers['set-cookie'] = sessionCookie(sessionId);
+  // Cards render from the server's saved diagram, which Vercel deployments do not keep locally.
+  if (process.env.VERCEL === '1') return Response.json({ reason: 'unavailable', message: 'Share cards are not available in this deployment yet. Download the diagram as SVG or PNG instead.' }, { status: 503, headers });
 
   let body: { modelId?: string; kind?: string; from?: string; to?: string; viewId?: string };
   try {

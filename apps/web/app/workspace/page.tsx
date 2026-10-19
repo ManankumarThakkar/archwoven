@@ -692,7 +692,7 @@ export default function WorkspacePage() {
             {inDetail && expandBlocker(model, detailFocus) === null && <ExpandInternals key={detailFocus} label={focusLabel} cost={deploy === 'hosted' && pool !== null} busy={refining} onExpand={hint => expand(detailFocus, hint)} />}
             <div style={{ flex: 1, minHeight: 0 }}><Canvas permalinkVersion={permalinkVersion} model={model} modelId={modelId ?? ''} viewId={currentView?.id ?? ''} busy={refining} onMove={inDetail ? undefined : positions=>directEdit({type:'move',positions})} onSelect={setSelected} onDeselect={() => setSelected(null)} /></div>
             <RefineBar busy={refining} summary={summary} canUndo={history.length > 1} onRefine={refine} onUndo={doUndo} onExport={doExport} sources={exportSources}
-              onDelete={() => { void deleteDiagram(); }} retention={deploy === 'local' ? 'Stored on this machine until you delete it.' : 'Kept for 30 days after the last change.'} />
+              onDelete={() => { void deleteDiagram(); }} retention={deploy === 'local' ? 'Stored on this machine until you delete it.' : pool === null ? 'The server keeps this diagram for 24 hours after its last change.' : 'Kept for 30 days after the last change.'} />
           </main>
         ) : (
           <main className="aw-empty-main" aria-label="Diagram workspace" aria-live="polite">

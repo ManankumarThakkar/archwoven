@@ -1,7 +1,9 @@
 // LABELLED TEST FIXTURE, NOT A PROVIDER: answers Anthropic token counts locally and returns a
 // recorded valid model for message requests (one fixed rename for refinements, two covering
 // internals for expansions) after ARCHWOVEN_FIXTURE_DELAY_MS. With ARCHWOVEN_FIXTURE_REPO_TAR it also
-// serves one public repository, github.com/fixture/shop, from that local tarball. Every other external
+// serves one public repository, github.com/fixture/shop, from that local tarball. With
+// ARCHWOVEN_FIXTURE_REDIS (a loopback Redis REST address) it forwards https://fixture-redis.upstash.io
+// there, so a server started with VERCEL=1 can use a disposable local Redis. Every other external
 // request fails. Calls are counted in ARCHWOVEN_FIXTURE_LOG so tests can prove what was dispatched.
 import { appendFileSync, readFileSync } from 'node:fs';
 const model = readFileSync(process.env.ARCHWOVEN_FIXTURE_MODEL, 'utf8');
@@ -25,6 +27,10 @@ function expansion(body) {
 globalThis.fetch = async (input, init) => {
   const url = new URL(typeof input === 'string' ? input : input?.url ?? String(input));
   if (url.hostname === '127.0.0.1' || url.hostname === 'localhost') return realFetch(input, init);
+  const redis = process.env.ARCHWOVEN_FIXTURE_REDIS;
+  if (redis && /^http:\/\/127\.0\.0\.1:\d+$/.test(redis) && url.origin === 'https://fixture-redis.upstash.io') {
+    return realFetch(redis + url.pathname + url.search, init);
+  }
   const repoTar = process.env.ARCHWOVEN_FIXTURE_REPO_TAR, sha = '0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c';
   if (repoTar && url.hostname === 'api.github.com') {
     const body = url.pathname === '/repos/fixture/shop' ? { default_branch: 'main' }
