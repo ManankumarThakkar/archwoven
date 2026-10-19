@@ -1,12 +1,8 @@
-import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
+import { siteMetadata } from './lib/seo';
 import './globals.css';
 
-export const metadata: Metadata = {
-  title: 'Archwoven — Turn ideas and code into clear architecture',
-  description:
-    'AI-assisted architecture workspace: plain-English requirements or GitHub repos become clear, interactive, editable architecture diagrams.',
-};
+export function generateMetadata() { return siteMetadata(); }
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
