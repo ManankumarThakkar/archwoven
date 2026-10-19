@@ -17,9 +17,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     let status;
     try { status = await jobs.cancel(id, sessionId); }
     catch { return Response.json({ error: HOSTED_UNAVAILABLE_COPY }, { status: 503 }); }
-    if (status !== 'not-found') return Response.json({ status });
-    // Operations not yet moved to hosted jobs (repository imports) still run in a development server's local store.
-    if (process.env.VERCEL === '1') return Response.json({ error: 'job not found' }, { status: 404 });
+    if (status === 'not-found') return Response.json({ error: 'job not found' }, { status: 404 });
+    return Response.json({ status });
   }
   const job = serverDeps.store.getJob(id);
   if (!job || job.sessionId !== sessionId) return Response.json({ error: 'job not found' }, { status: 404 });

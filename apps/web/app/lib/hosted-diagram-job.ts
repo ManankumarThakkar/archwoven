@@ -4,7 +4,7 @@ import { sameModelContent, SystemModelSchema, validateModel, type SystemModel, t
 import { serverDeps, readOrCreateSession, sessionCookie, llmNotConfigured, LLM_NOT_CONFIGURED_COPY, spenderOf, estimateTokens, PROMPT_TOKEN_LIMIT, OVERSIZED_COPY } from './server';
 import type { Spender } from './spending';
 import { deployMode, privacyForMode } from './mode';
-import { hostedJobLimits, runHostedJob, HOSTED_NOT_CONFIGURED_COPY, HOSTED_UNAVAILABLE_COPY, type JobOutcome } from './hosted-runner';
+import { hostedJobLimits, runHostedJob, HOSTED_NOT_CONFIGURED_COPY, HOSTED_UNAVAILABLE_COPY, type JobOutcome, type JobRun } from './hosted-runner';
 import { secretGate } from '../../lib/secret-gate';
 import { readDirectEdit, RequestTooLarge } from '../../lib/direct-edit';
 
@@ -102,7 +102,7 @@ export async function postHostedDiagramJob(req: Request, jobs: HostedJobs | 'mis
     if (admitted.kind === 'queue-full') return Response.json({ reason: 'busy', message: QUEUE_FULL_COPY }, { status: 503, headers });
     if (admitted.kind === 'network-busy') return Response.json({ reason: 'burst', message: NETWORK_BUSY_COPY, resetAt: Date.now() + 60_000 }, { status: 429, headers });
 
-    const work = async (signal: AbortSignal): Promise<JobOutcome> => {
+    const work = async (signal: AbortSignal, { claim }: JobRun): Promise<JobOutcome> => {
       const out = await op.run(model, signal, spender);
       const report = (outcome: 'ok' | 'repaired' | 'failed') => jobs.putOwned('lasttask', jobs.ownerOf(sessionId), sessionId,
         taskReport({ action: op.kind, view: op.view, taskId: jobId, modelId, usage: out.usage, retries: out.usage.repairs, outcome })).catch(() => undefined);
@@ -115,9 +115,10 @@ export async function postHostedDiagramJob(req: Request, jobs: HostedJobs | 'mis
       // A development server's local store holds direct edits, so it decides there; Redis decides elsewhere.
       const current = localStore && serverDeps.store.getRevisionOwner(modelId) === sessionId ? serverDeps.store.getRevision(modelId) : null;
       if (current && current.revision !== baseRevision) return fail(STALE_COPY);
-      const saved = await jobs.putModel(modelId, sessionId, changed, current ? null : baseRevision);
+      const saved = await jobs.putModel(modelId, sessionId, changed, current ? null : baseRevision, claim);
       if (saved === 'stale') return fail(STALE_COPY);
       if (saved === 'not-owner') return fail('This diagram is not available.');
+      if (saved === 'cancelled') return fail('Cancelled.');
       if (current) serverDeps.store.saveRevision(modelId, changed, sessionId);
       await jobs.putOwned('result', jobId, sessionId, { ...out.extra, model: changed });
       await report(out.usage.repairs > 0 ? 'repaired' : 'ok');

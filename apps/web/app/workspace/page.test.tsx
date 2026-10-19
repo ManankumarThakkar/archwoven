@@ -113,6 +113,16 @@ describe('hosted money limits in the header', () => {
     expect(container.textContent).toContain('Free AI · daily limit');
     expect(container.textContent).not.toMatch(/\/\s*credits today|null/);
   });
+
+  it('does not describe hosted repository analysis as local and free of credits', async () => {
+    transport = (input) => input === '/api/quota' ? Response.json({ remaining: null, pool: null, fake: false }) : undefined;
+    await mount();
+    await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+    await click('Import repository');
+    const help = container.querySelector('#repository-help')!.textContent!;
+    expect(help).not.toMatch(/Runs locally|no credits/);
+    expect(help).toContain('Uses free AI within a daily limit.');
+  });
 });
 
 describe('hosted refinement jobs', () => {

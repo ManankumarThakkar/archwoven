@@ -25,6 +25,8 @@ export interface HostedJobView {
   deadlineAt: number; usagePending: boolean; modelId: string | null; revision: number | null; questions: string[];
   clarification: unknown;
 }
+/** The running instance's claim on a job: writes made for the job land only while it holds it. */
+export interface JobClaim { jobId: string; claimant: string }
 export type AdmitResult = { kind: 'admitted' } | { kind: 'replay'; jobId: string } | { kind: 'busy'; jobId: string } | { kind: 'queue-full' } | { kind: 'network-busy' };
 export type ClaimResult = { kind: 'claimed' } | { kind: 'wait'; position: number } | { kind: 'expired' | 'gone' } | { kind: 'not-queued'; status: string };
 
@@ -162,11 +164,22 @@ if f[2] == 'queued' then
 end
 return {f[2], f[3], f[4] or '', f[5] or '', f[6], f[7] or '0', f[8] or '', f[9] or '', f[10] or '', position}`;
 
+// Only the running instance that claimed a job reports its stage.
+const STAGE = `
+local s = redis.call('HMGET', KEYS[1], 'status', 'claimedBy')
+if s[1] ~= 'running' or s[2] ~= ARGV[1] then return 0 end
+redis.call('HSET', KEYS[1], 'stage', ARGV[2])
+return 1`;
 const CANCELLED = `return redis.call('HGET', KEYS[1], 'cancel') == '1' and 1 or 0`;
 const PUT_OWNED = `redis.call('HSET', KEYS[1], 'owner', ARGV[1], 'value', ARGV[2]) redis.call('EXPIRE', KEYS[1], tonumber(ARGV[3])) return 'ok'`;
 const GET_OWNED = `local v = redis.call('HMGET', KEYS[1], 'owner', 'value') if v[1] ~= ARGV[1] then return false end return v[2]`;
 // A model write lands only for its owner and only over the revision the change was based on.
+// A job's write also lands only while the instance that claimed it is still running it (not cancelled).
 const PUT_MODEL = `
+if KEYS[2] then
+  local j = redis.call('HMGET', KEYS[2], 'status', 'claimedBy')
+  if j[1] ~= 'running' or j[2] ~= ARGV[6] then return 'cancelled' end
+end
 local v = redis.call('HMGET', KEYS[1], 'owner', 'revision')
 if v[1] and v[1] ~= ARGV[1] then return 'not-owner' end
 -- Records saved before revisions were tracked carry no revision field and are not checked.
@@ -217,6 +230,9 @@ export function openHostedJobs({ url, token, prefix, ownerKey = token, now = () 
       if (!ID.test(jobId)) return 'not-found';
       return await run(CANCEL, [], [p, id(jobId), ownerOf(sessionId)]) as string;
     },
+    async stage(jobId: string, claimant: string, stage: string): Promise<boolean> {
+      return await run(STAGE, [`${p}job:${id(jobId)}`], [claimant, stage]) === 1;
+    },
     async cancelRequested(jobId: string): Promise<boolean> {
       return await run(CANCELLED, [`${p}job:${id(jobId)}`], []) === 1;
     },
@@ -242,9 +258,10 @@ export function openHostedJobs({ url, token, prefix, ownerKey = token, now = () 
     },
     /** Values readable only by the session that owns them, for 24 hours. */
     /** Save a diagram's current revision; `baseRevision` null writes unconditionally (a new diagram). */
-    async putModel(modelId: string, sessionId: string, model: { revision: number; [field: string]: unknown }, baseRevision: number | null): Promise<'ok' | 'stale' | 'not-owner'> {
+    async putModel(modelId: string, sessionId: string, model: { revision: number; [field: string]: unknown }, baseRevision: number | null, claim?: JobClaim): Promise<'ok' | 'stale' | 'not-owner' | 'cancelled'> {
       if (!ID.test(modelId)) throw new Error('Invalid key.');
-      return await run(PUT_MODEL, [`${p}model:${modelId}`], [ownerOf(sessionId), JSON.stringify(model), baseRevision === null ? '' : baseRevision, model.revision, RESULT_TTL_SECONDS]) as 'ok' | 'stale' | 'not-owner';
+      const keys = [`${p}model:${modelId}`, ...(claim ? [`${p}job:${id(claim.jobId)}`] : [])];
+      return await run(PUT_MODEL, keys, [ownerOf(sessionId), JSON.stringify(model), baseRevision === null ? '' : baseRevision, model.revision, RESULT_TTL_SECONDS, claim?.claimant ?? '']) as 'ok' | 'stale' | 'not-owner' | 'cancelled';
     },
     /** Whether a diagram id is free, this session's, or another visitor's, and this session's stored copy. */
     async modelState(modelId: string, sessionId: string): Promise<{ owner: 'absent' | 'self' | 'other'; model: { revision?: unknown } | null }> {

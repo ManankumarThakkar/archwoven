@@ -1,6 +1,7 @@
 // LABELLED TEST FIXTURE, NOT A PROVIDER: answers Anthropic token counts locally and returns a
 // recorded valid model for message requests (one fixed rename for refinements, two covering
-// internals for expansions) after ARCHWOVEN_FIXTURE_DELAY_MS. Every other external
+// internals for expansions) after ARCHWOVEN_FIXTURE_DELAY_MS. With ARCHWOVEN_FIXTURE_REPO_TAR it also
+// serves one public repository, github.com/fixture/shop, from that local tarball. Every other external
 // request fails. Calls are counted in ARCHWOVEN_FIXTURE_LOG so tests can prove what was dispatched.
 import { appendFileSync, readFileSync } from 'node:fs';
 const model = readFileSync(process.env.ARCHWOVEN_FIXTURE_MODEL, 'utf8');
@@ -24,6 +25,15 @@ function expansion(body) {
 globalThis.fetch = async (input, init) => {
   const url = new URL(typeof input === 'string' ? input : input?.url ?? String(input));
   if (url.hostname === '127.0.0.1' || url.hostname === 'localhost') return realFetch(input, init);
+  const repoTar = process.env.ARCHWOVEN_FIXTURE_REPO_TAR, sha = '0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c';
+  if (repoTar && url.hostname === 'api.github.com') {
+    const body = url.pathname === '/repos/fixture/shop' ? { default_branch: 'main' }
+      : url.pathname === '/repos/fixture/shop/commits/main' ? { sha } : null;
+    return new Response(JSON.stringify(body ?? { message: 'Not Found' }), { status: body ? 200 : 404, headers: { 'content-type': 'application/json' } });
+  }
+  if (repoTar && url.hostname === 'codeload.github.com' && url.pathname === `/fixture/shop/tar.gz/${sha}`) {
+    return new Response(readFileSync(repoTar), { status: 200, headers: { 'content-type': 'application/x-gzip' } });
+  }
   if (url.hostname === 'api.anthropic.com' && url.pathname.endsWith('/messages/count_tokens')) {
     return new Response(JSON.stringify({ input_tokens: 3600 }), { status: 200, headers: { 'content-type': 'application/json' } });
   }
