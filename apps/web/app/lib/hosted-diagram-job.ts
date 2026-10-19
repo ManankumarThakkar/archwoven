@@ -1,4 +1,5 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
+import { isOwnedId, ownedId } from './owned-ids';
 import { taskReport, type HostedJobs } from '@archwoven/jobs';
 import { sameModelContent, SystemModelSchema, validateModel, type SystemModel, type TaskUsage, type ViewType } from '@archwoven/model';
 import { serverDeps, readOrCreateSession, sessionCookie, llmNotConfigured, LLM_NOT_CONFIGURED_COPY, spenderOf, estimateTokens, PROMPT_TOKEN_LIMIT, OVERSIZED_COPY } from './server';
@@ -87,6 +88,8 @@ export async function postHostedDiagramJob(req: Request, jobs: HostedJobs | 'mis
   if (jobs === 'misconfigured') return Response.json({ reason: 'unavailable', message: HOSTED_NOT_CONFIGURED_COPY }, { status: 503, headers });
   const { modelId, baseRevision } = op;
   if (!/^[0-9a-f-]{36}$/.test(modelId) || !Number.isInteger(baseRevision)) return Response.json({ error: 'A diagram id and its revision are required.' }, { status: 400, headers });
+  // A diagram id this session did not create is refused without a Redis command.
+  if (!isOwnedId(modelId, sessionId)) return Response.json({ error: 'model not found' }, { status: 404, headers });
   // The provider context is limited; a diagram too large to work on is refused before admission.
   if (estimateTokens(JSON.stringify(op.rawModel ?? null) + op.texts.map(t => t.text).join('')) > PROMPT_TOKEN_LIMIT) return Response.json({ reason: 'oversized', message: OVERSIZED_COPY }, { status: 413, headers });
   const model = clientModel(op.rawModel, baseRevision);
@@ -109,7 +112,7 @@ export async function postHostedDiagramJob(req: Request, jobs: HostedJobs | 'mis
     if (llmNotConfigured()) return Response.json({ reason: 'llm-not-configured', message: LLM_NOT_CONFIGURED_COPY }, { status: 503, headers });
 
     const key = `${op.kind}:${createHash('sha256').update(JSON.stringify([modelId, baseRevision, ...op.request])).digest('hex').slice(0, 40)}`;
-    const jobId = randomUUID(), limits = hostedJobLimits(), spender = spenderOf(req.headers, sessionId);
+    const jobId = ownedId(sessionId), limits = hostedJobLimits(), spender = spenderOf(req.headers, sessionId);
     const admitted = await jobs.admit(jobId, sessionId, op.kind, key, limits, spender.network);
     if (admitted.kind === 'replay') return Response.json({ jobId: admitted.jobId, remaining: null, resumable: true }, { status: 202, headers });
     if (admitted.kind === 'busy') return Response.json({ reason: 'busy', jobId: admitted.jobId, message: BUSY_COPY }, { status: 409, headers });

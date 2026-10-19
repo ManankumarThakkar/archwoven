@@ -4,6 +4,7 @@ import { validFullModel, type SystemModel } from '@archwoven/model';
 import { startTestRedis } from '../../../../../packages/jobs/src/redis-test-server';
 import { serverDeps } from '../../lib/server';
 import { COPY_LIMITS } from '../../lib/hosted-model-edit';
+import { ownedId } from '../../lib/owned-ids';
 import { POST as importModel } from './route';
 import { GET as getModel, PUT as restoreModel } from './[id]/route';
 import { POST as edit } from './[id]/edit/route';
@@ -15,6 +16,7 @@ afterAll(async () => { await redis?.close(); });
 
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const cookieOf = (response: Response) => response.headers.get('set-cookie')!.split(';')[0]!;
+const sessionOf = (cookie: string) => cookie.split('=')[1]!.split('.')[0]!;
 const visitor = async () => cookieOf(await getQuota(new Request('http://x')));
 const body = (value: unknown, cookie: string, method = 'POST') => ({ method, headers: { 'content-type': 'application/json', cookie }, body: typeof value === 'string' ? value : JSON.stringify(value) });
 const restore = (id: string, cookie: string, value: unknown) => restoreModel(new Request(`http://x/api/models/${id}`, body(value, cookie, 'PUT')), params(id));
@@ -32,7 +34,7 @@ describe.skipIf(!redis)('browser copies on hosted deployments (real Redis)', () 
   afterEach(() => vi.unstubAllEnvs());
 
   it('restores an expired diagram from the browser at its revision, and then accepts edits', async () => {
-    const owner = await visitor(), id = crypto.randomUUID();
+    const owner = await visitor(), id = ownedId(sessionOf(owner));
     expect((await read(id, owner)).status).toBe(404);
     const response = await restore(id, owner, { model: edited() });
     expect(response.status).toBe(200);
@@ -43,7 +45,7 @@ describe.skipIf(!redis)('browser copies on hosted deployments (real Redis)', () 
   });
 
   it('keeps the server copy when one exists, and refuses another visitor', async () => {
-    const owner = await visitor(), id = crypto.randomUUID();
+    const owner = await visitor(), id = ownedId(sessionOf(owner));
     await restore(id, owner, { model: edited() });
     const second = await restore(id, owner, { model: { ...edited(), revision: 9, parentId: 8, title: 'older tab' } });
     expect(second.status).toBe(409);
@@ -52,13 +54,13 @@ describe.skipIf(!redis)('browser copies on hosted deployments (real Redis)', () 
   });
 
   it('treats a browser copy as untrusted input', async () => {
-    const owner = await visitor(), id = crypto.randomUUID();
+    const owner = await visitor(), id = ownedId(sessionOf(owner));
     const dangling = { ...edited(), edges: [...validFullModel.edges, { ...validFullModel.edges[0]!, id: 'e.bad', to: 'missing' }] };
     for (const model of [{ title: 'not a diagram' }, dangling]) expect((await restore(id, owner, { model })).status).toBe(400);
     expect((await restore(id, owner, { model: edited(), extra: 1 })).status).toBe(400);
     expect((await restore(id, owner, '{')).status).toBe(400);
     expect((await restore(id, owner, { model: { ...edited(), title: 'x'.repeat(600_000) } })).status).toBe(413);
-    expect((await restore('../escape', owner, { model: edited() })).status).toBe(400);
+    expect((await restore('../escape', owner, { model: edited() })).status).toBe(404);
     const claimsPrivate = await restore(id, owner, { model: { ...edited(), privacy: { classification: 'private', boundary: 'local-only' } } });
     expect((await claimsPrivate.json()).model.privacy).toEqual({ classification: 'public', boundary: 'external-allowed' });
   });
@@ -81,7 +83,7 @@ describe.skipIf(!redis)('browser copies on hosted deployments (real Redis)', () 
     const refused = await importing(owner, { model: edited() });
     expect(refused.status).toBe(429);
     expect((await refused.json()).message).toMatch(/downloads? (still|keep) work/i);
-    expect((await restore(crypto.randomUUID(), owner, { model: edited() })).status).toBe(429);
+    expect((await restore(ownedId(sessionOf(owner)), owner, { model: edited() })).status).toBe(429);
   });
 
   it('names which limit was reached when shared copies run out', async () => {
@@ -100,7 +102,7 @@ describe.skipIf(!redis)('browser copies on hosted deployments (real Redis)', () 
     redis!.setDown(true);
     try {
       expect((await importing(owner, { model: edited() })).status).toBe(503);
-      expect((await restore(crypto.randomUUID(), owner, { model: edited() })).status).toBe(503);
+      expect((await restore(ownedId(sessionOf(owner)), owner, { model: edited() })).status).toBe(503);
     } finally { redis!.setDown(false); }
   });
 });

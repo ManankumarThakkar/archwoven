@@ -1,4 +1,5 @@
 import { readOrCreateSession } from '../../../../lib/server';
+import { isOwnedId } from '../../../../lib/owned-ids';
 import { hostedJobs, HOSTED_NOT_CONFIGURED_COPY, HOSTED_UNAVAILABLE_COPY } from '../../../../lib/hosted-runner';
 
 export const runtime = 'nodejs';
@@ -10,7 +11,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   const headers = { 'cache-control': 'private, no-store' };
   const jobs = hostedJobs();
   if (jobs === 'misconfigured') return Response.json({ error: HOSTED_NOT_CONFIGURED_COPY }, { status: 503, headers });
-  if (!jobs) return Response.json({ error: 'result not found' }, { status: 404, headers });
+  if (!jobs || !isOwnedId(id, sessionId)) return Response.json({ error: 'result not found' }, { status: 404, headers });
   let result: unknown;
   try { result = await jobs.getOwned('result', id, sessionId); }
   catch { return Response.json({ error: HOSTED_UNAVAILABLE_COPY }, { status: 503, headers }); }

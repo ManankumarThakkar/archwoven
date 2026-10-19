@@ -158,9 +158,18 @@ for (const name of engines.split(',')) {
       await renameTo(page, 'Customer', 'Shopper');
       check(scope, 'the restored diagram accepts edits', await page.getByText('Name saved.').first().waitFor({ timeout: 10_000 }).then(() => true, () => false));
 
+      // A new browser session cannot use the old diagram id; this browser's copy opens as a new diagram.
+      await context.clearCookies();
+      await page.reload();
+      check(scope, 'after a cookie reset, the kept diagram opens as a new one with an explanation',
+        await diagram(page) && await page.getByText('opened from this browser as a new diagram').first().waitFor({ timeout: 10_000 }).then(() => true, () => false) && !page.url().includes(diagramId));
+      const newId = new URLSearchParams(new URL(page.url()).hash.slice(1)).get('model');
+      const foreign = await page.evaluate(async id => (await fetch(`/api/models/${id}`)).status, diagramId);
+      check(scope, 'the old diagram id is refused for the new session', foreign === 404);
+
       const reopened = await context.newPage();
       await reopened.goto(`${base}/workspace`);
-      check(scope, 'a reopened workspace shows the diagram this browser kept last', await diagram(reopened) && reopened.url().includes(diagramId));
+      check(scope, 'a reopened workspace shows the diagram this browser kept last', await diagram(reopened) && reopened.url().includes(newId));
       await reopened.close();
 
       await page.goto(`${base}/workspace`);
@@ -174,9 +183,9 @@ for (const name of engines.split(',')) {
       await page.locator('input[type="file"][aria-label="Open a JSON download"]').setInputFiles({ name: 'broken.json', mimeType: 'application/json', buffer: Buffer.from('{"title":"not a diagram"}') });
       check(scope, 'a file that is not a diagram is refused with an explanation', await page.getByText('This file is not an Archwoven diagram').first().waitFor({ timeout: 10_000 }).then(() => true, () => false));
       await page.locator('input[type="file"][aria-label="Open a JSON download"]').setInputFiles(jsonPath);
-      await page.waitForURL(u => /model=/.test(u.hash) && !u.hash.includes(diagramId), { timeout: 15_000 }).catch(() => undefined);
+      await page.waitForURL(u => /model=/.test(u.hash) && !u.hash.includes(newId), { timeout: 15_000 }).catch(() => undefined);
       await page.screenshot({ path: join(out, `${name}-${width}-imported.png`), fullPage: true });
-      check(scope, 'a JSON download opens as a new diagram', await diagram(page) && !page.url().includes(diagramId) && /model=/.test(page.url()));
+      check(scope, 'a JSON download opens as a new diagram', await diagram(page) && !page.url().includes(newId) && /model=/.test(page.url()));
 
       const blocked = await context.newPage();
       await blocked.addInitScript(() => { Storage.prototype.setItem = () => { throw new DOMException('denied', 'SecurityError'); }; });

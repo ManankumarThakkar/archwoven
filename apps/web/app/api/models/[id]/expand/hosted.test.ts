@@ -11,6 +11,7 @@ import { GET as getResult } from '../../../jobs/[id]/result/route';
 import { GET as getQuota } from '../../../quota/route';
 import { STALE_COPY } from '../../../../lib/hosted-diagram-job';
 import { hostedJobs } from '../../../../lib/hosted-runner';
+import { ownedId } from '../../../../lib/owned-ids';
 
 const redis = await startTestRedis();
 if (!redis && process.env.CI) throw new Error('CI must provide Redis for the hosted expansion tests.');
@@ -133,7 +134,7 @@ describe.skipIf(!redis)('hosted expansion jobs (real Redis)', () => {
   });
 
   it('where the server holds only its Redis copy, keeps a revision saved during inference', async () => {
-    const owner = cookieOf(await getQuota(new Request('http://x'))), modelId = crypto.randomUUID();
+    const owner = cookieOf(await getQuota(new Request('http://x'))), modelId = ownedId(sessionOf(owner));
     const jobs = hostedJobs(); if (!jobs || jobs === 'misconfigured') throw new Error('hosted jobs unavailable');
     await jobs.putModel(modelId, sessionOf(owner), validFullModel, null);
     serverDeps.expandComponent = async () => {

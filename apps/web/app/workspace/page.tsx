@@ -24,6 +24,7 @@ import { svgToPng } from '../../lib/png';
 import { deleteBrowserDiagram, latestBrowserDiagram, loadBrowserDiagram, MAX_BROWSER_DIAGRAM_BYTES, saveBrowserDiagram, type SaveResult } from '../../lib/browser-diagrams';
 
 const RESTORED_COPY = 'The server copy had expired, so this diagram was restored from this browser.';
+const REOPENED_COPY = 'This diagram belonged to an earlier browser session, so it was opened from this browser as a new diagram.';
 const MISSING_COPY = 'This diagram is no longer on the server (copies are kept for 24 hours after the last change) and this browser has no copy of it. Open a JSON download, or create a new diagram.';
 const UNREADABLE_COPY = "This diagram is no longer on the server, and this browser's copy could not be read (it may be from an older version), so it was removed. Open a JSON download, or create a new diagram.";
 const NOT_A_DIAGRAM = 'This file is not an Archwoven diagram. Choose a JSON file downloaded from Archwoven.';
@@ -170,11 +171,20 @@ export default function WorkspacePage() {
   };
 
   /** The server copy expired: put this browser's copy back (an existing server copy wins), or explain why it cannot be opened. */
-  const restoreFromBrowser = async (id: string): Promise<{ model: SystemModel; note: string }> => {
+  const restoreFromBrowser = async (id: string): Promise<{ model: SystemModel; note: string; id?: string }> => {
     const kept = loadBrowserDiagram(id);
     if (!kept) throw new Error(MISSING_COPY);
     if ('problem' in kept) throw new Error(UNREADABLE_COPY);
     const res = await fetch(`/api/models/${encodeURIComponent(id)}`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ model: kept.model }) }).catch(() => null);
+    // Ids belong to the browser session that created them; after a cookie reset the copy opens as a new diagram.
+    if (res?.status === 404) {
+      const created = await fetch('/api/models', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ model: kept.model }) }).catch(() => null);
+      const body = created?.status === 201 ? await created.json().catch(() => null) as { id?: unknown } | null : null;
+      // Keep the copy under its new id before forgetting the old one, so a superseded load cannot lose it.
+      if (typeof body?.id === 'string') { saveBrowserDiagram(body.id, kept.model); deleteBrowserDiagram(id); return { model: kept.model, id: body.id, note: REOPENED_COPY }; }
+      const reason = created ? await responseMessage(created, 'The server could not take it back.') : 'The server could not be reached.';
+      return { model: kept.model, note: `Showing this browser's copy. ${reason} Editing and AI need the server copy, so try again later.` };
+    }
     const latest = res && (res.ok || res.status === 409) ? SystemModelSchema.safeParse((await res.json().catch(() => ({}))).model) : null;
     if (latest?.success) return { model: latest.data, note: res!.ok ? RESTORED_COPY : 'The server still had a newer copy of this diagram, so that is shown.' };
     const reason = res ? await responseMessage(res, 'The server could not take it back.') : 'The server could not be reached.';
@@ -187,13 +197,14 @@ export default function WorkspacePage() {
     requestedModelRef.current = id;
     try {
       const res = await fetch(`/api/models/${encodeURIComponent(id)}`);
-      let m: SystemModel, restoredNote = '';
+      let m: SystemModel, restoredNote = '', reopenedAs: string | undefined;
       if (res.ok) m = SystemModelSchema.parse((await res.json()).model);
-      else if (res.status === 404 && copiesRef.current) ({ model: m, note: restoredNote } = await restoreFromBrowser(id));
+      else if (res.status === 404 && copiesRef.current) ({ model: m, note: restoredNote, id: reopenedAs } = await restoreFromBrowser(id));
       else throw new Error(res.status === 404
         ? 'This saved diagram is unavailable in this browser session. Open it in the browser that created it, or create a new diagram.'
         : 'Could not open the saved diagram. Check your connection and reload.');
       if (sequence !== loadSequence.current) return;
+      if (reopenedAs) { id = reopenedAs; requestedModelRef.current = id; }
       const hashView = new URLSearchParams(window.location.hash.slice(1)).get('view');
       setModel(m);
       setModelId(id);

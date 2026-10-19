@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { ownedId } from '../../lib/owned-ids';
 import { taskReport, type HostedJobs } from '@archwoven/jobs';
 import { validateModel, appendDisclosures } from '@archwoven/model';
 import { parseRepoUrl } from '@archwoven/ingest';
@@ -44,7 +44,7 @@ export async function postHostedRepo(req: Request, jobs: HostedJobs | 'misconfig
 
   try {
     const key = typeof body.idempotencyKey === 'string' && /^[\w:.-]{1,128}$/.test(body.idempotencyKey) ? body.idempotencyKey : undefined;
-    const jobId = randomUUID(), limits = hostedJobLimits(), spender = spenderOf(req.headers, sessionId);
+    const jobId = ownedId(sessionId), limits = hostedJobLimits(), spender = spenderOf(req.headers, sessionId);
     const admitted = await jobs.admit(jobId, sessionId, 'repo', key, limits, spender.network);
     if (admitted.kind === 'replay') return Response.json({ jobId: admitted.jobId, remaining: null, resumable: true }, { status: 202, headers });
     if (admitted.kind === 'busy') return Response.json({ reason: 'busy', jobId: admitted.jobId, message: BUSY_COPY }, { status: 409, headers });

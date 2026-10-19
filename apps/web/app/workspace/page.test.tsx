@@ -1509,6 +1509,23 @@ describe('diagrams kept in this browser', () => {
     expect(container.textContent).toContain('The server copy had expired, so this diagram was restored from this browser.');
   });
 
+  it('reopens a kept diagram as a new one when its id belongs to an earlier browser session', async () => {
+    window.history.replaceState(null, '', '/workspace#model=m1');
+    keep('m1');
+    const imported: unknown[] = [];
+    transport = (input, init) => hostedQuota(input) ?? (
+      input === '/api/models/m1' && init?.method === 'PUT' ? Response.json({ error: 'model not found' }, { status: 404 }) :
+      input === '/api/models/m1' ? gone() :
+      input === '/api/models' && init?.method === 'POST' ? (imported.push(JSON.parse(String(init.body))), Response.json({ id: 'm7', model: validFullModelExtended }, { status: 201 })) : undefined);
+    await mount(); await settle();
+    expect(imported).toEqual([{ model: validFullModelExtended }]);
+    expect(rendered()).not.toBeNull();
+    expect(window.location.hash).toContain('model=m7');
+    expect(container.textContent).toContain('opened from this browser as a new diagram');
+    expect(localStorage.getItem(copyKey('m1'))).toBeNull();
+    expect(localStorage.getItem(copyKey('m7'))).not.toBeNull();
+  });
+
   it('explains when neither the server nor this browser has the diagram', async () => {
     window.history.replaceState(null, '', '/workspace#model=m1');
     transport = input => hostedQuota(input) ?? (input === '/api/models/m1' ? gone() : undefined);
