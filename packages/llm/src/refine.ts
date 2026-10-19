@@ -30,6 +30,11 @@ export const EMPTY_OPS_ERROR = 'No EditOps were emitted. Implement the instructi
 /** A batch that applies but changes nothing would read as success; it is repaired too. */
 export const NO_CHANGE_ERROR = 'These EditOps change nothing. Implement the instruction; if it targets a source-backed requirement, emit the op that does so and the server will explain the refusal.';
 
+/** What the visitor sees when every attempt changed nothing; the repair instructions above are for the provider. */
+export const REFINEMENT_NO_CHANGE_COPY = 'This instruction did not change the diagram. Describe the change more specifically, for example which component to add, rename, remove or connect.';
+export const visitorErrors = (errors: string[]): string[] =>
+  [...new Set(errors.map(e => e === EMPTY_OPS_ERROR || e === NO_CHANGE_ERROR ? REFINEMENT_NO_CHANGE_COPY : e))];
+
 export const REFINEMENT_SYSTEM = refinementSystem(true);
 export const LOCAL_REFINEMENT_SYSTEM = refinementSystem(false);
 
@@ -145,5 +150,5 @@ export async function generateRefinement(
   }
 
   // A protected requirement explains a failed request better than the provider's last workaround.
-  return { ok: false, errors: refusals.length ? [...new Set(refusals)] : lastErrors, usage: usageFrom(billed, effort, Date.now() - t0, repairs, modelId) };
+  return { ok: false, errors: refusals.length ? [...new Set(refusals)] : visitorErrors(lastErrors), usage: usageFrom(billed, effort, Date.now() - t0, repairs, modelId) };
 }

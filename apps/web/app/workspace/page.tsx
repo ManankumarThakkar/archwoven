@@ -3,7 +3,7 @@ import { CreatorLinks } from '../components/CreatorLinks';
 
 import { useEffect, useReducer, useRef, useState } from 'react';
 import type { EditOp, SystemModel, TaskReport, ViewType } from '@archwoven/model';
-import { SystemModelSchema, MAX_DETAIL_VIEWS, detailDrift, detailViewId, expandBlocker, internalsOf, isDetailView, type Edge, type View } from '@archwoven/model';
+import { SystemModelSchema, MAX_DETAIL_VIEWS, detailDrift, detailViewId, expandBlocker, internalsOf, isDetailView, validateModel, type Edge, type View } from '@archwoven/model';
 import { initial, next } from './states';
 import type { Mode, Stage } from './states';
 import { ControlPanel, type RepoForm } from './ControlPanel';
@@ -20,6 +20,22 @@ import { summarizeOps, pushHistory, undo, idempotencyKeyFor } from './refine-flo
 import { buildSvg } from '../../lib/export-svg';
 import { modelJson, modelJsonFileName, sourceReferences } from '../../lib/export-json';
 import { downloadBlob } from '../../lib/download';
+import { svgToPng } from '../../lib/png';
+import { deleteBrowserDiagram, latestBrowserDiagram, loadBrowserDiagram, MAX_BROWSER_DIAGRAM_BYTES, saveBrowserDiagram, type SaveResult } from '../../lib/browser-diagrams';
+
+const RESTORED_COPY = 'The server copy had expired, so this diagram was restored from this browser.';
+const MISSING_COPY = 'This diagram is no longer on the server (copies are kept for 24 hours after the last change) and this browser has no copy of it. Open a JSON download, or create a new diagram.';
+const UNREADABLE_COPY = "This diagram is no longer on the server, and this browser's copy could not be read (it may be from an older version), so it was removed. Open a JSON download, or create a new diagram.";
+const NOT_A_DIAGRAM = 'This file is not an Archwoven diagram. Choose a JSON file downloaded from Archwoven.';
+const KEEP_LONGER = 'Download JSON to keep it for longer than 24 hours.';
+/** How long a hosted diagram is kept, and whether this browser could keep its copy. */
+function hostedRetention(status: SaveResult | null): string {
+  const server = 'The server keeps this diagram for 24 hours after its last change';
+  if (status === 'unavailable') return `${server}. This browser is not keeping a copy because site storage is blocked. ${KEEP_LONGER}`;
+  if (status === 'full') return `${server}. Browser storage is full, so this browser is not keeping a copy. ${KEEP_LONGER}`;
+  if (status === 'too-large') return `${server}. This diagram is too large for this browser to keep. ${KEEP_LONGER}`;
+  return `${server}; this browser keeps a copy of your 20 most recent diagrams until you delete them or clear site data (anyone using this browser profile can open them). Undo covers changes made since this page opened.`;
+}
 import type { DirectEdit } from '../../lib/direct-edit';
 
 const STAGE_LABEL: Record<Stage, string> = {
@@ -99,6 +115,10 @@ export default function WorkspacePage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>('describe');
   const [restoring, setRestoring] = useState(true);
+  /** Redis-hosted deployments keep each diagram in this browser too (the server copy lasts 24 hours). */
+  const [browserCopies, setBrowserCopies] = useState(false);
+  const copiesRef = useRef(false);
+  const [copyStatus, setCopyStatus] = useState<SaveResult | null>(null);
   const loadSequence = useRef(0);
   /** The diagram most recently asked for, so hash updates the workspace makes itself never reload it. */
   const requestedModelRef = useRef<string | null>(null);
@@ -116,6 +136,7 @@ export default function WorkspacePage() {
       if (sequence !== usageSequence.current) return;
       setLastTask(q.lastTask ?? null);
       setRemaining(q.remaining); setPool(q.pool); setFake(q.fake);
+      copiesRef.current = q.pool === null; setBrowserCopies(q.pool === null);
     } catch { /* A usage refresh must not replace the task result or its error. */ }
   };
 
@@ -148,16 +169,30 @@ export default function WorkspacePage() {
     window.history.replaceState(null, '', `#${hash}`);
   };
 
+  /** The server copy expired: put this browser's copy back (an existing server copy wins), or explain why it cannot be opened. */
+  const restoreFromBrowser = async (id: string): Promise<{ model: SystemModel; note: string }> => {
+    const kept = loadBrowserDiagram(id);
+    if (!kept) throw new Error(MISSING_COPY);
+    if ('problem' in kept) throw new Error(UNREADABLE_COPY);
+    const res = await fetch(`/api/models/${encodeURIComponent(id)}`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ model: kept.model }) }).catch(() => null);
+    const latest = res && (res.ok || res.status === 409) ? SystemModelSchema.safeParse((await res.json().catch(() => ({}))).model) : null;
+    if (latest?.success) return { model: latest.data, note: res!.ok ? RESTORED_COPY : 'The server still had a newer copy of this diagram, so that is shown.' };
+    const reason = res ? await responseMessage(res, 'The server could not take it back.') : 'The server could not be reached.';
+    return { model: kept.model, note: `Showing this browser's copy. ${reason} Editing and AI need the server copy, so try again later.` };
+  };
+
   /** Gaps come only from the saved model, so a first load and every reload show the same list. */
   const loadModel = async (id: string, preferredView?: ViewType) => {
     const sequence = ++loadSequence.current;
     requestedModelRef.current = id;
     try {
       const res = await fetch(`/api/models/${encodeURIComponent(id)}`);
-      if (!res.ok) throw new Error(res.status === 404
+      let m: SystemModel, restoredNote = '';
+      if (res.ok) m = SystemModelSchema.parse((await res.json()).model);
+      else if (res.status === 404 && copiesRef.current) ({ model: m, note: restoredNote } = await restoreFromBrowser(id));
+      else throw new Error(res.status === 404
         ? 'This saved diagram is unavailable in this browser session. Open it in the browser that created it, or create a new diagram.'
         : 'Could not open the saved diagram. Check your connection and reload.');
-      const m = SystemModelSchema.parse((await res.json()).model);
       if (sequence !== loadSequence.current) return;
       const hashView = new URLSearchParams(window.location.hash.slice(1)).get('view');
       setModel(m);
@@ -171,6 +206,7 @@ export default function WorkspacePage() {
       if (chosen) hash.set('view', chosen);
       window.history.replaceState(null, '', `#${hash}`);
       dispatch({ type: 'RESTORED', modelId: id, revision: m.revision, gaps: [...new Set(m.openQuestions.map((q) => q.text))] });
+      setSummary(restoredNote);
       return true;
     } catch (err) {
       if (sequence !== loadSequence.current) return;
@@ -191,7 +227,9 @@ export default function WorkspacePage() {
       const hash = new URLSearchParams(window.location.hash.slice(1));
       let saved: string | null = null;
       try { saved = sessionStorage.getItem('aw_modelId'); } catch { /* permalink still works */ }
-      const id = hash.get('model') || saved;
+      // A closed tab reopens the diagram this browser kept most recently (a link without a diagram id is explained instead).
+      const interaction = ['focus', 'lens', 'route', 'chapter', 'relation'].some((key) => hash.has(key));
+      const id = hash.get('model') || saved || (copiesRef.current && !interaction ? latestBrowserDiagram() : null);
       const pending = storedJob();
       if (id) await loadModel(id);
       else if (!pending && ['focus', 'lens', 'route', 'chapter', 'relation'].some((key) => hash.has(key))) {
@@ -330,6 +368,7 @@ export default function WorkspacePage() {
       // 404: already expired or deleted elsewhere — clear it here as well.
       if (!res.ok && res.status !== 404) { setSummary(await responseMessage(res, 'Could not delete the diagram. Try again.')); return; }
       try { sessionStorage.removeItem('aw_modelId'); } catch { /* storage can be disabled */ }
+      deleteBrowserDiagram(modelId);
       window.history.replaceState(null, '', window.location.pathname + window.location.search);
       setModel(null); setModelId(null); requestedModelRef.current = null; setHistory([]); setSelected(null); setActiveView(''); setSummary('');
       dispatch({ type: 'RESET' });
@@ -398,6 +437,8 @@ export default function WorkspacePage() {
   /** A hosted diagram job (refinement, expansion): wait for it, then apply the result. Failures keep what the user typed. */
   const finishHostedJob = async (jobId: string, diagramId: string, baseRevision: number, copy: { name: string; failed: string; done: (result: { model: SystemModel; ops?: EditOp[] }) => string }): Promise<boolean> => {
     const job = await waitForJob(jobId);
+    // The visitor opened another diagram meanwhile: never apply (or keep) this result under that one.
+    if (requestedModelRef.current !== diagramId) { setSummary(`The ${copy.name} finished for a diagram that is no longer open. Open that diagram again to see its latest version.`); return false; }
     if (!job) { setSummary(`Connection lost. The ${copy.name} may still finish; reload this page to see the latest diagram.`); return false; }
     if (job.status !== 'succeeded') {
       const reason = job.status === 'cancelled' ? `${copy.name[0]!.toUpperCase()}${copy.name.slice(1)} cancelled.` : job.error || copy.failed;
@@ -426,11 +467,11 @@ export default function WorkspacePage() {
     mutationRef.current=true;
     setRefining(true);
     try {
-      const res = await fetch('/api/refine', {
+      const res = await withServerCopy(() => fetch('/api/refine', {
         method: 'POST', headers: { 'content-type': 'application/json' },
         // Hosted servers refine the diagram this page holds; the server keeps it only for 24 hours.
         body: JSON.stringify({ modelId, baseRevision: model.revision, instruction, view: (model.views.find((v) => v.id === activeView) ?? model.views[0])?.type ?? 'architecture', model }),
-      });
+      }));
       if (res.status === 202) return await finishHostedJob((await res.json() as { jobId: string }).jobId, modelId, model.revision,
         { name: 'refinement', failed: 'Refinement failed. Please try again.', done: r => r.ops ? summarizeOps(r.ops) : 'Refined.' });
       if (res.status === 409) {
@@ -469,10 +510,11 @@ export default function WorkspacePage() {
     if (!prev || !modelId || !model || mutationRef.current || history.length<2) return;
     mutationRef.current=true;setRefining(true);
     try {
-      const res = await fetch(`/api/models/${modelId}/undo`, {
+      const res = await withServerCopy(() => fetch(`/api/models/${modelId}/undo`, {
         method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ prevRevision: prev.revision, baseRevision:model.revision }),
-      });
+        // Hosted servers keep only the latest revision, so the earlier version travels with the request (checked as untrusted input).
+        body: JSON.stringify({ prevRevision: prev.revision, baseRevision: model.revision, previous: prev }),
+      }));
       if(res.status===409){const body=await res.json();setModel(body.model);setHistory([body.model]);setSummary('The diagram changed elsewhere. Review the latest version before undoing.');return;}
       if (!res.ok) { setSummary(await responseMessage(res, 'Undo failed. Please try again.')); return; }
       const { model: undone } = (await res.json()) as { model: SystemModel };
@@ -485,6 +527,24 @@ export default function WorkspacePage() {
     } finally {
       mutationRef.current=false;setRefining(false);
     }
+  };
+
+  // Keep every accepted revision in this browser, so the diagram outlives the 24-hour server copy.
+  useEffect(() => {
+    if (browserCopies && model && modelId) setCopyStatus(saveBrowserDiagram(modelId, model));
+  }, [browserCopies, model, modelId]);
+
+  /** The server copy expired while this page was open: put the page's diagram back, then send the request once more. */
+  const withServerCopy = async (send: () => Promise<Response>): Promise<Response> => {
+    const first = await send();
+    if (first.status !== 404 || !copiesRef.current || !model || !modelId) return first;
+    const reason = (await first.clone().json().catch(() => null) as { reason?: unknown } | null)?.reason;
+    if (reason !== 'expired') return first;
+    // Another tab may have kept a newer revision than this page: put the newest copy back.
+    const kept = loadBrowserDiagram(modelId);
+    const newest = kept && 'model' in kept && kept.model.revision > model.revision ? kept.model : model;
+    const put = await fetch(`/api/models/${encodeURIComponent(modelId)}`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ model: newest }) }).catch(() => null);
+    return put && (put.ok || put.status === 409) ? send() : first;
   };
 
   const selectView = (id: string) => {
@@ -512,7 +572,7 @@ export default function WorkspacePage() {
     setSummary(`Expanding ${label}…`);
     try {
       // Hosted servers expand the diagram this page holds; the server keeps it only for 24 hours.
-      const res = await fetch(`/api/models/${modelId}/expand`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ baseRevision: model.revision, target, ...(hint ? { hint } : {}), model }) });
+      const res = await withServerCopy(() => fetch(`/api/models/${modelId}/expand`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ baseRevision: model.revision, target, ...(hint ? { hint } : {}), model }) }));
       if (res.status === 202) return await finishHostedJob((await res.json() as { jobId: string }).jobId, modelId, model.revision,
         { name: 'expansion', failed: 'Could not expand this component. Try again.', done: r => `Added ${internalsOf(r.model, target).length} inferred internals to ${label}.` });
       if (res.status === 409) {
@@ -548,7 +608,7 @@ export default function WorkspacePage() {
     if(!model||!modelId||mutationRef.current)return false;
     mutationRef.current=true;setRefining(true);setSummary('Saving change…');
     try {
-      const response=await fetch(`/api/models/${modelId}/edit`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({baseRevision:model.revision,action})});
+      const response=await withServerCopy(()=>fetch(`/api/models/${modelId}/edit`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({baseRevision:model.revision,action})}));
       if(response.status===409){const body=await response.json();const latest=SystemModelSchema.parse(body.model);setModel(latest);setHistory([latest]);setSummary('The diagram changed elsewhere. Review the latest version and try again.');return false;}
       if(!response.ok){setSummary(await responseMessage(response,'Could not save this change. Try again.'));return false;}
       const accepted=SystemModelSchema.parse((await response.json()).model);
@@ -557,6 +617,23 @@ export default function WorkspacePage() {
       setSummary(action.type==='rename'?'Name saved.':action.type==='orient'?`${action.orientation==='LR'?'Horizontal':'Vertical'} layout saved.`:action.type==='detail'?'Detail view opened.':action.type==='close-detail'?'Detail view closed.':'Positions saved.');return true;
     }catch{setSummary('Could not save this change. Check your connection and try again.');return false;}
     finally{mutationRef.current=false;setRefining(false);}
+  };
+
+  /** Open a JSON download as a new diagram. The file is checked here and again by the server. */
+  const importJson = async (file: File) => {
+    const tell = (message: string) => { if (model) setSummary(message); else setNotice(message); };
+    if (file.size > MAX_BROWSER_DIAGRAM_BYTES) { tell('This file is too large to open (512 KB at most).'); return; }
+    let raw: unknown;
+    try { raw = JSON.parse(await file.text()); } catch { tell(NOT_A_DIAGRAM); return; }
+    const parsed = SystemModelSchema.safeParse(raw);
+    if (!parsed.success || !validateModel(parsed.data).ok) { tell(NOT_A_DIAGRAM); return; }
+    try {
+      const res = await fetch('/api/models', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ model: parsed.data }) });
+      if (res.status !== 201) { tell(await responseMessage(res, 'Could not open this file. Try again.')); return; }
+      const { id } = await res.json() as { id: string };
+      setNotice(null);
+      await loadModel(id);
+    } catch { tell('Could not open this file. Check your connection and try again.'); }
   };
 
   const doExport = async (kind: ExportKind) => {
@@ -580,19 +657,7 @@ export default function WorkspacePage() {
       let ext = 'svg';
       if (kind === 'png') {
         try {
-          const { ensureResvg, renderPng } = await import('../../probes/render/export');
-          const [wasm, ...fonts] = await Promise.all([
-            '/resvg/index_bg.wasm', '/fonts/inter-400.woff2', '/fonts/inter-600.woff2',
-          ].map(async (path) => {
-            const res = await fetch(path);
-            if (!res.ok) throw new Error(`Export asset unavailable: ${path}`);
-            const bytes = new Uint8Array(await res.arrayBuffer());
-            if (!bytes.byteLength) throw new Error(`Export asset empty: ${path}`);
-            return bytes;
-          }));
-          await ensureResvg(wasm!);
-          const png = await renderPng(svg, fonts);
-          blob = new Blob([png as unknown as BlobPart], { type: 'image/png' });
+          blob = await svgToPng(svg);
           ext = 'png';
         } catch { /* fall back to SVG, honestly named and reported below */ }
       }
@@ -672,6 +737,7 @@ export default function WorkspacePage() {
           onGenerateRepo={generateRepo}
           onRepoExample={(url, ref) => dispatch({ type: 'REPO_SELECT', url, ref })}
           onCancel={cancelJob}
+          onImport={file => { void importJson(file); }}
         />
         {showCanvas ? (
           <main className="aw-diagram-main" aria-label="Architecture diagram">
@@ -692,7 +758,7 @@ export default function WorkspacePage() {
             {inDetail && expandBlocker(model, detailFocus) === null && <ExpandInternals key={detailFocus} label={focusLabel} cost={deploy === 'hosted' && pool !== null} busy={refining} onExpand={hint => expand(detailFocus, hint)} />}
             <div style={{ flex: 1, minHeight: 0 }}><Canvas permalinkVersion={permalinkVersion} model={model} modelId={modelId ?? ''} viewId={currentView?.id ?? ''} busy={refining} onMove={inDetail ? undefined : positions=>directEdit({type:'move',positions})} onSelect={setSelected} onDeselect={() => setSelected(null)} /></div>
             <RefineBar busy={refining} summary={summary} canUndo={history.length > 1} onRefine={refine} onUndo={doUndo} onExport={doExport} sources={exportSources}
-              onDelete={() => { void deleteDiagram(); }} retention={deploy === 'local' ? 'Stored on this machine until you delete it.' : pool === null ? 'The server keeps this diagram for 24 hours after its last change.' : 'Kept for 30 days after the last change.'} />
+              onDelete={() => { void deleteDiagram(); }} retention={deploy === 'local' ? 'Stored on this machine until you delete it.' : pool === null ? hostedRetention(copyStatus) : 'Kept for 30 days after the last change.'} />
           </main>
         ) : (
           <main className="aw-empty-main" aria-label="Diagram workspace" aria-live="polite">

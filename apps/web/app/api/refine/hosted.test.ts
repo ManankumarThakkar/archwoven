@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { openStore } from '@archwoven/jobs';
+import type { Store } from '@archwoven/jobs';
 import { validFullModel, type EditOp, type SystemModel, type TaskUsage } from '@archwoven/model';
 import { startTestRedis } from '../../../../../packages/jobs/src/redis-test-server';
 import { serverDeps } from '../../lib/server';
@@ -8,7 +8,7 @@ import { POST as refine } from './route';
 import { GET as getJob } from '../jobs/[id]/route';
 import { POST as cancelJob } from '../jobs/[id]/cancel/route';
 import { GET as getResult } from '../jobs/[id]/result/route';
-import { GET as getModel } from '../models/[id]/route';
+import { GET as getModel, DELETE as deleteModel } from '../models/[id]/route';
 import { GET as getQuota } from '../quota/route';
 import { POST as editModel } from '../models/[id]/edit/route';
 import { POST as undoModel } from '../models/[id]/undo/route';
@@ -28,6 +28,10 @@ const as = (cookie: string) => ({ headers: { cookie } });
 const cookieOf = (response: Response) => response.headers.get('set-cookie')!.split(';')[0]!;
 const post = (route: (r: Request) => Promise<Response>, url: string, body: unknown, cookie = '') => route(new Request(`http://localhost${url}`, { method: 'POST', headers: { 'content-type': 'application/json', ...(cookie ? { cookie } : {}) }, body: JSON.stringify(body) }));
 const stranger = async () => cookieOf(await getQuota(new Request('http://x')));
+const savedModel = async (owner: string, modelId: string) => (await (await getModel(new Request('http://x', as(owner)), params(modelId))).json()).model as SystemModel;
+const renameDirectly = (owner: string, modelId: string, baseRevision: number, label: string) => editModel(new Request(`http://x/api/models/${modelId}/edit`, { method: 'POST', headers: { 'content-type': 'application/json', cookie: owner }, body: JSON.stringify({ baseRevision, action: { type: 'rename', target: 'gateway.api', label } }) }), params(modelId));
+// Hosted mode keeps diagrams in Redis only: any use of the local database fails the test.
+const noLocalStore = new Proxy({}, { get() { throw new Error('hosted diagrams must not use the local database'); } }) as Store;
 
 async function diagram(): Promise<{ owner: string; modelId: string }> {
   const started = await post(generate, '/api/generate', { prompt: 'A shop where customers order through an API backed by PostgreSQL.', view: 'architecture' });
@@ -41,7 +45,7 @@ describe.skipIf(!redis)('hosted refinement jobs (real Redis)', () => {
   beforeEach(async () => {
     await redis!.flush();
     for (const [key, value] of Object.entries({ ARCHWOVEN_MODE: 'hosted', ARCHWOVEN_FAKE: '0', ANTHROPIC_API_KEY: 'test-key-not-real', UPSTASH_REDIS_REST_URL: redis!.url, UPSTASH_REDIS_REST_TOKEN: redis!.token, ARCHWOVEN_REDIS_PREFIX: 'archwoven-test:', ARCHWOVEN_SESSION_SECRET: 'test-session-secret-0123456789abcdef', VERCEL: '' })) vi.stubEnv(key, value);
-    serverDeps.store = openStore(':memory:');
+    serverDeps.store = noLocalStore;
     serverDeps.schedule = task => { scheduled.push(task); };
     serverDeps.generateModel = async () => ({ ok: true as const, model: validFullModel, usage });
     serverDeps.generateRefinement = async () => ({ ok: true as const, ops: [rename], usage });
@@ -60,8 +64,7 @@ describe.skipIf(!redis)('hosted refinement jobs (real Redis)', () => {
     const result = await (await getResult(new Request('http://x', as(owner)), params(jobId))).json();
     expect(result.ops).toEqual([rename]);
     expect(result.model.nodes.find((n: { id: string }) => n.id === 'gateway.api').label).toBe('Edge Gateway');
-    expect((await (await getModel(new Request('http://x', as(owner)), params(modelId))).json()).model.revision).toBe(2);
-    expect(serverDeps.store.getRevision(modelId)!.revision).toBe(2);
+    expect((await savedModel(owner, modelId)).revision).toBe(2);
     const other = await stranger();
     expect((await getResult(new Request('http://x', as(other)), params(jobId))).status).toBe(404);
     expect((await getJob(new Request('http://x', as(other)), params(jobId))).status).toBe(404);
@@ -90,27 +93,27 @@ describe.skipIf(!redis)('hosted refinement jobs (real Redis)', () => {
   it('keeps an edit saved while inference ran, and discards the late result', async () => {
     const { owner, modelId } = await diagram();
     serverDeps.generateRefinement = async () => {
-      const edited = structuredClone(validFullModel) as SystemModel; edited.revision = 2; edited.parentId = 1; edited.nodes[0]!.label = 'Edited meanwhile';
-      serverDeps.store.saveRevision(modelId, edited, owner.split('=')[1]!.split('.')[0]!);
+      expect((await renameDirectly(owner, modelId, 1, 'Edited meanwhile')).status).toBe(200);
       return { ok: true as const, ops: [rename], usage };
     };
     const { jobId } = await (await post(refine, '/api/refine', refineBody(modelId), owner)).json();
     await drain();
     expect(await (await getJob(new Request('http://x', as(owner)), params(jobId))).json()).toMatchObject({ status: 'failed', error: STALE_COPY });
-    expect(serverDeps.store.getRevision(modelId)!.nodes[0]!.label).toBe('Edited meanwhile');
-    expect((await (await getModel(new Request('http://x', as(owner)), params(modelId))).json()).model.revision).toBe(2);
+    const kept = await savedModel(owner, modelId);
+    expect(kept.revision).toBe(2);
+    expect(kept.nodes.find(n => n.id === 'gateway.api')!.label).toBe('Edited meanwhile');
     expect((await getResult(new Request('http://x', as(owner)), params(jobId))).status).toBe(404);
   });
 
-  it('refines after a direct edit on a development server, whose local store holds the latest revision', async () => {
+  it('refines after a direct edit, whose revision the server copy holds', async () => {
     const { owner, modelId } = await diagram();
-    const edited = structuredClone(validFullModel) as SystemModel; edited.revision = 2; edited.parentId = 1; edited.nodes[0]!.label = 'Renamed directly';
-    serverDeps.store.saveRevision(modelId, edited, owner.split('=')[1]!.split('.')[0]!);
+    expect((await renameDirectly(owner, modelId, 1, 'Renamed directly')).status).toBe(200);
+    const edited = await savedModel(owner, modelId);
     serverDeps.generateRefinement = async () => ({ ok: true as const, ops: [{ ...rename, baseRevision: 2 }], usage });
     const { jobId } = await (await post(refine, '/api/refine', { ...refineBody(modelId, edited), baseRevision: 2 }, owner)).json();
     await drain();
     expect(await (await getJob(new Request('http://x', as(owner)), params(jobId))).json()).toMatchObject({ status: 'succeeded', revision: 3 });
-    expect((await (await getModel(new Request('http://x', as(owner)), params(modelId))).json()).model.revision).toBe(3);
+    expect((await savedModel(owner, modelId)).revision).toBe(3);
   });
 
   it('refuses a refinement of an outdated revision before any paid work, returning the latest diagram', async () => {
@@ -152,7 +155,7 @@ describe.skipIf(!redis)('hosted refinement jobs (real Redis)', () => {
     const broken = (await (await post(refine, '/api/refine', refineBody(modelId, validFullModel, 'Add a cache'), owner)).json()).jobId;
     await drain();
     expect(await (await getJob(new Request('http://x', as(owner)), params(broken))).json()).toMatchObject({ status: 'failed' });
-    expect(serverDeps.store.getRevision(modelId)!.revision).toBe(1);
+    expect((await savedModel(owner, modelId)).revision).toBe(1);
   });
 
   it('starts one job for repeated submissions and refuses a second request while one runs', async () => {
@@ -182,25 +185,36 @@ describe.skipIf(!redis)('hosted refinement jobs (real Redis)', () => {
     await cancelJob(new Request('http://x', { method: 'POST', ...as(owner) }), params(jobId));
     await running;
     expect(await (await getJob(new Request('http://x', as(owner)), params(jobId))).json()).toMatchObject({ status: 'cancelled' });
-    expect(serverDeps.store.getRevision(modelId)!.revision).toBe(1);
+    expect((await savedModel(owner, modelId)).revision).toBe(1);
   }, 15_000);
 
-  it('refines a diagram the server no longer holds (its 24-hour copy expired) from the browser copy', async () => {
+  it('refuses to refine a diagram whose server copy expired, before any paid work, so the page restores it first', async () => {
     const owner = await stranger(), modelId = crypto.randomUUID();
-    const started = await post(refine, '/api/refine', refineBody(modelId), owner);
-    expect(started.status).toBe(202);
-    const { jobId } = await started.json();
-    await drain();
-    expect(await (await getJob(new Request('http://x', as(owner)), params(jobId))).json()).toMatchObject({ status: 'succeeded', modelId, revision: 2 });
-    expect((await (await getModel(new Request('http://x', as(owner)), params(modelId))).json()).model.revision).toBe(2);
+    const refineCall = vi.fn(); serverDeps.generateRefinement = refineCall;
+    const response = await post(refine, '/api/refine', refineBody(modelId), owner);
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({ reason: 'expired' });
+    expect(scheduled).toHaveLength(0); expect(refineCall).not.toHaveBeenCalled();
   });
 
-  it('on Vercel, says that server-side edits and undo are not available yet instead of failing obscurely', async () => {
-    vi.stubEnv('VERCEL', '1');
+  it('does not bring back a diagram deleted while its refinement ran', async () => {
+    const { owner, modelId } = await diagram();
+    serverDeps.generateRefinement = async () => {
+      await deleteModel(new Request('http://x', { method: 'DELETE', headers: { cookie: owner } }), params(modelId));
+      return { ok: true as const, ops: [rename], usage };
+    };
+    const { jobId } = await (await post(refine, '/api/refine', refineBody(modelId), owner)).json();
+    await drain();
+    expect(await (await getJob(new Request('http://x', as(owner)), params(jobId))).json()).toMatchObject({ status: 'failed', error: STALE_COPY });
+    expect((await getModel(new Request('http://x', as(owner)), params(modelId))).status).toBe(404);
+  });
+
+  it('on Vercel without valid hosted storage, refuses edits and undo with an explanation', async () => {
+    vi.stubEnv('VERCEL', '1'); // the loopback test Redis is not accepted on Vercel
     for (const route of [editModel, undoModel]) {
       const response = await route(new Request('http://x', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }), params(crypto.randomUUID()));
       expect(response.status).toBe(503);
-      expect((await response.json()).error).toMatch(/not available in this deployment yet/);
+      expect((await response.json()).message).toMatch(/hosted job storage is not configured/);
     }
   });
 });

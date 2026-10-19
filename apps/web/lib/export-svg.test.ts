@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { openDetailView, validFullModel, type SystemModel } from '@archwoven/model';
 import { buildSvg } from './export-svg';
-import { buildCardSvg } from '../app/api/share-card/card';
+import { buildCardSvg } from '../app/workspace/share-card';
 import { expandedDetailModel } from '../probes/render/detail-fixture';
 
 const evil = (n: string): string =>

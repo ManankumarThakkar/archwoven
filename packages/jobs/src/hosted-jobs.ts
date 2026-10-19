@@ -182,11 +182,24 @@ if KEYS[2] then
 end
 local v = redis.call('HMGET', KEYS[1], 'owner', 'revision')
 if v[1] and v[1] ~= ARGV[1] then return 'not-owner' end
+-- A change based on a revision never recreates a diagram the server no longer holds (expired or deleted).
+if not v[1] and ARGV[3] ~= '' then return 'stale' end
 -- Records saved before revisions were tracked carry no revision field and are not checked.
 if v[1] and ARGV[3] ~= '' and v[2] and v[2] ~= ARGV[3] then return 'stale' end
 redis.call('HSET', KEYS[1], 'owner', ARGV[1], 'value', ARGV[2], 'revision', ARGV[4])
 redis.call('EXPIRE', KEYS[1], tonumber(ARGV[5]))
 return 'ok'`;
+// A diagram restored from the visitor's browser lands only where the server holds no copy.
+const RESTORE_MODEL = `
+local owner = redis.call('HGET', KEYS[1], 'owner')
+if owner then return owner == ARGV[1] and 'exists' or 'not-owner' end
+redis.call('HSET', KEYS[1], 'owner', ARGV[1], 'value', ARGV[2], 'revision', ARGV[3])
+redis.call('EXPIRE', KEYS[1], tonumber(ARGV[4]))
+return 'ok'`;
+const ALLOW = `
+local count = redis.call('INCR', KEYS[1])
+if count == 1 then redis.call('EXPIRE', KEYS[1], tonumber(ARGV[2])) end
+return count <= tonumber(ARGV[1]) and 1 or 0`;
 const DELETE_OWNED = `if redis.call('HGET', KEYS[1], 'owner') ~= ARGV[1] then return 0 end return redis.call('DEL', KEYS[1])`;
 
 const ID = /^[0-9a-f-]{36}$/;
@@ -262,6 +275,17 @@ export function openHostedJobs({ url, token, prefix, ownerKey = token, now = () 
       if (!ID.test(modelId)) throw new Error('Invalid key.');
       const keys = [`${p}model:${modelId}`, ...(claim ? [`${p}job:${id(claim.jobId)}`] : [])];
       return await run(PUT_MODEL, keys, [ownerOf(sessionId), JSON.stringify(model), baseRevision === null ? '' : baseRevision, model.revision, RESULT_TTL_SECONDS, claim?.claimant ?? '']) as 'ok' | 'stale' | 'not-owner' | 'cancelled';
+    },
+    /** Save a diagram from the visitor's browser where the server copy has expired; an existing copy always wins. */
+    async restoreModel(modelId: string, sessionId: string, model: { revision: number; [field: string]: unknown }): Promise<'ok' | 'exists' | 'not-owner'> {
+      if (!ID.test(modelId)) throw new Error('Invalid key.');
+      return await run(RESTORE_MODEL, [`${p}model:${modelId}`], [ownerOf(sessionId), JSON.stringify(model), model.revision, RESULT_TTL_SECONDS]) as 'ok' | 'exists' | 'not-owner';
+    },
+    /** Count one free write for `identity` (stored only as a keyed hash); false once `limit` is reached within the window. */
+    async allow(bucket: string, identity: string, limit: number, windowSeconds: number): Promise<boolean> {
+      if (!/^[a-z-]{1,32}$/.test(bucket)) throw new Error('Invalid bucket.');
+      const key = createHmac('sha256', ownerKey).update(`${prefix}rate:${bucket}:${identity}`).digest('hex').slice(0, 32);
+      return await run(ALLOW, [`${p}rate:${bucket}:${key}`], [limit, windowSeconds]) === 1;
     },
     /** Whether a diagram id is free, this session's, or another visitor's, and this session's stored copy. */
     async modelState(modelId: string, sessionId: string): Promise<{ owner: 'absent' | 'self' | 'other'; model: { revision?: unknown } | null }> {

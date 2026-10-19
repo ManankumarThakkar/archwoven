@@ -45,9 +45,11 @@ export interface ControlPanelProps {
   onGenerateRepo: (form: RepoForm) => void;
   onRepoExample: (url: string, ref: string) => void;
   onCancel: () => void;
+  /** Open a JSON download as a new diagram. */
+  onImport?: (file: File) => void;
 }
 
-export function ControlPanel({ running, locked=false, remaining, deploy, mode, prefill, onMode, onGenerate, onGenerateRepo, onRepoExample, onCancel }: ControlPanelProps) {
+export function ControlPanel({ running, locked=false, remaining, deploy, mode, prefill, onMode, onGenerate, onGenerateRepo, onRepoExample, onCancel, onImport }: ControlPanelProps) {
   const [prompt, setPrompt] = useState('');
   const [view, setView] = useState<ViewType>('architecture');
   const [url, setUrl] = useState('');
@@ -201,6 +203,12 @@ export function ControlPanel({ running, locked=false, remaining, deploy, mode, p
           )}
         </>
       )}
+      {onImport && <label className="aw-import" style={{ display: 'grid', gap: 4, fontSize: 12, color: '#8b98b8' }}>
+        Open a JSON download
+        <input type="file" accept="application/json,.json" aria-label="Open a JSON download" disabled={running}
+          onChange={(e) => { const file = e.currentTarget.files?.[0]; try { e.currentTarget.value = ''; } catch { /* some browsers keep the selection */ } if (file) onImport(file); }}
+          style={{ fontSize: 12, color: '#cbd5e1', maxWidth: '100%' }} />
+      </label>}
       <div className="aw-panel-footer"><span aria-hidden="true">◇</span> Inspect connections. Refine in words. Export your map.</div>
       </fieldset>
     </aside>

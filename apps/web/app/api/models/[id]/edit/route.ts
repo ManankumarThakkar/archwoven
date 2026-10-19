@@ -1,14 +1,15 @@
-import { applyEditOps, closeDetailView, openDetailView, orientArchitecture } from '@archwoven/model';
 import { serverDeps, readOrCreateSession } from '../../../../lib/server';
-import { detailEdit, directEditOps, orientationEdit, readDirectEdit } from '../../../../../lib/direct-edit';
-import { editsUnavailable, EDITS_UNAVAILABLE_COPY } from '../../../../lib/hosted-runner';
+import { applyDirectEdit, INVALID_EDIT_COPY, readDirectEdit } from '../../../../../lib/direct-edit';
+import { hostedJobs } from '../../../../lib/hosted-runner';
+import { postHostedEdit } from '../../../../lib/hosted-model-edit';
 export const runtime = 'nodejs';
 export async function POST(req: Request, ctx: {
     params: Promise<{
         id: string;
     }>;
 }) {
-    if (editsUnavailable()) return Response.json({ error: EDITS_UNAVAILABLE_COPY }, { status: 503 });
+    const jobs = hostedJobs();
+    if (jobs) return postHostedEdit(req, jobs, (await ctx.params).id);
     const { sessionId } = readOrCreateSession(req), { id } = await ctx.params;
     if (serverDeps.store.getRevisionOwner(id) !== sessionId)
         return Response.json({ error: 'model not found' }, { status: 404 });
@@ -26,16 +27,11 @@ export async function POST(req: Request, ctx: {
         return Response.json({ error: 'baseRevision is required' }, { status: 400 });
     if (body.baseRevision !== latest.revision)
         return Response.json({ reason: 'stale-revision', message: 'The diagram changed elsewhere. Review the latest version and try again.', model: latest }, { status: 409 });
-    const orientation = orientationEdit(body, latest);
-    const detail = orientation ? null : detailEdit(body, latest);
-    const ops = orientation || detail ? null : directEditOps(body, latest);
-    if ((!ops && !orientation && !detail) || req.signal.aborted)
-        return Response.json({ error: 'Invalid edit. Choose an existing element, a name of 1–500 characters, node positions within ±100000, a horizontal/vertical architecture direction, or a component detail view.' }, { status: 400 });
-    const applied = orientation ? orientArchitecture(latest, orientation.viewId, orientation.orientation)
-        : detail ? (detail.type === 'detail' ? openDetailView(latest, detail.target) : closeDetailView(latest, detail.viewId))
-        : applyEditOps(latest, ops!);
+    if (req.signal.aborted)
+        return Response.json({ error: INVALID_EDIT_COPY }, { status: 400 });
+    const applied = applyDirectEdit(body, latest);
     if (!applied.ok)
-        return Response.json({ errors: applied.errors }, { status: 400 });
+        return Response.json(applied.invalid ? { error: applied.errors[0] } : { errors: applied.errors }, { status: 400 });
     if (applied.model.revision !== latest.revision) serverDeps.store.saveRevision(id, applied.model, sessionId);
     return Response.json({ model: applied.model, revision: applied.model.revision });
 }

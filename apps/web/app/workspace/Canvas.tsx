@@ -8,6 +8,9 @@ import { layoutModel, type LayoutResult } from '../../lib/layout';
 import type { Point } from '../../lib/direct-edit';
 import { useGraphEditing, type GraphPlacement } from './useGraphEditing';
 import { journey, reachability } from './graph-inspect';
+import { buildCardSvg } from './share-card';
+import { svgToPng } from '../../lib/png';
+import { downloadBlob } from '../../lib/download';
 import { motionMode } from './motion';
 import { lensKindsInView, lensPasses, parseLens, serializeLens, toggleLens } from './lens';
 import { pulseOrder } from './pulses';
@@ -432,21 +435,12 @@ function GraphCanvas({ model, modelId, viewId, permalinkVersion = 0, onSelect, o
           <button style={btnCls} disabled={shareBusy} onClick={async () => {
             setShareBusy(true);
             try {
-              const body = probe
-                ? { modelId, kind: 'route', from: probe.from, to: probe.to, viewId }
-                : { modelId, kind: 'reach', from: focusId, viewId };
-              const res = await fetch('/api/share-card', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-              if (!res.ok) {
-                const j = (await res.json().catch(() => null)) as { message?: string } | null;
-                setShareErr(j?.message ?? 'share failed — try again');
-                return;
-              }
+              // Rendered in the browser from the diagram on screen; nothing is sent to the server.
+              const svg = probe ? buildCardSvg(model, viewId, 'route', probe.from, probe.to) : buildCardSvg(model, viewId, 'reach', focusId!);
+              downloadBlob(await svgToPng(svg, 1), `archwoven-${probe ? 'route' : 'reach'}.png`);
               setShareErr(null);
-              const blob = await res.blob();
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = url; a.download = `archwoven-${probe ? 'route' : 'reach'}.png`; a.click();
-              URL.revokeObjectURL(url);
+            } catch {
+              setShareErr('Could not create the share card. Download the diagram as SVG instead.');
             } finally { setShareBusy(false); }
           }}>⤓ share</button>
         )}

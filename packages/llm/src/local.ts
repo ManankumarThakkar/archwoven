@@ -9,7 +9,7 @@ import {
 } from '@archwoven/model';
 import { LOCAL_MODEL_SYSTEM, NATIVE_MODEL_JSON_SCHEMA, MAX_REPAIRS, type GenerateOutcome, type TaskUsage } from './client';
 import { LOCAL_REPO_SYSTEM, fenceEscape, pinEvidence, sourceEvidenceErrors, preserveSourceGaps } from './repo';
-import { EMPTY_OPS_ERROR, LOCAL_REFINEMENT_SYSTEM, NO_CHANGE_ERROR } from './refine';
+import { EMPTY_OPS_ERROR, LOCAL_REFINEMENT_SYSTEM, NO_CHANGE_ERROR, visitorErrors } from './refine';
 import type { RefineOutcome } from './refine';
 import { buildSourceModel, SOURCE_PRESENTATION_SCHEMA, SOURCE_PRESENTATION_SYSTEM } from './source-presentation';
 import { EXPANSION_SYSTEM, NATIVE_EXPANSION_SCHEMA, expansionRepair, expansionUserMessage, type ExpandOutcome } from './expand';
@@ -292,7 +292,7 @@ export async function generateRefinementLocal(
     }
   }
 
-  return { ok: false, errors: refusals.length ? [...new Set(refusals)] : lastErrors, usage };
+  return { ok: false, errors: refusals.length ? [...new Set(refusals)] : visitorErrors(lastErrors), usage };
 }
 
 /**
