@@ -13,6 +13,12 @@ textarea::placeholder, input::placeholder { color: #8290aa; opacity: 1; }
 .aw-brand > span:last-child { color: #5eead4; }
 .aw-brand-mark { display: grid; place-items: center; width: 30px; height: 30px; margin-right: 10px; border: 1px solid #28615d; border-radius: 9px; background: #143633; color: #8bf3df; font-size: 22px; }
 .aw-header-caption { color: #8796af; font-size: 12px; padding-left: 14px; border-left: 1px solid #334155; }
+.aw-creator-links { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; min-width: 0; font-size: 12px; }
+.aw-creator-byline { color: #9baec6; line-height: 1.6; }
+.aw-creator-byline strong { color: #dbe6f4; font-weight: 500; }
+.aw-creator-links a { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 44px; padding: 6px 4px; color: #b8c9df; text-decoration: none; }
+.aw-creator-links a:hover { color: #80ead5; text-decoration: underline; text-underline-offset: 4px; }
+.aw-creator-links svg { flex: 0 0 auto; }
 .aw-header-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-left: auto; min-width: 0; max-width: 100%; }
 .aw-header-status > span { overflow-wrap: anywhere; line-height: 1.6; }
 .workspace-shell { display: flex; min-width: 0; }
