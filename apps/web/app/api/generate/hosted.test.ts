@@ -91,12 +91,13 @@ describe.skipIf(!redis)('hosted description jobs (real Redis)', () => {
     expect((await from('198.51.100.7')).status).toBe(202);
   });
 
-  it('still serves repository jobs kept in the local store on a development server', async () => {
+  it('reads and cancels jobs only from hosted storage once it is configured', async () => {
     const owner = cookieOf(await getQuota(new Request('http://x')));
     const sessionId = owner.split('=')[1]!.split('.')[0]!;
     serverDeps.store.createJob({ id: 'repo-job-1', modelId: 'repo-job-1', kind: 'repo', sessionId });
-    expect(await (await getJob(new Request('http://x', as(owner)), params('repo-job-1'))).json()).toMatchObject({ status: 'queued' });
-    expect((await getJob(new Request('http://x', as(cookieOf(await getQuota(new Request('http://x'))))), params('repo-job-1'))).status).toBe(404);
+    expect((await getJob(new Request('http://x', as(owner)), params('repo-job-1'))).status).toBe(404);
+    expect((await cancelJob(new Request('http://x', { method: 'POST', ...as(owner) }), params('repo-job-1'))).status).toBe(404);
+    expect(serverDeps.store.getJob('repo-job-1')!.status).toBe('queued');
   });
 
   it('lets only one of two competing instances run the paid work', async () => {
@@ -124,6 +125,20 @@ describe.skipIf(!redis)('hosted description jobs (real Redis)', () => {
     await running;
     expect(signal.aborted).toBe(true);
     expect(await (await getJob(new Request('http://x', as(owner)), params(jobId))).json()).toMatchObject({ status: 'cancelled', usagePending: false });
+    expect((await getModel(new Request('http://x', as(owner)), params(jobId))).status).toBe(404);
+  });
+
+  it('saves nothing when the job is cancelled while the provider answer arrives', async () => {
+    let release!: () => void, started!: () => void;
+    const answering = new Promise<void>(r => { release = r; }), inFlight = new Promise<void>(r => { started = r; });
+    serverDeps.generateModel = async () => { started(); await answering; return { ok: true as const, model: validFullModel, usage }; };
+    const response = await post(prompt), owner = cookieOf(response), { jobId } = await response.json();
+    const running = scheduled.shift()!();
+    await inFlight;
+    await cancelJob(new Request('http://x', { method: 'POST', ...as(owner) }), params(jobId));
+    release();
+    await running;
+    expect(await (await getJob(new Request('http://x', as(owner)), params(jobId))).json()).toMatchObject({ status: 'cancelled' });
     expect((await getModel(new Request('http://x', as(owner)), params(jobId))).status).toBe(404);
   });
 

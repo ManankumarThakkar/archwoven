@@ -16,13 +16,19 @@ import { homedir } from 'node:os';
 import { LOCAL_PATH_HINT } from '../../../lib/local-path';
 import { repoJobRegistry } from '../../lib/repo-registry';
 import { startJobDeadline, JOB_TIMEOUT_COPY } from '../../lib/job-registry';
+import { hostedJobs } from '../../lib/hosted-runner';
+import { postHostedRepo } from './hosted';
 
 export const runtime = 'nodejs';
+// Hosted jobs run inside this invocation via after(): up to 60 s waiting for a slot plus 180 s of work.
+export const maxDuration = 300;
 
 const safeSubdir = (s: string): boolean =>
   /^[\w@.-]+(\/[\w@.-]+)*$/.test(s) && s.split('/').every((seg) => seg !== '.' && seg !== '..');
 
 export async function POST(req: Request) {
+  const jobs = hostedJobs();
+  if (jobs) return postHostedRepo(req, jobs);
   const { sessionId, minted } = readOrCreateSession(req);
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (minted) headers['set-cookie'] = sessionCookie(sessionId);

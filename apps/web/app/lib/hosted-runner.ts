@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { openHostedJobs, WAIT_COPY, type HostedJobLimits, type HostedJobs } from '@archwoven/jobs';
+import { openHostedJobs, WAIT_COPY, type HostedJobLimits, type HostedJobs, type JobClaim } from '@archwoven/jobs';
 import { deployMode } from './mode';
 import { JOB_TIMEOUT_COPY } from './job-registry';
 
@@ -45,6 +45,8 @@ export function hostedJobs(): HostedJobs | 'misconfigured' | null {
   return cached.jobs;
 }
 
+/** What a running job can do: report its stage, and hold its claim for writes that must not outlive a cancel. */
+export interface JobRun { stage: (name: string) => Promise<void>; claim: JobClaim }
 export interface JobOutcome { status: 'succeeded' | 'failed' | 'clarifying'; error?: string; fields?: Record<string, string | number> }
 
 /**
@@ -53,7 +55,7 @@ export interface JobOutcome { status: 'succeeded' | 'failed' | 'clarifying'; err
  * cancels, and record the outcome once. Nothing is retried; if this
  * invocation dies, the job reads as failed after its deadline.
  */
-export async function runHostedJob(jobs: HostedJobs, jobId: string, work: (signal: AbortSignal) => Promise<JobOutcome>, limits = hostedJobLimits(), { pollMs = 1000, cancelPollMs = 5000 } = {}): Promise<void> {
+export async function runHostedJob(jobs: HostedJobs, jobId: string, work: (signal: AbortSignal, run: JobRun) => Promise<JobOutcome>, limits = hostedJobLimits(), { pollMs = 1000, cancelPollMs = 5000 } = {}): Promise<void> {
   const claimant = randomUUID();
   try {
     for (;;) {
@@ -71,8 +73,11 @@ export async function runHostedJob(jobs: HostedJobs, jobId: string, work: (signa
   const watcher = setInterval(() => {
     jobs.cancelRequested(jobId).then(cancelled => { if (cancelled) controller.abort(); }).catch(() => undefined);
   }, cancelPollMs);
+  // Stage reports are best effort and applied in order.
+  let staged = Promise.resolve();
+  const stage = (name: string) => (staged = staged.then(() => jobs.stage(jobId, claimant, name)).then(() => undefined, () => undefined));
   let outcome: JobOutcome;
-  try { outcome = await work(controller.signal); }
+  try { outcome = await work(controller.signal, { stage, claim: { jobId, claimant } }); }
   catch { outcome = { status: 'failed', error: 'This request failed. You can retry it.' }; }
   finally { clearTimeout(timer); clearInterval(watcher); }
   if (timedOut) outcome = { status: 'failed', error: JOB_TIMEOUT_COPY };

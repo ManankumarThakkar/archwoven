@@ -15,9 +15,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     let hosted;
     try { hosted = await jobs.read(id, sessionId); }
     catch { return Response.json({ error: HOSTED_UNAVAILABLE_COPY }, { status: 503 }); }
-    if (hosted) return Response.json({ usagePending: hosted.usagePending, questions: hosted.questions, remaining: null, status: hosted.status, stage: hosted.stage, modelId: hosted.modelId ?? id, revision: hosted.revision, queuePosition: hosted.queuePosition, deadlineAt: hosted.deadlineAt, gaps: [], error: hosted.error, pollAfterMs: 1500 }, { headers: { 'cache-control': 'private, no-store' } });
-    // Operations not yet moved to hosted jobs (repository imports) still run in a development server's local store.
-    if (process.env.VERCEL === '1') return Response.json({ error: 'job not found' }, { status: 404 });
+    if (!hosted) return Response.json({ error: 'job not found' }, { status: 404 });
+    return Response.json({ usagePending: hosted.usagePending, questions: hosted.questions, remaining: null, status: hosted.status, stage: hosted.stage, modelId: hosted.modelId ?? id, revision: hosted.revision, queuePosition: hosted.queuePosition, deadlineAt: hosted.deadlineAt, gaps: [], error: hosted.error, pollAfterMs: 1500 }, { headers: { 'cache-control': 'private, no-store' } });
   }
   const job = serverDeps.store.getJob(id);
   if (!job || job.sessionId !== sessionId) return Response.json({ error: 'job not found' }, { status: 404 });

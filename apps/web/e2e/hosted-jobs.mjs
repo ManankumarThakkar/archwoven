@@ -1,13 +1,14 @@
 #!/usr/bin/env node
-/** Hosted description jobs in a real browser: production build, real Redis job state and
- * spending ledger, and a LABELLED provider fixture (no inference; see the README).
+/** Hosted jobs (descriptions, refinement, expansion, repository imports) in a real browser:
+ * production build, real Redis job state and spending ledger, and a LABELLED provider fixture (no inference; see the README).
  *
  *   node apps/web/e2e/hosted-jobs.mjs flows <localhost-url> <outDir> <toolsDir> <fixture-log> [chromium,webkit]
  *   node apps/web/e2e/hosted-jobs.mjs crash-start <localhost-url> <outDir> <toolsDir>   (then kill and restart the server)
  *   node apps/web/e2e/hosted-jobs.mjs crash-check <localhost-url> <outDir> <toolsDir>
  *
  * The server must run in hosted mode with Redis job storage, a session secret and the fixture
- * preload, with ARCHWOVEN_FIXTURE_DELAY_MS long enough to act while a job runs (about 6 s).
+ * preload, with ARCHWOVEN_FIXTURE_DELAY_MS long enough to act while a job runs (about 6 s) and
+ * ARCHWOVEN_FIXTURE_REPO_TAR serving the fixture repository.
  */
 import { createRequire } from 'node:module';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -154,7 +155,40 @@ if (mode === 'flows') {
         await reopened.reload();
         check(scope, 'the expansion survives a reload', await diagram(reopened) && await reopened.locator('.react-flow__node').filter({ hasText: 'Core Logic' }).count() === 1);
 
-        // 9. Another visitor cannot read the job or its diagram.
+        // 9. A public repository import as a hosted job: its stages show, a mid-job reload reconnects,
+        // and the diagram survives a reload. A second import (another ref) is cancelled while it runs.
+        const importRepo = async (ref) => {
+          await reopened.goto(`${base}/workspace`);
+          await reopened.getByRole('button', { name: 'Import repository', exact: true }).click();
+          await reopened.locator('#repository-url').fill('https://github.com/fixture/shop');
+          if (ref) await reopened.getByRole('textbox', { name: 'Repository branch or commit', exact: true }).fill(ref);
+          const [response] = await Promise.all([
+            reopened.waitForResponse(r => r.url().endsWith('/api/repo') && r.request().method() === 'POST'),
+            reopened.getByRole('button', { name: /Analyze repository/ }).click(),
+          ]);
+          return { status: response.status(), body: await response.json().catch(() => ({})) };
+        };
+        check(scope, 'hosted repository help describes the free AI limit', /Uses free AI within a daily limit/.test(await (async () => { await reopened.goto(`${base}/workspace`); await reopened.getByRole('button', { name: 'Import repository', exact: true }).click(); return reopened.locator('#repository-help').textContent(); })()));
+        const repoBefore = messages();
+        const repo = await importRepo();
+        check(scope, 'a repository import is accepted as a resumable job', repo.status === 202 && repo.body.resumable === true && (await activeJob(reopened))?.jobId === repo.body.jobId);
+        check(scope, 'the import shows its stage while it runs', await reopened.getByText(/Fetching the repository|Reading the code|Designing the architecture/).first().waitFor({ timeout: 5000 }).then(() => true, () => false));
+        await reopened.waitForTimeout(1500);
+        await reopened.reload();
+        check(scope, 'a reloaded page finishes the same repository import', await diagram(reopened) && reopened.url().includes(repo.body.jobId) && (await activeJob(reopened)) === null);
+        check(scope, 'one provider request was dispatched for the import', messages() - repoBefore === 1);
+        await reopened.reload();
+        check(scope, 'the imported diagram survives a reload', await diagram(reopened));
+        const cancelled = await importRepo('main');
+        await reopened.getByRole('button', { name: 'Cancel', exact: true }).first().click();
+        const analyze = reopened.getByRole('button', { name: /Analyze repository/ });
+        check(scope, 'after cancelling, the import form is usable again', await analyze.waitFor({ timeout: 10_000 }).then(() => analyze.isEnabled(), () => false));
+        const repoStatus = await reopened.evaluate(id => fetch(`/api/jobs/${id}`).then(r => r.json()), cancelled.body.jobId);
+        check(scope, 'a cancelled repository import saves nothing', repoStatus.status === 'cancelled' && (await reopened.evaluate(id => fetch(`/api/models/${id}`).then(r => r.status), cancelled.body.jobId)) === 404);
+        check(scope, 'the import form keeps the typed repository after cancelling', await reopened.locator('#repository-url').inputValue().catch(() => '') === 'https://github.com/fixture/shop');
+        await reopened.screenshot({ path: join(out, `${name}-${width}-repo-cancelled.png`), fullPage: true });
+
+        // 10. Another visitor cannot read the job or its diagram.
         const stranger = await browser.newContext();
         const peek = await stranger.newPage();
         await peek.goto(`${base}/workspace`);

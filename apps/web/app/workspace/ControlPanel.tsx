@@ -170,7 +170,7 @@ export function ControlPanel({ running, locked=false, remaining, deploy, mode, p
               <label className="aw-repo-option">Branch or commit
               <input aria-label="Repository branch or commit" value={ref} onChange={(e) => setRef(e.target.value)} disabled={running} placeholder="Default branch" style={input} /></label>
             </div>
-            <div id="repository-help" style={{ fontSize: 12, color: '#8b98b8', lineHeight: 1.6 }}>Map public repositories across languages. Spring Boot and FastAPI include deeper framework-specific extraction; other repositories use a general code map with gaps called out.<br />{remaining !== null ? `Costs 2 credits (${remaining} left). ` : 'Runs locally; no credits. '}The commit is pinned when the job starts.</div>
+            <div id="repository-help" style={{ fontSize: 12, color: '#8b98b8', lineHeight: 1.6 }}>Map public repositories across languages. Spring Boot and FastAPI include deeper framework-specific extraction; other repositories use a general code map with gaps called out.<br />{remaining !== null ? `Costs 2 credits (${remaining} left). ` : deploy === 'local' ? 'Runs locally; no credits. ' : 'Uses free AI within a daily limit. '}The commit is pinned when the job starts.</div>
 
             <div>
               <div style={{ fontSize: 12, color: '#8b98b8', marginBottom: 6 }}>Examples</div>

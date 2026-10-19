@@ -7,7 +7,7 @@ import {
   OVERSIZED_COPY, llmNotConfigured, LLM_NOT_CONFIGURED_COPY, spenderOf,
 } from '../../lib/server';
 import { deployMode, privacyForMode } from '../../lib/mode';
-import { hostedJobLimits, runHostedJob, HOSTED_NOT_CONFIGURED_COPY, HOSTED_UNAVAILABLE_COPY, type JobOutcome } from '../../lib/hosted-runner';
+import { hostedJobLimits, runHostedJob, HOSTED_NOT_CONFIGURED_COPY, HOSTED_UNAVAILABLE_COPY, type JobOutcome, type JobRun } from '../../lib/hosted-runner';
 import { parseReply, continuationPrompt, preserveClarification, type ClarificationReply } from '../../lib/clarification';
 import { secretGate } from '../../../lib/secret-gate';
 
@@ -67,7 +67,7 @@ export async function postHostedGenerate(req: Request, jobs: HostedJobs | 'misco
     if (admitted.kind === 'network-busy') return Response.json({ reason: 'burst', message: NETWORK_BUSY_COPY, resetAt: Date.now() + 60_000 }, { status: 429, headers });
 
     const answered = reply ? context : undefined, answeredBy = reply;
-    const work = async (signal: AbortSignal): Promise<JobOutcome> => {
+    const work = async (signal: AbortSignal, { claim }: JobRun): Promise<JobOutcome> => {
       const out = await serverDeps.generateModel(prompt, view, { signal, allowClarification: !context, spender });
       const report = (outcome: 'ok' | 'repaired' | 'failed') => jobs.putOwned('lasttask', jobs.ownerOf(sessionId), sessionId,
         taskReport({ action: 'generate', view, taskId: jobId, modelId: jobId, usage: out.usage, retries: out.usage.repairs, outcome })).catch(() => undefined);
@@ -84,7 +84,8 @@ export async function postHostedGenerate(req: Request, jobs: HostedJobs | 'misco
       if (signal.aborted) { await report('failed'); return { status: 'failed', error: 'Cancelled.' }; }
       // Privacy is server-stamped from deploy mode — model self-report never wins.
       const stamped = { ...checked.model, privacy: privacyForMode(deployMode()) };
-      await jobs.putModel(jobId, sessionId, stamped, null);
+      // Saved only while this instance still runs the job: a cancel that landed meanwhile keeps nothing.
+      if (await jobs.putModel(jobId, sessionId, stamped, null, claim) !== 'ok') { await report('failed'); return { status: 'failed', error: 'Cancelled.' }; }
       // A development server keeps editing working through its local store; Vercel has none.
       if (process.env.VERCEL !== '1') serverDeps.store.saveRevision(jobId, stamped, sessionId);
       await report(out.usage.repairs > 0 ? 'repaired' : 'ok');

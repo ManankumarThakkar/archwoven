@@ -98,6 +98,19 @@ describe.skipIf(!redis)('hosted job lifecycle (real Redis)', () => {
     expect(await queue.read(job, 'a')).toMatchObject({ status: 'running' });
   });
 
+  it('shows the running stage reported by the instance that claimed the job, and no later stage once it ends', async () => {
+    const queue = jobs(), job = id();
+    await queue.admit(job, 'a', 'repo', undefined, limits);
+    expect(await queue.stage(job, 'worker-1', 'fetching')).toBe(false);
+    await queue.claim(job, 'worker-1', limits);
+    expect(await queue.stage(job, 'worker-2', 'fetching')).toBe(false);
+    expect(await queue.stage(job, 'worker-1', 'fetching')).toBe(true);
+    expect(await queue.read(job, 'a')).toMatchObject({ status: 'running', stage: 'fetching' });
+    await queue.cancel(job, 'a');
+    expect(await queue.stage(job, 'worker-1', 'designing')).toBe(false);
+    expect(await queue.read(job, 'a')).toMatchObject({ status: 'cancelled', stage: 'fetching' });
+  });
+
   it('cancels a waiting job outright and flags a running one for its executor', async () => {
     const queue = jobs(), waiting = id(), running = id();
     await queue.admit(running, 'a', 'generate', undefined, limits); clock += 1;
@@ -171,6 +184,18 @@ describe.skipIf(!redis)('hosted job lifecycle (real Redis)', () => {
     await queue.finish(job, 'worker-1', 'clarifying', '', { clarification: JSON.stringify({ prompt: 'A blog', view: 'architecture', questions: ['Who writes?'] }) });
     await queue.scrubClarification(job);
     expect(await queue.read(job, 'a')).toMatchObject({ status: 'clarifying', clarification: null, questions: [] });
+  });
+
+  it("saves a job's model only while the instance that claimed it is still running it", async () => {
+    const queue = jobs(), job = id();
+    await queue.admit(job, 'a', 'repo', undefined, limits);
+    expect(await queue.putModel(job, 'a', { revision: 1 }, null, { jobId: job, claimant: 'worker-1' })).toBe('cancelled');
+    await queue.claim(job, 'worker-1', limits);
+    expect(await queue.putModel(job, 'a', { revision: 1 }, null, { jobId: job, claimant: 'worker-2' })).toBe('cancelled');
+    expect(await queue.putModel(job, 'a', { revision: 1 }, null, { jobId: job, claimant: 'worker-1' })).toBe('ok');
+    await queue.cancel(job, 'a');
+    expect(await queue.putModel(job, 'a', { revision: 2 }, 1, { jobId: job, claimant: 'worker-1' })).toBe('cancelled');
+    expect(await queue.getOwned('model', job, 'a')).toEqual({ revision: 1 });
   });
 
   it('saves a refined model only over the revision it was based on, and only for its owner', async () => {

@@ -110,6 +110,22 @@ describe.skipIf(!redis)('hosted expansion jobs (real Redis)', () => {
     expect(serverDeps.store.getRevision(modelId)!.revision).toBe(1);
   }, 15_000);
 
+  it('keeps the diagram unchanged when the expansion is cancelled while its result returns', async () => {
+    const { owner, modelId } = await diagram();
+    let release!: () => void, started!: () => void;
+    const analysing = new Promise<void>(r => { release = r; }), inFlight = new Promise<void>(r => { started = r; });
+    serverDeps.expandComponent = async () => { started(); await analysing; return { ok: true as const, model: expanded(), usage }; };
+    const { jobId } = await (await expandReq(modelId, owner)).json();
+    const running = scheduled.shift()!();
+    await inFlight;
+    await cancelJob(new Request('http://x', { method: 'POST', ...as(owner) }), params(jobId));
+    release();
+    await running;
+    expect(await (await getJob(new Request('http://x', as(owner)), params(jobId))).json()).toMatchObject({ status: 'cancelled' });
+    expect(serverDeps.store.getRevision(modelId)!.revision).toBe(1);
+    expect((await getResult(new Request('http://x', as(owner)), params(jobId))).status).toBe(404);
+  });
+
   it('where the server holds only its Redis copy, keeps a revision saved during inference', async () => {
     const owner = cookieOf(await getQuota(new Request('http://x'))), modelId = crypto.randomUUID();
     const jobs = hostedJobs(); if (!jobs || jobs === 'misconfigured') throw new Error('hosted jobs unavailable');
