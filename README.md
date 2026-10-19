@@ -111,6 +111,12 @@ Development output goes to `.next-dev` and production output to `.next`, so a bu
 
 ### Vercel preview diagnostics
 
+The homepage is a server-rendered product page with a labelled recorded diagram, creator links and no generation calls. The workspace is at `/workspace`.
+
+For search publication, set `ARCHWOVEN_SITE_URL` to the final HTTPS origin in the **Production** environment, then rebuild. Without a valid origin, the site stays `noindex`. Development, Preview, local/private mode and demo mode also stay `noindex`; the workspace is always `noindex`, and API responses carry an `X-Robots-Tag`. The sitemap contains only the public landing page. These search directives do not replace session ownership or deployment protection.
+
+After deployment, verify the public URL in Google Search Console and Bing Webmaster Tools and submit `/sitemap.xml`. Optional `ARCHWOVEN_GOOGLE_SITE_VERIFICATION` and `ARCHWOVEN_BING_SITE_VERIFICATION` values emit the corresponding ownership meta tags. Keep Preview deployments protected. Edit `apps/web/public/og.svg` and run `node scripts/render-social-preview.mjs` to regenerate the static social image; this uses the bundled fonts and no external services.
+
 The hosted Redis spending ledger and shared jobs are implemented for descriptions, refinement, component expansion and repository imports. Local/private mode keeps SQLite. Public launch still needs browser-held diagrams and editing/undo on Vercel, removal of the legacy SQLite dependency during serverless startup, and acceptance against actual Vercel and Upstash deployments. Keep application APIs restricted until those checks are complete.
 
 To check serverless dependency packaging without a provider key:
