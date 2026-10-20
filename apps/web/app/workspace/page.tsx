@@ -731,28 +731,28 @@ export default function WorkspacePage() {
         <Brand />
         <CreatorLinks />
         <div className="aw-header-status">
-        <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 6, background: '#111a2e', color: '#93c5fd' }}>{privacy}</span>
+        <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 6, background: 'var(--sh-chip)', color: 'var(--sh-info)' }}>{privacy}</span>
         {deploy === 'local'
-          ? <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 6, background: '#111a2e', color: '#93c5fd' }}>Local · no credit limits</span>
+          ? <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 6, background: 'var(--sh-chip)', color: 'var(--sh-info)' }}>Local · no credit limits</span>
           : pool === null
             // Hosted spending caps are money limits, not credits.
-            ? <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 6, background: '#111a2e', color: '#fbbf24' }}>◐ Free AI · daily limit</span>
-            : <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 6, background: '#111a2e', color: '#fbbf24' }}>◐ {remaining ?? pool}/{pool} credits today</span>}
+            ? <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 6, background: 'var(--sh-chip)', color: 'var(--sh-warn)' }}>◐ Free AI · daily limit</span>
+            : <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 6, background: 'var(--sh-chip)', color: 'var(--sh-warn)' }}>◐ {remaining ?? pool}/{pool} credits today</span>}
         {usagePending ? <span role="status">Usage pending · provider is settling</span> : lastTask && <TaskUsageSummary task={lastTask} />}
         {!llmReady && (
-          <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 6, background: '#3b2f0d', color: '#fbbf24' }}>
+          <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 6, background: 'var(--sh-warn-soft)', color: 'var(--sh-warn)' }}>
             ⚠ No API key — set ANTHROPIC_API_KEY in apps/web/.env.local, or run locally: ARCHWOVEN_MODE=local pnpm dev
           </span>
         )}
         {state.kind === 'partial' && state.gaps.length > 0 && (
-          <span title={state.gaps.join('\n')} style={{ fontSize: 12, padding: '2px 8px', borderRadius: 6, background: '#3b2f0d', color: '#fbbf24' }}>⚠ {state.gaps.length} gaps</span>
+          <span title={state.gaps.join('\n')} style={{ fontSize: 12, padding: '2px 8px', borderRadius: 6, background: 'var(--sh-warn-soft)', color: 'var(--sh-warn)' }}>⚠ {state.gaps.length} gaps</span>
         )}
         </div>
       </header>
-      {fake && <div role="status" style={{ padding: '10px 16px', background: '#3b2f0d', color: '#fde68a', fontSize: 13 }}>
+      {fake && <div role="status" style={{ padding: '10px 16px', background: 'var(--sh-warn-soft)', color: 'var(--sh-warn)', fontSize: 13 }}>
         Demo mode: generation and refinement return fixed sample data, not diagrams based on your input. Disable ARCHWOVEN_FAKE and configure a generation provider to create real diagrams.
       </div>}
-      {cancelError && state.kind === 'running' && <div role="alert" style={{ padding: '10px 16px', color: '#fda4af' }}>{cancelError}</div>}
+      {cancelError && state.kind === 'running' && <div role="alert" style={{ padding: '10px 16px', color: 'var(--sh-danger)' }}>{cancelError}</div>}
       <div className="workspace-shell" style={{ flex: 1, minHeight: 0 }}>
         <ControlPanel
           locked={refining || !!clarification}
@@ -815,15 +815,15 @@ function CanvasPlaceholder({ state, queuedPos, onReset, hideReset = false }: { s
   if (state.kind === 'quota-blocked') {
     const mins = state.resetAt ? Math.max(0, Math.round((state.resetAt - Date.now()) / 60_000)) : null;
     return <div style={{ textAlign: 'center', maxWidth: 360 }}>
-      <div style={{ fontSize: '1.1rem', color: '#fbbf24', marginBottom: 8 }}>{QUOTA_TITLE[state.reason] ?? 'Generations paused'}</div>
+      <div style={{ fontSize: '1.1rem', color: 'var(--sh-warn)', marginBottom: 8 }}>{QUOTA_TITLE[state.reason] ?? 'Generations paused'}</div>
       <div>{state.message || (mins !== null ? `Resets in ${Math.floor(mins / 60)}h ${mins % 60}m.` : 'Please try again later.')}</div>
-      {!hideReset && <button onClick={onReset} style={{ marginTop: 12, padding: '6px 12px', borderRadius: 8, border: '1px solid #334155', background: 'transparent', color: '#e5e7eb', cursor: 'pointer' }}>Start over</button>}
+      {!hideReset && <button onClick={onReset} style={{ marginTop: 12, padding: '6px 12px', borderRadius: 8, border: '1px solid var(--sh-line)', background: 'transparent', color: 'var(--sh-ink)', cursor: 'pointer' }}>Start over</button>}
     </div>;
   }
-  if (state.kind === 'error') return <div style={{ textAlign: 'center', color: '#f87171' }}>Something went wrong: {state.message}<div>{!hideReset && <button onClick={onReset} style={{ marginTop: 12, padding: '6px 12px', borderRadius: '8px', border: '1px solid #334155', background: 'transparent', color: '#e5e7eb', cursor: 'pointer' }}>Try again</button>}</div></div>;
+  if (state.kind === 'error') return <div style={{ textAlign: 'center', color: 'var(--sh-danger)' }}>Something went wrong: {state.message}<div>{!hideReset && <button onClick={onReset} style={{ marginTop: 12, padding: '6px 12px', borderRadius: '8px', border: '1px solid var(--sh-line)', background: 'transparent', color: 'var(--sh-ink)', cursor: 'pointer' }}>Try again</button>}</div></div>;
   if (state.kind === 'success' || state.kind === 'partial') return <div role="status">Opening diagram revision {state.revision}…</div>;
-  if (state.kind === 'cancelled') return <div>Cancelled. {!hideReset && <button onClick={onReset} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #334155', background: 'transparent', color: '#e5e7eb', cursor: 'pointer' }}>Reset</button>}</div>;
-  if (state.kind === 'stale') return <div style={{ color: '#fbbf24' }}>This diagram changed elsewhere (latest rev {state.latestRevision}). Reload to continue.</div>;
+  if (state.kind === 'cancelled') return <div>Cancelled. {!hideReset && <button onClick={onReset} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid var(--sh-line)', background: 'transparent', color: 'var(--sh-ink)', cursor: 'pointer' }}>Reset</button>}</div>;
+  if (state.kind === 'stale') return <div style={{ color: 'var(--sh-warn)' }}>This diagram changed elsewhere (latest rev {state.latestRevision}). Reload to continue.</div>;
   if (state.kind === 'clarifying') return <div>A few clarifying questions: {state.questions.join(' · ')}</div>;
   if (state.kind === 'paused') return <div>Paused: {state.message}</div>;
   return <div className="aw-welcome">

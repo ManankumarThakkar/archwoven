@@ -30,8 +30,8 @@ const MOTION_KEY = 'archwoven-motion';
 
 function BoundaryNode({ data }: { data: { label: string; lines: string[] } }) {
   return (
-    <div style={{ width: '100%', height: '100%', border: '1.5px dashed #64748b', borderRadius: 14, pointerEvents: 'none' }}>
-      <span title={data.label} style={{ position: 'absolute', top: 8, left: 12, fontSize: 11, lineHeight: '16px', color: '#94a3b8' }}>{data.lines.map((line, i) => <span key={i} style={{ display: 'block' }}>{line}</span>)}</span>
+    <div style={{ width: '100%', height: '100%', border: '1.5px dashed var(--cv-muted)', borderRadius: 14, pointerEvents: 'none' }}>
+      <span title={data.label} style={{ position: 'absolute', top: 8, left: 12, fontSize: 11, lineHeight: '16px', color: 'var(--cv-muted)' }}>{data.lines.map((line, i) => <span key={i} style={{ display: 'block' }}>{line}</span>)}</span>
     </div>
   );
 }
@@ -138,7 +138,7 @@ function GraphCanvas({ model, modelId, viewId, permalinkVersion = 0, onSelect, o
           sourcePosition, targetPosition,
           data: entity ? { entity: node, sourcePosition, targetPosition } : { node, sourcePosition, targetPosition, inside: isInternal(model, node.id) ? model.nodes.find((m) => m.id === node.group)?.label : undefined, hasDetail: internalsOf(model, node.id).length > 0 },
           style: entity
-            ? { width: n.width, height: n.height, borderRadius: 10, background: '#0f172a' }
+            ? { width: n.width, height: n.height, borderRadius: 10, background: 'var(--cv-raised)' }
             : { width: n.width, height: n.height, borderRadius: 10, background: s.bg },
         };
       });
@@ -396,8 +396,8 @@ function GraphCanvas({ model, modelId, viewId, permalinkVersion = 0, onSelect, o
     return { ...e, className: cls, animated, style: pulse ? { ...e.style, animationDelay: `${pulseDelays.get(e.id)}s` } : e.style };
   });
 
-  const selectCls = { fontSize: 11, padding: '2px 6px', borderRadius: 6, border: '1px solid #1f2937', background: '#111a2e', color: '#cbd5e1' } as const;
-  const btnCls = { fontSize: 11, padding: '2px 8px', borderRadius: 6, border: '1px solid #334155', background: '#111a2e', color: '#e5e7eb', cursor: 'pointer' } as const;
+  const selectCls = { fontSize: 11, padding: '2px 6px', borderRadius: 6, border: '1px solid var(--cv-line)', background: 'var(--cv-raised)', color: 'var(--cv-text)' } as const;
+  const btnCls = { fontSize: 11, padding: '2px 8px', borderRadius: 6, border: '1px solid var(--cv-line)', background: 'var(--cv-raised)', color: 'var(--cv-text)', cursor: 'pointer' } as const;
   const viewNodes = view?.nodes ?? [];
 
   if (layoutError) return <div className="aw-canvas" role="alert" style={{ padding: 24 }}>{layoutError}</div>;
@@ -422,7 +422,7 @@ function GraphCanvas({ model, modelId, viewId, permalinkVersion = 0, onSelect, o
         </select>
         <button style={btnCls} disabled={!probeFrom || !probeTo || !!probe} onClick={() => playProbe(probeFrom, probeTo)}>▶ probe</button>
         {probe && <button style={btnCls} onClick={() => { stopTimer(); setProbe(null); writeHash({ route: null }); }}>clear</button>}
-        {probeNoRoute && <span style={{ fontSize: 11, color: '#fbbf24' }}>no route between those</span>}
+        {probeNoRoute && <span style={{ fontSize: 11, color: 'var(--cv-amber)' }}>no route between those</span>}
         {model.guidedViews.length > 0 && (
           <>
             <select aria-label="chapter" value={chapterIdx} onChange={(e) => { const i = Number(e.target.value); setChapterIdx(i); writeHash({ chapter: i >= 0 ? model.guidedViews[i]!.id : null }); }} style={selectCls}>
@@ -444,26 +444,26 @@ function GraphCanvas({ model, modelId, viewId, permalinkVersion = 0, onSelect, o
             } finally { setShareBusy(false); }
           }}>⤓ share</button>
         )}
-        {shareErr && <span style={{ fontSize: 11, color: '#fbbf24' }}>{shareErr}</span>}
+        {shareErr && <span style={{ fontSize: 11, color: 'var(--cv-amber)' }}>{shareErr}</span>}
         <div className="aw-canvas-tools" style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
           <button style={btnCls} aria-pressed={motion === 'still'} onClick={() => { const m = motion === 'still' ? 'motion' : 'still'; setMotion(m); localStorage.setItem(MOTION_KEY, m); }}>
             {motion === 'still' ? '◼ still' : '◉ motion'}
           </button>
           {viewKinds.length > 0 && (
             <>
-              <span style={{ fontSize: 11, color: '#8b98b8' }}>lens</span>
+              <span style={{ fontSize: 11, color: 'var(--cv-muted)' }}>lens</span>
               {viewKinds.map((k) => (
                 <button key={k} aria-pressed={lens.includes(k)} onClick={() => setLensKinds(toggleLens(lens, k))}
-                  style={{ ...btnCls, borderColor: lens.includes(k) ? '#5eead4' : '#334155', background: lens.includes(k) ? '#0f2e2b' : '#111a2e', color: lens.includes(k) ? '#5eead4' : '#e5e7eb' }}>{k}</button>
+                  style={{ ...btnCls, borderColor: lens.includes(k) ? 'var(--cv-accent)' : 'var(--cv-line)', background: lens.includes(k) ? 'var(--cv-accent-soft)' : 'var(--cv-raised)', color: lens.includes(k) ? 'var(--cv-accent)' : 'var(--cv-text)' }}>{k}</button>
               ))}
             </>
           )}
           <button type="button" style={btnCls} onClick={() => setFinderOpen(true)}>Find node /</button>
-          {view?.type === 'er' && <span style={{ fontSize: 11, color: '#a6b4cf' }}>PK primary · FK foreign · UK unique · 1 one · N/M many</span>}
+          {view?.type === 'er' && <span style={{ fontSize: 11, color: 'var(--cv-muted)' }}>PK primary · FK foreign · UK unique · 1 one · N/M many</span>}
         </div>
       </div>
       {chapter?.note && (
-        <div style={{ position: 'absolute', bottom: 8, left: 8, zIndex: 5, maxWidth: 420, fontSize: 11, color: '#cbd5e1', background: '#111a2ecc', border: '1px solid #c4b5fd44', borderRadius: 8, padding: '6px 10px' }}>
+        <div style={{ position: 'absolute', bottom: 8, left: 8, zIndex: 5, maxWidth: 420, fontSize: 11, color: 'var(--cv-text)', background: 'color-mix(in srgb, var(--cv-raised) 80%, transparent)', border: '1px solid #c4b5fd44', borderRadius: 8, padding: '6px 10px' }}>
           <strong style={{ color: '#c4b5fd' }}>{chapter.label}</strong> — {chapter.note}
         </div>
       )}
@@ -482,7 +482,7 @@ function GraphCanvas({ model, modelId, viewId, permalinkVersion = 0, onSelect, o
         onEdgeClick={(_, e) => { setRelationId(e.id); onSelect(e.id); writeHash({ relation: e.id }); }}
         proOptions={{ hideAttribution: true }}
       >
-        <Background gap={16} color="#1a2333" />
+        <Background gap={16} color="var(--cv-dot)" />
         <Controls showFitView={false}><ControlButton aria-label="Fit View" title="Fit View" onClick={() => fitCamera('whole')}>⛶</ControlButton></Controls>
         {showMinimap && <MiniMap pannable zoomable />}
       </ReactFlow></div>
