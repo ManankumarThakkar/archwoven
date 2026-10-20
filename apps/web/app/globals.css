@@ -10,8 +10,8 @@ textarea::placeholder, input::placeholder { color: #8290aa; opacity: 1; }
 .aw-workspace { display: flex; flex-direction: column; height: 100dvh; min-height: 600px; background: #080d17; color: #e5e7eb; }
 .aw-header { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 15px 24px; border-bottom: 1px solid #253044; background: #0b1220; }
 .aw-brand { display: inline-flex; align-items: center; color: #f0f5ff; text-decoration: none; font-weight: 750; font-size: 20px; letter-spacing: -0.7px; }
-.aw-brand > span:last-child { color: #5eead4; }
-.aw-brand-mark { display: grid; place-items: center; width: 30px; height: 30px; margin-right: 10px; border: 1px solid #28615d; border-radius: 9px; background: #143633; color: #8bf3df; font-size: 22px; }
+.aw-brand > span:last-child { color: inherit; }
+.aw-brand svg { flex-shrink: 0; margin-right: 10px; }
 .aw-header-caption { color: #8796af; font-size: 12px; padding-left: 14px; border-left: 1px solid #334155; }
 .aw-creator-links { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; min-width: 0; font-size: 12px; }
 .aw-creator-byline { color: #9baec6; line-height: 1.6; }

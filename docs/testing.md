@@ -26,6 +26,7 @@ Playwright and axe-core are intentionally outside production dependencies. Use a
 
 | Script in `apps/web/e2e/` | Coverage |
 |---|---|
+| [`landing.mjs`](../apps/web/e2e/landing.mjs) | Landing layout at 320–1440 px, walkthrough controls, SVG download, reduced motion, no-JavaScript access and accessibility |
 | [`vercel-runtime.mjs`](../apps/web/e2e/vercel-runtime.mjs) | Production build with `VERCEL=1`, no writable SQLite, real Redis fixtures; jobs, browser persistence, editing/undo, stale tabs, expansion, recovery, imports, downloads, ownership and accessibility |
 | [`storage-capacity.mjs`](../apps/web/e2e/storage-capacity.mjs) | Full storage refuses paid work, preserves inputs/current diagram/downloads, then admits work after capacity is freed |
 | [`hosted-jobs.mjs`](../apps/web/e2e/hosted-jobs.mjs) | Job acceptance, reload and close/reopen recovery, cancellation, two tabs, imports and a killed server |
