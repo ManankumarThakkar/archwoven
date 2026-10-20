@@ -1,0 +1,1157 @@
+{
+  "description": {
+    "schemaVersion": "1",
+    "revision": 1,
+    "title": "Video Streaming Platform",
+    "requirements": [
+      {
+        "id": "req.clients",
+        "text": "Viewers use web and TV apps through a CDN",
+        "status": "stated"
+      },
+      {
+        "id": "req.gateway",
+        "text": "API gateway routes to catalog, playback and recommendation services",
+        "status": "stated"
+      },
+      {
+        "id": "req.events",
+        "text": "Playback writes view events to Kafka",
+        "status": "stated"
+      },
+      {
+        "id": "req.analytics",
+        "text": "Analytics service consumes view events and stores aggregates in ClickHouse",
+        "status": "stated"
+      },
+      {
+        "id": "req.accounts",
+        "text": "User accounts live in PostgreSQL",
+        "status": "stated"
+      },
+      {
+        "id": "req.sessions",
+        "text": "Sessions live in Redis",
+        "status": "stated"
+      }
+    ],
+    "openQuestions": [
+      {
+        "id": "q.accounts-owner",
+        "text": "Which service owns user accounts and sessions? An account service is proposed.",
+        "blockedBy": "e.gateway-accounts"
+      },
+      {
+        "id": "q.catalog-store",
+        "text": "Where does the catalog service store its metadata?",
+        "blockedBy": null
+      },
+      {
+        "id": "q.reco-data",
+        "text": "Does recommendation read analytics aggregates from ClickHouse?",
+        "blockedBy": null
+      }
+    ],
+    "nodes": [
+      {
+        "id": "actor.viewer",
+        "kind": "actor",
+        "label": "Viewer",
+        "provenance": "user-specified",
+        "evidence": []
+      },
+      {
+        "id": "client.web",
+        "kind": "component",
+        "label": "Web App",
+        "provenance": "user-specified",
+        "evidence": [],
+        "group": "clients"
+      },
+      {
+        "id": "client.tv",
+        "kind": "component",
+        "label": "TV App",
+        "provenance": "user-specified",
+        "evidence": [],
+        "group": "clients"
+      },
+      {
+        "id": "edge.cdn",
+        "kind": "gateway",
+        "label": "CDN",
+        "provenance": "user-specified",
+        "evidence": [],
+        "group": "edge"
+      },
+      {
+        "id": "gw.api",
+        "kind": "gateway",
+        "label": "API Gateway",
+        "provenance": "user-specified",
+        "evidence": [],
+        "group": "edge"
+      },
+      {
+        "id": "svc.catalog",
+        "kind": "service",
+        "label": "Catalog Service",
+        "provenance": "user-specified",
+        "evidence": [],
+        "group": "services"
+      },
+      {
+        "id": "svc.playback",
+        "kind": "service",
+        "label": "Playback Service",
+        "provenance": "user-specified",
+        "evidence": [],
+        "group": "services"
+      },
+      {
+        "id": "svc.recommendation",
+        "kind": "service",
+        "label": "Recommendation Service",
+        "provenance": "user-specified",
+        "evidence": [],
+        "group": "services"
+      },
+      {
+        "id": "svc.accounts",
+        "kind": "service",
+        "label": "Account Service",
+        "provenance": "proposed",
+        "evidence": [],
+        "group": "services"
+      },
+      {
+        "id": "queue.kafka",
+        "kind": "queue",
+        "label": "Kafka View Events",
+        "provenance": "user-specified",
+        "evidence": [],
+        "group": "analytics"
+      },
+      {
+        "id": "svc.analytics",
+        "kind": "service",
+        "label": "Analytics Service",
+        "provenance": "user-specified",
+        "evidence": [],
+        "group": "analytics"
+      },
+      {
+        "id": "db.clickhouse",
+        "kind": "datastore",
+        "label": "ClickHouse Aggregates",
+        "provenance": "user-specified",
+        "evidence": [],
+        "group": "analytics"
+      },
+      {
+        "id": "db.postgres",
+        "kind": "datastore",
+        "label": "PostgreSQL Accounts",
+        "provenance": "user-specified",
+        "evidence": [],
+        "group": "data"
+      },
+      {
+        "id": "cache.redis",
+        "kind": "datastore",
+        "label": "Redis Sessions",
+        "provenance": "user-specified",
+        "evidence": [],
+        "group": "data"
+      }
+    ],
+    "edges": [
+      {
+        "id": "e.viewer-web",
+        "from": "actor.viewer",
+        "to": "client.web",
+        "type": "sync",
+        "label": "watches",
+        "role": "main",
+        "provenance": "user-specified",
+        "evidence": []
+      },
+      {
+        "id": "e.viewer-tv",
+        "from": "actor.viewer",
+        "to": "client.tv",
+        "type": "sync",
+        "label": "watches",
+        "role": "branch",
+        "provenance": "user-specified",
+        "evidence": []
+      },
+      {
+        "id": "e.web-cdn",
+        "from": "client.web",
+        "to": "edge.cdn",
+        "type": "sync",
+        "label": "HTTPS",
+        "role": "main",
+        "provenance": "user-specified",
+        "evidence": []
+      },
+      {
+        "id": "e.tv-cdn",
+        "from": "client.tv",
+        "to": "edge.cdn",
+        "type": "sync",
+        "label": "HTTPS",
+        "role": "branch",
+        "provenance": "user-specified",
+        "evidence": []
+      },
+      {
+        "id": "e.cdn-gateway",
+        "from": "edge.cdn",
+        "to": "gw.api",
+        "type": "sync",
+        "label": "API requests",
+        "role": "main",
+        "provenance": "inferred",
+        "evidence": []
+      },
+      {
+        "id": "e.gateway-catalog",
+        "from": "gw.api",
+        "to": "svc.catalog",
+        "type": "sync",
+        "label": "browse catalog",
+        "role": "branch",
+        "provenance": "user-specified",
+        "evidence": []
+      },
+      {
+        "id": "e.gateway-playback",
+        "from": "gw.api",
+        "to": "svc.playback",
+        "type": "sync",
+        "label": "start playback",
+        "role": "main",
+        "provenance": "user-specified",
+        "evidence": []
+      },
+      {
+        "id": "e.gateway-reco",
+        "from": "gw.api",
+        "to": "svc.recommendation",
+        "type": "sync",
+        "label": "get recommendations",
+        "role": "branch",
+        "provenance": "user-specified",
+        "evidence": []
+      },
+      {
+        "id": "e.gateway-accounts",
+        "from": "gw.api",
+        "to": "svc.accounts",
+        "type": "sync",
+        "label": "auth and session",
+        "role": "branch",
+        "provenance": "proposed",
+        "evidence": []
+      },
+      {
+        "id": "e.playback-kafka",
+        "from": "svc.playback",
+        "to": "queue.kafka",
+        "type": "async",
+        "label": "view events",
+        "role": "async",
+        "provenance": "user-specified",
+        "evidence": []
+      },
+      {
+        "id": "e.kafka-analytics",
+        "from": "queue.kafka",
+        "to": "svc.analytics",
+        "type": "async",
+        "label": "consume events",
+        "role": "async",
+        "provenance": "user-specified",
+        "evidence": []
+      },
+      {
+        "id": "e.analytics-clickhouse",
+        "from": "svc.analytics",
+        "to": "db.clickhouse",
+        "type": "data",
+        "label": "write aggregates",
+        "role": "main",
+        "provenance": "user-specified",
+        "evidence": []
+      },
+      {
+        "id": "e.accounts-postgres",
+        "from": "svc.accounts",
+        "to": "db.postgres",
+        "type": "data",
+        "label": "user accounts",
+        "role": "branch",
+        "provenance": "proposed",
+        "evidence": []
+      },
+      {
+        "id": "e.accounts-redis",
+        "from": "svc.accounts",
+        "to": "cache.redis",
+        "type": "data",
+        "label": "sessions",
+        "role": "branch",
+        "provenance": "proposed",
+        "evidence": []
+      }
+    ],
+    "views": [
+      {
+        "id": "view.architecture",
+        "type": "architecture",
+        "orientation": "LR",
+        "nodes": [
+          "actor.viewer",
+          "client.web",
+          "client.tv",
+          "edge.cdn",
+          "gw.api",
+          "svc.catalog",
+          "svc.playback",
+          "svc.recommendation",
+          "svc.accounts",
+          "queue.kafka",
+          "svc.analytics",
+          "db.clickhouse",
+          "db.postgres",
+          "cache.redis"
+        ],
+        "edges": [
+          "e.viewer-web",
+          "e.viewer-tv",
+          "e.web-cdn",
+          "e.tv-cdn",
+          "e.cdn-gateway",
+          "e.gateway-catalog",
+          "e.gateway-playback",
+          "e.gateway-reco",
+          "e.gateway-accounts",
+          "e.playback-kafka",
+          "e.kafka-analytics",
+          "e.analytics-clickhouse",
+          "e.accounts-postgres",
+          "e.accounts-redis"
+        ],
+        "mainPath": [
+          "actor.viewer",
+          "client.web",
+          "edge.cdn",
+          "gw.api",
+          "svc.playback",
+          "queue.kafka",
+          "svc.analytics",
+          "db.clickhouse"
+        ]
+      }
+    ],
+    "semanticChecks": {
+      "allowedRoots": [
+        "actor.viewer"
+      ],
+      "allowedTerminals": [
+        "svc.catalog",
+        "svc.recommendation",
+        "db.clickhouse",
+        "db.postgres",
+        "cache.redis"
+      ],
+      "requiredEdges": [
+        {
+          "from": "gw.api",
+          "to": "svc.catalog",
+          "type": "sync"
+        },
+        {
+          "from": "gw.api",
+          "to": "svc.playback",
+          "type": "sync"
+        },
+        {
+          "from": "gw.api",
+          "to": "svc.recommendation",
+          "type": "sync"
+        },
+        {
+          "from": "svc.playback",
+          "to": "queue.kafka",
+          "type": "async"
+        },
+        {
+          "from": "queue.kafka",
+          "to": "svc.analytics",
+          "type": "async"
+        },
+        {
+          "from": "svc.analytics",
+          "to": "db.clickhouse",
+          "type": "data"
+        }
+      ],
+      "requiredPaths": [
+        {
+          "from": "actor.viewer",
+          "to": "db.clickhouse"
+        },
+        {
+          "from": "client.tv",
+          "to": "gw.api"
+        }
+      ]
+    },
+    "boundaries": [
+      {
+        "id": "b.clients",
+        "label": "Client Apps",
+        "wraps": [
+          "client.web",
+          "client.tv"
+        ]
+      },
+      {
+        "id": "b.edge",
+        "label": "Edge",
+        "wraps": [
+          "edge.cdn",
+          "gw.api"
+        ]
+      },
+      {
+        "id": "b.services",
+        "label": "Core Services",
+        "wraps": [
+          "svc.catalog",
+          "svc.playback",
+          "svc.recommendation",
+          "svc.accounts"
+        ]
+      },
+      {
+        "id": "b.analytics",
+        "label": "Analytics Pipeline",
+        "wraps": [
+          "queue.kafka",
+          "svc.analytics",
+          "db.clickhouse"
+        ]
+      },
+      {
+        "id": "b.data",
+        "label": "Account Data",
+        "wraps": [
+          "db.postgres",
+          "cache.redis"
+        ]
+      }
+    ],
+    "guidedViews": [
+      {
+        "id": "g.access",
+        "label": "Viewer access",
+        "focus": [
+          "actor.viewer",
+          "client.web",
+          "client.tv",
+          "edge.cdn",
+          "gw.api"
+        ],
+        "note": "Web and TV apps reach the API gateway through the CDN."
+      },
+      {
+        "id": "g.services",
+        "label": "Gateway routing",
+        "focus": [
+          "gw.api",
+          "svc.catalog",
+          "svc.playback",
+          "svc.recommendation"
+        ],
+        "note": "The gateway routes to catalog, playback and recommendation."
+      },
+      {
+        "id": "g.events",
+        "label": "View event pipeline",
+        "focus": [
+          "svc.playback",
+          "queue.kafka",
+          "svc.analytics",
+          "db.clickhouse"
+        ],
+        "note": "Playback emits view events to Kafka; analytics aggregates into ClickHouse."
+      },
+      {
+        "id": "g.accounts",
+        "label": "Accounts and sessions",
+        "focus": [
+          "svc.accounts",
+          "db.postgres",
+          "cache.redis"
+        ],
+        "note": "Proposed account service owns PostgreSQL accounts and Redis sessions."
+      }
+    ],
+    "privacy": {
+      "classification": "public",
+      "boundary": "external-allowed"
+    }
+  },
+  "repository": {
+    "schemaVersion": "1",
+    "revision": 1,
+    "title": "full-stack-fastapi-template backend",
+    "requirements": [],
+    "openQuestions": [
+      {
+        "id": "oq.api.prefix",
+        "text": "computed prefix settings.API_V1_STR resolved to its declared default \"/api/v1\" \u2014 an environment override would change these paths"
+      }
+    ],
+    "nodes": [
+      {
+        "id": "app.main",
+        "kind": "gateway",
+        "label": "app",
+        "provenance": "source-supported",
+        "evidence": [
+          {
+            "repo": "fastapi/full-stack-fastapi-template",
+            "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+            "path": "backend/app/main.py",
+            "lines": [
+              21,
+              25
+            ]
+          }
+        ]
+      },
+      {
+        "id": "api.router",
+        "kind": "service",
+        "label": "api_router",
+        "provenance": "source-supported",
+        "evidence": [
+          {
+            "repo": "fastapi/full-stack-fastapi-template",
+            "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+            "path": "backend/app/api/main.py",
+            "lines": [
+              6,
+              6
+            ]
+          }
+        ]
+      },
+      {
+        "id": "api.routes.items",
+        "kind": "service",
+        "label": "items-router",
+        "provenance": "source-supported",
+        "evidence": [
+          {
+            "repo": "fastapi/full-stack-fastapi-template",
+            "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+            "path": "backend/app/api/routes/items.py",
+            "lines": [
+              10,
+              10
+            ]
+          }
+        ]
+      },
+      {
+        "id": "api.routes.login",
+        "kind": "service",
+        "label": "login-router",
+        "provenance": "source-supported",
+        "evidence": [
+          {
+            "repo": "fastapi/full-stack-fastapi-template",
+            "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+            "path": "backend/app/api/routes/login.py",
+            "lines": [
+              20,
+              20
+            ]
+          }
+        ]
+      },
+      {
+        "id": "api.routes.private",
+        "kind": "service",
+        "label": "private-router",
+        "provenance": "source-supported",
+        "evidence": [
+          {
+            "repo": "fastapi/full-stack-fastapi-template",
+            "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+            "path": "backend/app/api/routes/private.py",
+            "lines": [
+              13,
+              13
+            ]
+          }
+        ]
+      },
+      {
+        "id": "api.routes.users",
+        "kind": "service",
+        "label": "users-router",
+        "provenance": "source-supported",
+        "evidence": [
+          {
+            "repo": "fastapi/full-stack-fastapi-template",
+            "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+            "path": "backend/app/api/routes/users.py",
+            "lines": [
+              29,
+              29
+            ]
+          }
+        ]
+      },
+      {
+        "id": "api.routes.utils",
+        "kind": "service",
+        "label": "utils-router",
+        "provenance": "source-supported",
+        "evidence": [
+          {
+            "repo": "fastapi/full-stack-fastapi-template",
+            "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+            "path": "backend/app/api/routes/utils.py",
+            "lines": [
+              8,
+              8
+            ]
+          }
+        ]
+      },
+      {
+        "id": "entity.user",
+        "kind": "entity",
+        "label": "user",
+        "provenance": "source-supported",
+        "evidence": [
+          {
+            "repo": "fastapi/full-stack-fastapi-template",
+            "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+            "path": "backend/app/models.py",
+            "lines": [
+              51,
+              55
+            ]
+          }
+        ]
+      },
+      {
+        "id": "entity.item",
+        "kind": "entity",
+        "label": "item",
+        "provenance": "source-supported",
+        "evidence": [
+          {
+            "repo": "fastapi/full-stack-fastapi-template",
+            "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+            "path": "backend/app/models.py",
+            "lines": [
+              87,
+              93
+            ]
+          }
+        ]
+      },
+      {
+        "id": "datastore.postgresql",
+        "kind": "datastore",
+        "label": "PostgreSQL",
+        "provenance": "source-supported",
+        "evidence": [
+          {
+            "repo": "fastapi/full-stack-fastapi-template",
+            "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+            "path": "backend/app/core/config.py",
+            "lines": [
+              31,
+              31
+            ]
+          }
+        ]
+      }
+    ],
+    "edges": [
+      {
+        "id": "e.item.user",
+        "from": "entity.item",
+        "to": "entity.user",
+        "type": "relation",
+        "label": "N:1",
+        "provenance": "source-supported",
+        "evidence": [
+          {
+            "repo": "fastapi/full-stack-fastapi-template",
+            "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+            "path": "backend/app/models.py",
+            "lines": [
+              87,
+              93
+            ]
+          }
+        ]
+      },
+      {
+        "id": "e.router.login",
+        "from": "api.router",
+        "to": "api.routes.login",
+        "type": "sync",
+        "provenance": "source-supported",
+        "evidence": [
+          {
+            "repo": "fastapi/full-stack-fastapi-template",
+            "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+            "path": "backend/app/api/main.py",
+            "lines": [
+              7,
+              7
+            ]
+          }
+        ]
+      },
+      {
+        "id": "e.router.users",
+        "from": "api.router",
+        "to": "api.routes.users",
+        "type": "sync",
+        "provenance": "source-supported",
+        "evidence": [
+          {
+            "repo": "fastapi/full-stack-fastapi-template",
+            "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+            "path": "backend/app/api/main.py",
+            "lines": [
+              8,
+              8
+            ]
+          }
+        ]
+      },
+      {
+        "id": "e.router.utils",
+        "from": "api.router",
+        "to": "api.routes.utils",
+        "type": "sync",
+        "provenance": "source-supported",
+        "evidence": [
+          {
+            "repo": "fastapi/full-stack-fastapi-template",
+            "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+            "path": "backend/app/api/main.py",
+            "lines": [
+              9,
+              9
+            ]
+          }
+        ]
+      },
+      {
+        "id": "e.router.items",
+        "from": "api.router",
+        "to": "api.routes.items",
+        "type": "sync",
+        "provenance": "source-supported",
+        "evidence": [
+          {
+            "repo": "fastapi/full-stack-fastapi-template",
+            "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+            "path": "backend/app/api/main.py",
+            "lines": [
+              10,
+              10
+            ]
+          }
+        ]
+      },
+      {
+        "id": "e.router.private",
+        "from": "api.router",
+        "to": "api.routes.private",
+        "type": "sync",
+        "provenance": "source-supported",
+        "evidence": [
+          {
+            "repo": "fastapi/full-stack-fastapi-template",
+            "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+            "path": "backend/app/api/main.py",
+            "lines": [
+              14,
+              14
+            ]
+          }
+        ]
+      },
+      {
+        "id": "e.app.router",
+        "from": "app.main",
+        "to": "api.router",
+        "type": "sync",
+        "provenance": "source-supported",
+        "evidence": [
+          {
+            "repo": "fastapi/full-stack-fastapi-template",
+            "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+            "path": "backend/app/main.py",
+            "lines": [
+              35,
+              35
+            ]
+          }
+        ]
+      },
+      {
+        "id": "e.items.db",
+        "from": "api.routes.items",
+        "to": "datastore.postgresql",
+        "type": "data",
+        "label": "Depends",
+        "provenance": "source-supported",
+        "evidence": [
+          {
+            "repo": "fastapi/full-stack-fastapi-template",
+            "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+            "path": "backend/app/api/routes/items.py",
+            "lines": [
+              13,
+              45
+            ]
+          }
+        ]
+      },
+      {
+        "id": "e.login.db",
+        "from": "api.routes.login",
+        "to": "datastore.postgresql",
+        "type": "data",
+        "label": "Depends",
+        "provenance": "source-supported",
+        "evidence": [
+          {
+            "repo": "fastapi/full-stack-fastapi-template",
+            "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+            "path": "backend/app/api/routes/login.py",
+            "lines": [
+              23,
+              42
+            ]
+          }
+        ]
+      },
+      {
+        "id": "e.private.db",
+        "from": "api.routes.private",
+        "to": "datastore.postgresql",
+        "type": "data",
+        "label": "Depends",
+        "provenance": "source-supported",
+        "evidence": [
+          {
+            "repo": "fastapi/full-stack-fastapi-template",
+            "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+            "path": "backend/app/api/routes/private.py",
+            "lines": [
+              23,
+              38
+            ]
+          }
+        ]
+      },
+      {
+        "id": "e.users.db",
+        "from": "api.routes.users",
+        "to": "datastore.postgresql",
+        "type": "data",
+        "label": "Depends",
+        "provenance": "source-supported",
+        "evidence": [
+          {
+            "repo": "fastapi/full-stack-fastapi-template",
+            "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+            "path": "backend/app/api/routes/users.py",
+            "lines": [
+              32,
+              51
+            ]
+          }
+        ]
+      },
+      {
+        "id": "e.utils.db",
+        "from": "api.routes.utils",
+        "to": "datastore.postgresql",
+        "type": "data",
+        "label": "Depends",
+        "provenance": "source-supported",
+        "evidence": [
+          {
+            "repo": "fastapi/full-stack-fastapi-template",
+            "commit": "b1125d8839482cb7bbae603ddc6d0081bf87532e",
+            "path": "backend/app/api/routes/utils.py",
+            "lines": [
+              11,
+              26
+            ]
+          }
+        ]
+      }
+    ],
+    "views": [
+      {
+        "id": "view.architecture",
+        "type": "architecture",
+        "orientation": "LR",
+        "nodes": [
+          "app.main",
+          "api.router",
+          "api.routes.items",
+          "api.routes.login",
+          "api.routes.private",
+          "api.routes.users",
+          "api.routes.utils",
+          "datastore.postgresql"
+        ],
+        "edges": [
+          "e.app.router",
+          "e.router.login",
+          "e.router.users",
+          "e.router.utils",
+          "e.router.items",
+          "e.router.private",
+          "e.items.db",
+          "e.login.db",
+          "e.private.db",
+          "e.users.db",
+          "e.utils.db"
+        ],
+        "mainPath": [
+          "app.main",
+          "api.router",
+          "api.routes.items",
+          "datastore.postgresql"
+        ]
+      },
+      {
+        "id": "view.er",
+        "type": "er",
+        "nodes": [
+          "entity.item",
+          "entity.user"
+        ],
+        "edges": [
+          "e.item.user"
+        ]
+      }
+    ],
+    "boundaries": [],
+    "guidedViews": [],
+    "privacy": {
+      "classification": "public",
+      "boundary": "external-allowed"
+    }
+  },
+  "prompt": "A video streaming platform: viewers use web and TV apps through a CDN; an API gateway routes to catalog, playback and recommendation services; playback writes view events to Kafka, consumed by an analytics service that stores aggregates in ClickHouse; user accounts live in PostgreSQL and sessions in Redis.",
+  "recordings": {
+    "description": "benchmarks/provider-eval/results/2026-10-17-hosted/models/streaming.model.json",
+    "repository": "benchmarks/provider-eval/results/2026-10-17-hosted-imports-after-19b/models/repo-fastapi-template.model.json",
+    "walkthroughDescription": "benchmarks/provider-eval/results/2026-10-17-hosted-19b-evidence-and-fence/models/checkout.model.json"
+  },
+  "walkthroughDescription": {
+    "schemaVersion": "1",
+    "revision": 1,
+    "title": "Checkout Flow",
+    "requirements": [
+      {
+        "id": "req.checkout-entry",
+        "text": "Customers reach checkout through an API gateway",
+        "status": "stated"
+      },
+      {
+        "id": "req.order-routing",
+        "text": "Gateway routes checkout requests to the order service",
+        "status": "stated"
+      },
+      {
+        "id": "req.stripe-charge",
+        "text": "Order service charges the customer via Stripe",
+        "status": "stated"
+      }
+    ],
+    "openQuestions": [
+      {
+        "id": "q.order-persistence",
+        "text": "Where does the order service persist orders and payment status?",
+        "blockedBy": null
+      },
+      {
+        "id": "q.payment-confirmation",
+        "text": "Is payment confirmed synchronously or via Stripe webhooks?",
+        "blockedBy": "e.orders-stripe"
+      }
+    ],
+    "nodes": [
+      {
+        "id": "actor.customer",
+        "kind": "actor",
+        "label": "Customer",
+        "provenance": "user-specified",
+        "evidence": []
+      },
+      {
+        "id": "gw.api",
+        "kind": "gateway",
+        "label": "API Gateway",
+        "provenance": "user-specified",
+        "evidence": []
+      },
+      {
+        "id": "svc.orders",
+        "kind": "service",
+        "label": "Order Service",
+        "provenance": "user-specified",
+        "evidence": []
+      },
+      {
+        "id": "ext.stripe",
+        "kind": "external",
+        "label": "Stripe",
+        "provenance": "user-specified",
+        "evidence": []
+      }
+    ],
+    "edges": [
+      {
+        "id": "e.customer-gateway",
+        "from": "actor.customer",
+        "to": "gw.api",
+        "type": "sync",
+        "label": "Checkout request",
+        "role": "main",
+        "provenance": "user-specified",
+        "evidence": []
+      },
+      {
+        "id": "e.gateway-orders",
+        "from": "gw.api",
+        "to": "svc.orders",
+        "type": "sync",
+        "label": "Route to orders",
+        "role": "main",
+        "provenance": "user-specified",
+        "evidence": []
+      },
+      {
+        "id": "e.orders-stripe",
+        "from": "svc.orders",
+        "to": "ext.stripe",
+        "type": "sync",
+        "label": "Charge payment",
+        "role": "main",
+        "provenance": "user-specified",
+        "evidence": []
+      }
+    ],
+    "views": [
+      {
+        "id": "view.architecture",
+        "type": "architecture",
+        "orientation": "LR",
+        "nodes": [
+          "actor.customer",
+          "gw.api",
+          "svc.orders",
+          "ext.stripe"
+        ],
+        "edges": [
+          "e.customer-gateway",
+          "e.gateway-orders",
+          "e.orders-stripe"
+        ],
+        "mainPath": [
+          "actor.customer",
+          "gw.api",
+          "svc.orders",
+          "ext.stripe"
+        ]
+      }
+    ],
+    "semanticChecks": {
+      "allowedRoots": [
+        "actor.customer"
+      ],
+      "allowedTerminals": [
+        "ext.stripe"
+      ],
+      "requiredEdges": [
+        {
+          "from": "gw.api",
+          "to": "svc.orders",
+          "type": "sync"
+        },
+        {
+          "from": "svc.orders",
+          "to": "ext.stripe",
+          "type": "sync"
+        }
+      ],
+      "requiredPaths": [
+        {
+          "from": "actor.customer",
+          "to": "ext.stripe"
+        }
+      ]
+    },
+    "boundaries": [
+      {
+        "id": "b.checkout-platform",
+        "label": "Checkout Platform",
+        "wraps": [
+          "gw.api",
+          "svc.orders"
+        ]
+      }
+    ],
+    "guidedViews": [
+      {
+        "id": "g.entry",
+        "label": "Entry and routing",
+        "focus": [
+          "actor.customer",
+          "gw.api",
+          "svc.orders"
+        ],
+        "note": "Customers enter through the API gateway, which routes checkout to the order service."
+      },
+      {
+        "id": "g.payment",
+        "label": "Payment",
+        "focus": [
+          "svc.orders",
+          "ext.stripe"
+        ],
+        "note": "The order service charges the customer through Stripe."
+      }
+    ],
+    "privacy": {
+      "classification": "public",
+      "boundary": "external-allowed"
+    }
+  }
+}

@@ -1,6 +1,6 @@
 import { Brand } from './components/Brand';
 import { CreatorLinks, SocialIcon } from './components/CreatorLinks';
-import { ProductPreview } from './components/ProductPreview';
+import { ProductFilm } from './components/ProductFilm';
 import { ViewIllustration } from './components/ViewIllustration';
 import { site } from './lib/site';
 import { landingMetadata, structuredData } from './lib/seo';
@@ -37,7 +37,7 @@ export default function Home() {
         <div className="lp-actions"><a className="lp-button" href="/workspace">Open workspace <span aria-hidden="true">↗</span></a><a className="lp-text-link" href="#example"><span className="lp-play-icon" aria-hidden="true">▷</span> See it come together</a></div>
         <p className="lp-hero-note">No account needed <span aria-hidden="true">·</span> Free AI within shared usage limits</p></div>
       </section>
-      <div className="lp-stage-wrap"><ProductPreview /></div>
+      <div className="lp-stage-wrap"><ProductFilm /></div>
       <div className="lp-capabilities" aria-label="Workspace capabilities"><span>4 diagram views</span><span>Commit-pinned evidence</span><span>SVG, PNG &amp; JSON exports</span><span>Local / private deployment</span></div>
       <section id="how-it-works" className="lp-section lp-how" aria-labelledby="how-title">
         <div className="lp-section-heading"><p className="lp-eyebrow">A LITTLE CONTEXT. A LOT MORE CLARITY.</p><h2 id="how-title">Your next system,<br />woven together.</h2><p>Start with what you know. Follow the connections. Leave with something you can explain.</p></div>
@@ -58,7 +58,7 @@ export default function Home() {
       </div></section>
       <section className="lp-section lp-faq" aria-labelledby="faq-title"><div className="lp-section-heading"><p className="lp-eyebrow">A FEW USEFUL ANSWERS</p><h2 id="faq-title">Before you<br />start exploring.</h2></div><div>
         <details><summary>Can I generate a diagram from any GitHub repository?</summary><p>Submit a public GitHub repository within the import limits. Spring Boot and FastAPI receive framework-aware extraction; other repositories receive a bounded map of source modules and imports, with gaps disclosed. The local deployment also supports checked-out local clones.</p></details>
-        <details><summary>Does the walkthrough use AI?</summary><p>No. The walkthrough uses a recorded example. Opening the workspace also does not start generation. AI is requested when you submit a description, analyse a repository, refine a diagram or expand a component.</p></details>
+        <details><summary>Does watching the film use AI?</summary><p>No. The film uses recorded examples. Opening the workspace also does not start generation. AI is requested when you submit a description, analyse a repository, refine a diagram or expand a component.</p></details>
         <details><summary>What happens when the free AI allowance runs out?</summary><p>New AI calls pause with a message explaining the applicable limit. Available diagrams, examples and browser downloads remain usable. Hosted recovery copies are temporary, so download the files you want to keep.</p></details>
         <details><summary>Can I use Archwoven privately?</summary><p>Yes. Run the local deployment with Ollama to keep inference on your machine. Read the <a href={site.repository + '#run-privately'}>private deployment instructions</a> for setup and limitations.</p></details>
         <details><summary>Can I edit and export the diagrams?</summary><p>Yes. Arrange components, rename elements, refine in words and undo changes. Export SVG or PNG for a document or presentation, or JSON to reopen a model in Archwoven.</p></details>

@@ -3,7 +3,11 @@ import { join } from 'node:path';
 
 const nextConfig: NextConfig = {
   async headers() {
-    return [{ source: '/api/:path*', headers: [{ key: 'X-Robots-Tag', value: 'noindex, nofollow' }] }];
+    return [
+      { source: '/api/:path*', headers: [{ key: 'X-Robots-Tag', value: 'noindex, nofollow' }] },
+      // Versioned film assets can be reused across repeat visits. Bump the version when replacing them.
+      { source: '/media/archwoven-overview-v1.:ext(mp4|jpg)', headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }] },
+    ];
   },
   // Pin the monorepo root, even when a parent folder has another lockfile.
   outputFileTracingRoot: join(__dirname, '../..'),

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Archwoven — landing motion study</title><link rel="stylesheet" href="/theme.css"><style>
+@font-face{font-family:Inter;src:url('/apps/web/public/fonts/inter-400.woff2');font-weight:400}@font-face{font-family:Inter;src:url('/apps/web/public/fonts/inter-600.woff2');font-weight:600}
+*{box-sizing:border-box}body{margin:0;background:var(--sh-bg);color:var(--sh-ink);font:15px/1.6 Inter,Arial,sans-serif}main{max-width:1392px;margin:auto;padding:30px 40px}header{display:flex;align-items:center;justify-content:space-between;gap:24px;margin-bottom:22px}header span{font-size:11px;letter-spacing:1.5px}h1{font-size:28px;font-weight:600;letter-spacing:-1px;margin:4px 0}#stage{aspect-ratio:16/9;background:var(--cv-bg);border-radius:22px;overflow:hidden;box-shadow:0 22px 70px color-mix(in srgb,var(--sh-ink) 10%,transparent);position:relative}#stage svg,#movie{display:block;width:100%;height:100%}#movie{position:absolute;inset:0;object-fit:contain;background:var(--cv-bg)}.bar{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-top:18px;color:var(--sh-muted);font-size:13px}.buttons{display:flex;gap:9px}#play{background:var(--sh-green);border-color:var(--sh-green);color:var(--sh-on-green);min-width:84px}button{font:inherit;padding:9px 16px;min-height:44px;border:1px solid var(--sh-line-strong);border-radius:25px;background:transparent;color:var(--sh-ink);cursor:pointer}button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid var(--sh-green);outline-offset:4px}.review{margin-top:28px;border-top:1px solid var(--sh-line);padding-top:18px;color:var(--sh-muted);font-size:13px}summary{cursor:pointer;min-height:36px}nav{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}nav button{font-size:12px}button[aria-pressed=true]{background:var(--sh-green-soft)}input{accent-color:var(--sh-green);width:calc(100% - 110px)}output{display:inline-block;min-width:100px;text-align:right}p{max-width:900px}.render-mode main{max-width:none;padding:0}.render-mode header,.render-mode .bar,.render-mode .review,.render-mode #movie{display:none}.render-mode #stage{width:1920px;height:1080px;border-radius:0;box-shadow:none}.error{color:var(--sh-danger)}
+@media(max-width:680px){main{padding:18px 12px}header{gap:12px}header>span{display:none}h1{font-size:22px}#stage{border-radius:12px}.bar{align-items:start;gap:12px}.bar>span{max-width:48%}.buttons{gap:5px}button{padding:9px 12px}.review{margin-top:20px}nav button{flex:1}}
+</style></head><body><main><header><div><span>LANDING MOTION STUDY / 02</span><h1>A system in motion.</h1></div><span>REVIEW ONLY · NOT PUBLISHED</span></header>
+<div id="stage" aria-label="Archwoven product motion illustration"></div>
+<div class="bar"><span>Description → request → events → repository → evidence</span><div class="buttons"><button id="play" aria-controls="movie">Pause</button><button id="restart">Restart</button></div></div>
+<div class="review"><details id="tools"><summary>Review controls</summary><input id="seek" type="range" min="0" max="32" step="0.1" value="0" aria-label="Film position in seconds"><output id="time">0:00 / 0:32</output><nav aria-label="Film chapters" id="chapters"></nav><p>Recorded real-provider outputs, arranged for this original motion illustration. The streaming example contains 14 components and 14 connections. Its proposed account service is marked in amber. The repository example is a separate FastAPI template analysis at commit b1125d8. Camera composition is designed for landscape review.</p></details>
+<details><summary>Read the descriptive transcript</summary><ol><li>A streaming platform fills the frame. Viewer, web and TV apps connect through a CDN and an API gateway to branching services. An account service is marked proposed.</li><li>A short excerpt of the description appears, then the camera moves into the request path: Viewer, Web App, CDN, API Gateway and Playback Service.</li><li>The camera follows asynchronous view events from Playback through Kafka and Analytics to ClickHouse.</li><li>A separate repository analysis reveals the FastAPI application, its API router, five route modules and PostgreSQL.</li><li>The application-to-router connection reveals backend/app/main.py, line 35, at commit b1125d8. Environment overrides remain unverified.</li><li>A connecting thread resolves into the Archwoven wordmark, Architecture connected, and archwoven.dev.</li></ol></details></div>
+</main><script type="module">
+import {renderFilm,duration,chapters,applyProductTheme} from './film.mjs';
+const stage=document.querySelector('#stage'),play=document.querySelector('#play'),seek=document.querySelector('#seek'),output=document.querySelector('#time');
+const renderMode=new URLSearchParams(location.search).has('render');
+const motionPreference=matchMedia('(prefers-reduced-motion: reduce)');
+let data,movie,t=0,userPaused=false,resumeOnVisible=false;
+const fmt=n=>'0:'+String(Math.floor(n)).padStart(2,'0');
+function labels(){
+  seek.value=t;output.value=fmt(t)+' / '+fmt(duration);
+  document.querySelectorAll('[data-start]').forEach(b=>b.setAttribute('aria-pressed',String(chapters.findLast(c=>c.start<=t)?.start===Number(b.dataset.start))));
+}
+function draw(value){
+  t=Math.max(0,Math.min(duration,Number(value)||0));
+  if(renderMode)stage.innerHTML=renderFilm(data,t);
+  else if(movie&&movie.readyState)movie.currentTime=t;
+  labels();
+}
+function updateControls(){
+  play.textContent=movie.paused?'Play':'Pause';
+  play.setAttribute('aria-label',movie.paused?'Play':'Pause');
+}
+async function startPlayback(){userPaused=false;await movie.play();}
+function pausePlayback(){userPaused=true;movie.pause();}
+try{
+  const theme=getComputedStyle(document.documentElement);
+  applyProductTheme(token=>theme.getPropertyValue(token));
+  data=await(await fetch('./recordings.json')).json();await document.fonts.ready;
+  if(renderMode){document.body.classList.add('render-mode');draw(0);}
+  else{
+    stage.innerHTML=renderFilm(data,0);stage.firstElementChild.setAttribute('aria-hidden','true');
+    movie=document.createElement('video');movie.id='movie';movie.muted=true;movie.loop=true;movie.playsInline=true;movie.preload='auto';
+    movie.poster='/output/poster.jpg';movie.setAttribute('aria-label','Archwoven landing motion illustration');movie.src='/output/archwoven-film.mp4';stage.append(movie);
+    movie.onplay=updateControls;movie.onpause=updateControls;
+    movie.ontimeupdate=()=>{t=movie.currentTime;labels();};
+    movie.onerror=()=>{play.textContent='Preview unavailable';play.disabled=true;};
+    updateControls();
+    if(!motionPreference.matches){movie.autoplay=true;startPlayback().catch(updateControls);}
+  }
+  for(const c of chapters){
+    const b=document.createElement('button');b.textContent=c.label;b.dataset.start=c.start;
+    b.onclick=()=>{pausePlayback();draw(c.start+.6);};document.querySelector('#chapters').append(b);
+  }
+  play.onclick=()=>{if(movie.paused)startPlayback().catch(updateControls);else pausePlayback();};
+  document.querySelector('#restart').onclick=()=>{draw(0);startPlayback().catch(updateControls);};
+  seek.oninput=()=>{pausePlayback();draw(seek.value);};
+  document.addEventListener('visibilitychange',()=>{
+    if(!movie)return;
+    if(document.hidden){resumeOnVisible=!movie.paused;movie.pause();}
+    else if(resumeOnVisible&&!userPaused&&!motionPreference.matches){resumeOnVisible=false;startPlayback().catch(updateControls);}
+  });
+  motionPreference.addEventListener('change',()=>{if(movie&&motionPreference.matches){resumeOnVisible=false;movie.pause();}});
+  labels();window.film={seek:draw,duration};
+}catch(error){stage.innerHTML='<p class="error">This local preview could not load. Reload to try again.</p>';console.error(error);}
+</script></body></html>
