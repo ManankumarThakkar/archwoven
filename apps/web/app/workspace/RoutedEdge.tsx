@@ -13,8 +13,8 @@ export function RoutedEdge({ id, data, markerStart, markerEnd, style }: Pick<Edg
     <path className="aw-flow-token" aria-hidden="true" d={routePath(route.points)} fill="none" stroke={style?.stroke} strokeWidth={3} style={{ animationDelay: style?.animationDelay }} />
     {label && <g data-edge-label={id} style={{ pointerEvents: 'all' }}>
       <title>{label.lines.join(' ')}</title>
-      <rect x={label.x} y={label.y} width={label.width} height={label.height} rx={5} fill="#0c1523" stroke="#26364c" />
-      <text x={label.x + 8} y={label.y + 17} fontSize={11} fill="#cbd5e1">{label.lines.map((line, i) => <tspan key={i} x={label.x + 8} dy={i ? 16 : 0}>{line}</tspan>)}</text>
+      <rect x={label.x} y={label.y} width={label.width} height={label.height} rx={5} style={{ fill: 'var(--cv-bar)', stroke: 'var(--cv-line)' }} />
+      <text x={label.x + 8} y={label.y + 17} fontSize={11} style={{ fill: 'var(--cv-text)' }}>{label.lines.map((line, i) => <tspan key={i} x={label.x + 8} dy={i ? 16 : 0}>{line}</tspan>)}</text>
     </g>}
   </>;
 }
