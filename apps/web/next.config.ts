@@ -8,9 +8,11 @@ const nextConfig: NextConfig = {
   // Pin the monorepo root, even when a parent folder has another lockfile.
   outputFileTracingRoot: join(__dirname, '../..'),
   // The extractor is an external esbuild bundle, so NFT cannot follow its
-  // createRequire() grammar lookup. Include only the runtime grammar assets.
+  // createRequire() grammar lookup or the parser's own WASM, which its CommonJS
+  // build (what Vercel's loader requires) finds beside itself. Include only these runtime assets.
   outputFileTracingIncludes: {
     '/api/**/*': [
+      '../../node_modules/.pnpm/web-tree-sitter@*/node_modules/web-tree-sitter/web-tree-sitter.wasm',
       '../../packages/extract/node_modules/tree-sitter-java/package.json',
       '../../packages/extract/node_modules/tree-sitter-java/tree-sitter-java.wasm',
       '../../packages/extract/node_modules/tree-sitter-python/package.json',

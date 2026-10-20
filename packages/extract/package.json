@@ -3,10 +3,18 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "main": "dist/index.js",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
   "scripts": {
-    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --external:web-tree-sitter --outfile=dist/index.js && tsc -p tsconfig.json",
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --external:web-tree-sitter --outfile=dist/index.js && esbuild src/index.ts --bundle --platform=node --format=cjs --external:web-tree-sitter --define:import.meta.url=__extractModuleUrl \"--banner:js=const __extractModuleUrl = require('node:url').pathToFileURL(__filename).href;\" --outfile=dist/index.cjs && tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
