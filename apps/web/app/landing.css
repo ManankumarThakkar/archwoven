@@ -203,7 +203,7 @@
 .aw-landing .aw-creator-byline strong { color: #243c2f; }
 .aw-landing .aw-creator-links a { color: #3f5b47; }
 .lp-sr-only, .lp-skip:not(:focus) { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.lp-skip:focus { display: block; padding: 16px 24px; }
+.lp-skip:focus { position: fixed; z-index: 100; top: 12px; left: 12px; display: block; padding: 16px 24px; border: 1px solid var(--lp-green); border-radius: 6px; background: var(--lp-paper); }
 @media (min-width: 1600px) {
   .lp-hero { padding-top: 90px; }
 }
