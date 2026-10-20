@@ -59,12 +59,14 @@ function CatalogMap({ layout }: { layout: keyof typeof mapLayouts }) {
 }
 
 export function ProductPreview() {
+  const [ready, setReady] = useState(false);
   const [step, setStep] = useState(0);
   const remaining = useRef(8_000);
   const startedAt = useRef(0);
   const [playing, setPlaying] = useState(false);
   const [started, setStarted] = useState(false);
   const [finished, setFinished] = useState(false);
+  useEffect(() => setReady(true), []);
   useEffect(() => {
     if (!playing) return;
     startedAt.current = Date.now();
@@ -86,7 +88,7 @@ export function ProductPreview() {
     <div className="lp-product-top"><span><i aria-hidden="true" /> THE CATALOG SYSTEM</span><span className="lp-product-label">Recorded example · no AI calls</span></div>
     <div className="lp-product-body">
       <div className="lp-story">
-        <div className="lp-story-controls" role="group" aria-label="Walkthrough steps">{steps.map((item, index) => <button key={item.title} type="button" aria-pressed={step === index} onClick={() => select(index)}><span>0{index + 1}</span>{item.title}</button>)}</div>
+        <div className="lp-story-controls" role="group" aria-label="Walkthrough steps">{steps.map((item, index) => <button key={item.title} type="button" disabled={!ready} aria-pressed={step === index} onClick={() => select(index)}><span>0{index + 1}</span>{item.title}</button>)}</div>
         <div className="lp-story-content">
           <span className="lp-story-kicker">FROM CONTEXT TO CLARITY</span>
           <h2>{current.heading}</h2>
@@ -94,7 +96,7 @@ export function ProductPreview() {
           <p role="status">{current.note}</p>
           {step === 2 && <a className="lp-preview-download" href="/examples/catalog-architecture.svg" download>Download example SVG <span aria-hidden="true">↗</span></a>}
         </div>
-        <button className="lp-play" type="button" onClick={play}><span aria-hidden="true">{playing ? 'Ⅱ' : '▷'}</span>{playing ? 'Pause walkthrough' : finished ? 'Replay walkthrough' : started ? 'Resume walkthrough' : 'Play walkthrough'}<span className="lp-play-duration">24s</span></button>
+        <button className="lp-play" type="button" disabled={!ready} onClick={play}><span aria-hidden="true">{playing ? 'Ⅱ' : '▷'}</span>{playing ? 'Pause walkthrough' : finished ? 'Replay walkthrough' : started ? 'Resume walkthrough' : 'Play walkthrough'}<span className="lp-play-duration">24s</span></button>
       </div>
       <div className="lp-map"><CatalogMap layout="wide" /><CatalogMap layout="folded" /><CatalogMap layout="compact" /><div className="lp-map-caption"><span><i aria-hidden="true" /> Described <i className="lp-inferred-dot" aria-hidden="true" /> Inferred</span><span>4 components · 3 connections</span></div></div>
     </div>

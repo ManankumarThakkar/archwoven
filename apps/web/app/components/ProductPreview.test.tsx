@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ProductPreview } from './ProductPreview';
 
@@ -57,4 +58,10 @@ it('resumes the remaining time in a step and starts a full walkthrough after man
   await click('Explore');
   await click('Play walkthrough');
   expect(host.querySelector('[aria-pressed="true"]')?.textContent).toContain('Describe');
+});
+
+it('keeps server-only controls disabled while the recorded example stays downloadable', () => {
+  host.innerHTML = renderToStaticMarkup(<ProductPreview />);
+  expect([...host.querySelectorAll('button')].every(button => button.disabled)).toBe(true);
+  expect(host.querySelector('a[download]')?.getAttribute('href')).toBe('/examples/catalog-architecture.svg');
 });

@@ -24,6 +24,7 @@ for (const engine of ['chromium', 'webkit']) {
       try {
         await page.goto(base);
         await page.getByRole('button', { name: /Play walkthrough/ }).waitFor();
+        await page.waitForFunction(() => !document.querySelector('.lp-play')?.disabled);
         if (width === 1440) await page.screenshot({ path: join(out, `${engine}-hero.png`) });
         check(scope, 'landing and map are readable without page overflow', await page.getByRole('heading', { level: 1 }).isVisible() && await page.getByRole('img', { name: /^Catalog architecture/ }).isVisible() && await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
         const label = page.locator('.lp-map-name:visible').first();
@@ -60,13 +61,14 @@ for (const engine of ['chromium', 'webkit']) {
     await motionPage.keyboard.press('Tab');
     check(engine, 'keyboard navigation begins with the visible skip link', await motionPage.getByRole('link', { name: 'Skip to content' }).evaluate(el => el === document.activeElement && el.getBoundingClientRect().width > 1));
     await motionPage.getByRole('button', { name: /Play walkthrough/ }).click();
+    await motionPage.getByRole('button', { name: /Pause walkthrough/ }).waitFor();
     check(engine, 'requested motion runs with the normal motion preference', await motionPage.getByRole('img', { name: /^Catalog architecture/ }).locator('.lp-map-connection path').first().evaluate(el => getComputedStyle(el).animationName === 'lp-flow'));
     await motionPage.getByRole('button', { name: /Pause walkthrough/ }).click();
     check(engine, 'pausing stops the geometry animation', await motionPage.getByRole('img', { name: /^Catalog architecture/ }).locator('.lp-map-connection path').first().evaluate(el => getComputedStyle(el).animationName === 'none'));
     await motion.close();
     const plain = await browser.newContext({ javaScriptEnabled: false });
     const page = await plain.newPage(); await page.goto(base);
-    check(engine, 'no-JavaScript visitors can understand the product and enter the workspace', await page.getByRole('heading', { level: 1 }).isVisible() && await page.getByRole('link', { name: 'View example SVG' }).isVisible() && await page.getByRole('link', { name: 'Open workspace', exact: true }).first().getAttribute('href') === '/workspace');
+    check(engine, 'no-JavaScript visitors can understand the product and enter the workspace', await page.getByRole('heading', { level: 1 }).isVisible() && await page.getByRole('link', { name: 'View example SVG' }).isVisible() && await page.getByRole('link', { name: 'Open workspace', exact: true }).first().getAttribute('href') === '/workspace' && await page.getByRole('button', { name: /Play walkthrough/ }).isDisabled());
     await plain.close();
   } finally { await browser.close(); writeFileSync(join(out, 'results.json'), JSON.stringify(results, null, 2)); }
 }
