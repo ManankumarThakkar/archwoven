@@ -3,7 +3,7 @@
 import { useRef } from 'react';
 import type { SystemModel } from '@archwoven/model';
 
-/** Outline rail (archify node-outline.js port): current-view nodes in schema order.
+/** Current-view nodes in schema order.
  *  Click focuses (same path as a node click); ArrowUp/Down move focus within the rail.
  *  Hidden on phone layouts and when the actual canvas is too narrow. */
 export function OutlineRail({ model, viewNodes, activeId, onFocusNode }: {

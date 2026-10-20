@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="840" viewBox="0 0 1600 840" role="img" aria-labelledby="title desc">
+<title id="title">Archwoven — architecture, connected.</title>
+<desc id="desc">Turn ideas and code into diagrams you can explore. An original interwoven path connects a description and a repository to a system of components, with evidence and editable exports.</desc>
+<defs>
+  <pattern id="dots" width="28" height="28" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1" fill="#2b423a" opacity=".6"/></pattern>
+  <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="m2 1 6 4-6 4" fill="none" stroke="#8fdcbd" stroke-width="1.5"/></marker>
+  <linearGradient id="wash" x1="0" x2="1" y2="1"><stop stop-color="#1d4438"/><stop offset="1" stop-color="#10201e"/></linearGradient>
+</defs>
+<rect width="1600" height="840" rx="28" fill="#f6f2e9"/>
+<g font-family="Inter,Arial,sans-serif">
+  <g transform="translate(70 62) scale(1.45)">
+    <path d="M7 32 18.2 8.7a2 2 0 0 1 3.6 0L33 32" fill="none" stroke="#172d2a" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M10.8 24H25a4 4 0 0 0 0-8h-5" fill="none" stroke="#2caa8c" stroke-width="3.4" stroke-linecap="round"/>
+    <text x="35" y="31" font-size="34" font-weight="600" fill="#172d2a" letter-spacing="-1.6">rchwoven</text>
+  </g>
+  <text x="74" y="191" font-size="15" font-weight="600" fill="#176753" letter-spacing="2.6">ARCHITECTURE, CONNECTED.</text>
+  <text x="68" y="297" font-size="88" font-weight="600" fill="#172d2a" letter-spacing="-5">Make the</text>
+  <text x="68" y="395" font-size="88" font-weight="600" fill="#172d2a" letter-spacing="-5">complex<tspan dx="14" fill="#176753">clear.</tspan></text>
+  <text x="74" y="469" font-size="25" fill="#56665f">From your ideas. From your code.</text>
+  <text x="74" y="509" font-size="25" fill="#56665f">Into diagrams you can explore and explain.</text>
+  <g font-size="18" fill="#172d2a">
+    <rect x="74" y="565" width="254" height="58" rx="29" fill="#e0ece4"/>
+    <path d="m98 597 15-15 6 6-15 15-8 2Z" fill="none" stroke="#176753" stroke-width="2"/>
+    <text x="136" y="601">Describe a system</text>
+    <rect x="340" y="565" width="250" height="58" rx="29" fill="#ebe5d8"/>
+    <text x="362" y="601" font-family="monospace" fill="#176753">&lt;/&gt;</text>
+    <text x="412" y="601">Map a repository</text>
+  </g>
+  <path d="M74 680H474C680 680 638 248 796 248H882" fill="none" stroke="#c3b9a5" stroke-width="2"/>
+  <path d="M74 693H495C718 693 667 261 805 261H882" fill="none" stroke="#2caa8c" stroke-width="2" opacity=".6"/>
+  <text x="74" y="757" fill="#176753" font-size="20" font-weight="600">archwoven.dev</text>
+  <path d="M246 754 256 744M246 744h10v10" fill="none" stroke="#176753" stroke-width="2"/>
+  <rect x="782" y="100" width="748" height="610" rx="24" fill="#172d2a" opacity=".08" transform="translate(0 12)"/>
+  <rect x="782" y="100" width="748" height="610" rx="24" fill="url(#wash)"/>
+  <rect x="782" y="100" width="748" height="610" rx="24" fill="url(#dots)"/>
+  <text x="823" y="150" fill="#a3b8ae" font-size="13" letter-spacing="1.8">ONE IDEA. A SYSTEM TO UNDERSTAND.</text>
+  <g fill="none" stroke="#8fdcbd" stroke-width="2.3" marker-end="url(#arrow)">
+    <path d="M1053 248H1244"/>
+    <path d="M1344 291V391"/>
+    <path d="M1244 438H1053"/>
+  </g>
+  <g fill="#1a342d" stroke="#8fdcbd" stroke-width="1.4">
+    <rect x="824" y="200" width="229" height="96" rx="14"/>
+    <rect x="1244" y="200" width="243" height="96" rx="14"/>
+    <rect x="1244" y="391" width="243" height="96" rx="14"/>
+    <rect x="824" y="391" width="229" height="96" rx="14"/>
+  </g>
+  <g fill="#a3b8ae" font-size="11" letter-spacing="1.7">
+    <text x="846" y="229">ACTOR</text><text x="1266" y="229">CLIENT</text>
+    <text x="1266" y="420">SERVICE</text><text x="846" y="420">DATA STORE</text>
+  </g>
+  <g fill="#e3eee8" font-size="28" font-weight="600" letter-spacing="-.6">
+    <text x="846" y="270">Reader</text><text x="1266" y="270">Web app</text>
+    <text x="1266" y="461">Catalog API</text><text x="846" y="461">PostgreSQL</text>
+  </g>
+  <g fill="#a3b8ae" font-size="15">
+    <text x="1125" y="231">uses</text><text x="1363" y="351">HTTPS</text><text x="1100" y="422">reads / writes</text>
+  </g>
+  <rect x="824" y="557" width="663" height="108" rx="14" fill="#fbf8f2"/>
+  <path d="m848 589 6 6 12-14" stroke="#176753" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="880" y="594" fill="#12594a" font-size="19" font-weight="600">Keep the reasoning with the diagram.</text>
+  <text x="848" y="632" fill="#56665f" font-size="17">Inspect evidence. Make an edit. Export what you know.</text>
+  <text x="822" y="761" fill="#56665f" font-size="14" letter-spacing="1">ARCHITECTURE · SEQUENCE · DATA MODEL · DETAIL</text>
+</g>
+</svg>

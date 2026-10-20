@@ -26,7 +26,7 @@ Playwright and axe-core are intentionally outside production dependencies. Use a
 
 | Script in `apps/web/e2e/` | Coverage |
 |---|---|
-| [`landing.mjs`](../apps/web/e2e/landing.mjs) | Landing layout at 320–1440 px, walkthrough controls, SVG download, reduced motion, no-JavaScript access and accessibility |
+| [`landing.mjs`](../apps/web/e2e/landing.mjs) | Landing layout at 320–1440 px, film playback, pause/restart, looping, data saving, media failure, reduced motion, no-JavaScript access and accessibility |
 | [`vercel-runtime.mjs`](../apps/web/e2e/vercel-runtime.mjs) | Production build with `VERCEL=1`, no writable SQLite, real Redis fixtures; jobs, browser persistence, editing/undo, stale tabs, expansion, recovery, imports, downloads, ownership and accessibility |
 | [`storage-capacity.mjs`](../apps/web/e2e/storage-capacity.mjs) | Full storage refuses paid work, preserves inputs/current diagram/downloads, then admits work after capacity is freed |
 | [`hosted-jobs.mjs`](../apps/web/e2e/hosted-jobs.mjs) | Job acceptance, reload and close/reopen recovery, cancellation, two tabs, imports and a killed server |
@@ -55,7 +55,7 @@ Chromium and WebKit coverage does not establish behavior in the Safari applicati
 - [`provider-eval`](../benchmarks/provider-eval/) records real hosted descriptions, refinements and pinned imports: validity, semantic gates, repairs, latency, cost, cache savings and ground truth.
 - [`provider-eval/staged`](../benchmarks/provider-eval/staged/) compares reviewed Opus, Sonnet and Haiku configurations on eight screening cases. Screening finds large differences cheaply; it is not statistical evidence.
 
-Cases, pinned repositories and recorded results are retained alongside their harnesses. The benchmark case and receipt format is adapted from the MIT-licensed archify benchmark; no archify code is included.
+Cases, pinned repositories and recorded results are retained alongside their harnesses. Third-party attribution is collected in [NOTICE.md](../NOTICE.md).
 
 ## Paid evaluations
 
@@ -95,3 +95,16 @@ pnpm eval:budget resolve <budget.db> <attempt-id> <usd> --evidence "<what the co
 ```
 
 Resolution requires interactive confirmation, retains evidence and cannot exceed the hold. In-flight attempts and frozen ledgers cannot be resolved this way. The guard supports the reviewed text-only API requests, standard routing/service tier and five-minute caches. Unsupported paid features fail closed. It is unavailable on Vercel; public hosted caps use the [Redis deployment ledger](deployment.md#initialize-spending-limits).
+
+## Recorded results
+
+These measurements describe the saved evaluation runs, not a guarantee for later inputs or deployments.
+
+| Evaluation | Recorded result | Evidence |
+|---|---|---|
+| Hosted descriptions | 7/7 first-pass valid across four view types; median 14.2 s; $0.2726 total | [Run report](../benchmarks/provider-eval/results/2026-10-17-hosted-19b-evidence-and-fence/results.json) |
+| Hosted imports | 5/6 first-pass valid across four pinned repositories; median 35 s; $0.10–0.32 each | [Import run](../benchmarks/provider-eval/results/2026-10-17-hosted-imports-after-19b/results.json), [follow-up](../benchmarks/provider-eval/results/2026-10-17-hosted-import-diagnosis/) |
+| Hand-checked diagram accuracy | PetClinic 19/19 nodes, 10/10 edges; FastAPI template 10/12 nodes, 12/16 edges. Source-supported precision was 100% in these two cases. | [Ground truth](../probes/ground-truth/) |
+| Endpoint extraction on two held-out repositories | 19/19 each after fixing the two defects found in the first run | [Ground truth](../probes/ground-truth/) |
+
+Browser suites cover Chromium and WebKit, keyboard use, actual SVG/PNG/JSON downloads, and axe WCAG 2.1 A/AA checks. The landing film pass checked eight widths from 320 to 1440 px. Screen readers, physical devices, Firefox, the Safari application and model inference inside Docker need separate validation.

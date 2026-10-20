@@ -6,8 +6,7 @@ runs named in its `recordings` field. Rendering never requests inference.
 Colours are read from `apps/web/app/globals.css`.
 
 The site ships only the H.264 video and JPEG poster in `apps/web/public/media`.
-These authoring tools are not imported by the application. `walkthrough.mjs`
-and `walkthroughDescription` preserve the earlier repository walkthrough.
+These authoring tools are not imported by the application.
 Generated frames, encoders and review captures stay outside the repository.
 
 To regenerate on macOS, supply a directory containing `playwright-core` with a
