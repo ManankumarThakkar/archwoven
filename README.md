@@ -34,7 +34,7 @@ A 32-second tour: describe a streaming platform, follow requests and events, the
 
 | Architecture | Sequence |
 |---|---|
-| [![Checkout architecture with customer, gateway, order service and payment provider](docs/assets/architecture.png)](docs/assets/architecture.png) | [![Login sequence showing participants and ordered interactions](docs/assets/sequence.png)](docs/assets/sequence.png) |
+| [![Streaming architecture with clients, services, events and data stores](docs/assets/architecture.png)](docs/assets/architecture.png) | [![Login sequence showing participants and ordered interactions](docs/assets/sequence.png)](docs/assets/sequence.png) |
 | **The big picture.** Components, services and connections. | **The interaction.** Who calls whom, and in what order. |
 | **Data model** | **Component detail** |
 | [![Library data model with entities, fields and relationships](docs/assets/data-model.png)](docs/assets/data-model.png) | [![Order-service detail showing request handling, persistence and event publishing](docs/assets/component-detail.png)](docs/assets/component-detail.png) |

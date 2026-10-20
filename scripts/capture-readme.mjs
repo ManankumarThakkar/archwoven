@@ -11,7 +11,7 @@ const browser = await chromium.launch();
 const out = new URL('../docs/assets/', import.meta.url);
 mkdirSync(out, { recursive: true });
 const samples = [
-  ['architecture', 'checkout'], ['sequence', 'login-seq'],
+  ['architecture', 'streaming'], ['sequence', 'login-seq'],
   ['data-model', 'library-er'], ['component-detail', 'order-component'],
 ];
 const results = [];
@@ -20,7 +20,7 @@ try {
   if (config.mode !== 'local') throw new Error('Capture requires a disposable local-mode server.');
   for (const [name, file] of samples) {
     const model = JSON.parse(readFileSync(new URL(`../benchmarks/provider-eval/results/2026-10-17-hosted-19b-evidence-and-fence/models/${file}.model.json`, import.meta.url), 'utf8'));
-    const context = await browser.newContext({ viewport: { width: 1700, height: name === 'sequence' ? 1100 : 740 }, deviceScaleFactor: 2, reducedMotion: 'reduce' });
+    const context = await browser.newContext({ viewport: { width: 1700, height: 740 }, deviceScaleFactor: 2, reducedMotion: 'reduce' });
     const page = await context.newPage(), errors = [];
     page.setDefaultTimeout(12_000);
     page.on('pageerror', e => errors.push(e.message));
@@ -35,6 +35,11 @@ try {
     if (sequence) {
       await page.locator('.aw-sequence-svg svg').waitFor();
       await page.getByRole('button', { name: 'Fit', exact: true }).click();
+      for (let attempt = 0; attempt < 10; attempt++) {
+        const fits = await page.locator('.aw-sequence-svg svg').evaluate(svg => svg.getBoundingClientRect().bottom <= svg.closest('.aw-sequence-viewport').getBoundingClientRect().bottom);
+        if (fits) break;
+        await page.getByRole('button', { name: 'Zoom out timeline', exact: true }).click();
+      }
     } else {
       await page.locator('.react-flow__node').first().waitFor();
       await page.getByRole('button', { name: 'Fit View', exact: true }).click();

@@ -3,8 +3,8 @@
   "results": [
     {
       "image": "architecture.png",
-      "source": "checkout.model.json",
-      "nodes": 4,
+      "source": "streaming.model.json",
+      "nodes": 14,
       "view": "architecture"
     },
     {
