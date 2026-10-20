@@ -198,7 +198,7 @@
 .lp-closing h2 { font-size: clamp(48px, 5.2vw, 72px); letter-spacing: -3px; margin-bottom: 30px; }
 .lp-closing > p:last-child { font-size: 11px; color: #5a6d55; margin-top: 20px; line-height: 1.8; }
 .lp-footer { display: flex; align-items: center; justify-content: space-between; gap: 30px; padding-block: 40px; }
-.lp-footer > div > p { font-size: 11px; margin: 10px 0 0 46px; color: #61715f; }
+.lp-footer > div > p { font-size: 11px; margin: 10px 0 0; color: #61715f; }
 .aw-landing .aw-creator-byline { color: #61715f; }
 .aw-landing .aw-creator-byline strong { color: #243c2f; }
 .aw-landing .aw-creator-links a { color: #3f5b47; }
@@ -262,7 +262,6 @@
   .lp-header, .lp-hero, .lp-section, .lp-footer, .lp-stage-wrap, .lp-capabilities { width: calc(100% - 40px); }
   .lp-header { gap: 10px; }
   .aw-landing .aw-brand { font-size: 19px; }
-  .aw-landing .aw-brand svg { width: 30px; height: 30px; margin-right: 6px; }
   .aw-landing .lp-small-button { font-size: 10px; padding-inline: 12px; gap: 10px; }
   .lp-hero h1 { font-size: clamp(31px, 8.9vw, 42px); letter-spacing: -1.9px; }
   .lp-hero-heading > .lp-eyebrow { font-size: 8px; letter-spacing: 1px; gap: 8px; }

@@ -9,9 +9,9 @@ textarea::placeholder, input::placeholder { color: #8290aa; opacity: 1; }
 
 .aw-workspace { display: flex; flex-direction: column; height: 100dvh; min-height: 600px; background: #080d17; color: #e5e7eb; }
 .aw-header { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 15px 24px; border-bottom: 1px solid #253044; background: #0b1220; }
-.aw-brand { display: inline-flex; align-items: center; color: #f0f5ff; text-decoration: none; font-weight: 750; font-size: 20px; letter-spacing: -0.7px; }
+.aw-brand { display: inline-flex; align-items: baseline; line-height: 1; color: #f0f5ff; text-decoration: none; font-weight: 600; font-size: 20px; letter-spacing: -0.7px; }
 .aw-brand > span:last-child { color: inherit; }
-.aw-brand svg { flex-shrink: 0; margin-right: 10px; }
+.aw-brand svg { flex-shrink: 0; width: .82em; height: .82em; margin-right: 0; transform: translateY(.035em); }
 .aw-header-caption { color: #8796af; font-size: 12px; padding-left: 14px; border-left: 1px solid #334155; }
 .aw-creator-links { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; min-width: 0; font-size: 12px; }
 .aw-creator-byline { color: #9baec6; line-height: 1.6; }
