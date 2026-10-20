@@ -1,82 +1,70 @@
+import { Brand } from './components/Brand';
 import { CreatorLinks, SocialIcon } from './components/CreatorLinks';
+import { ProductPreview } from './components/ProductPreview';
+import { ViewIllustration } from './components/ViewIllustration';
 import { site } from './lib/site';
 import { landingMetadata, structuredData } from './lib/seo';
 import './landing.css';
 
-const diagramTypes = [
-  ['Architecture', 'See the components, services and data stores that make a system work.'],
-  ['Sequence', 'Follow a request through the participants, one interaction at a time.'],
-  ['ER / data model', 'Understand entities, fields and the relationships between them.'],
-  ['Component detail', 'Explore a component and the responsibilities inside it.'],
-];
+const views = [
+  { kind: 'architecture', title: 'The big picture.', name: 'Architecture', text: 'Components, services and data stores. See the parts and how they connect.' },
+  { kind: 'sequence', title: 'The next interaction.', name: 'Sequence', text: 'Follow a request from participant to participant, in the order it happens.' },
+  { kind: 'er', title: 'The shape of your data.', name: 'ER / data model', text: 'Entities, fields and relationships. Understand what belongs together.' },
+  { kind: 'detail', title: 'One level deeper.', name: 'Component detail', text: 'Open a component and explore the responsibilities inside it.' },
+] as const;
 
 export function generateMetadata() { return landingMetadata(); }
 
 export default function Home() {
   const schema = structuredData();
-  return (
-    <div className="aw-landing">
-      {schema && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema).replace(/</g, '\\u003c') }} />}
-      <a className="lp-skip" href="#main">Skip to content</a>
-      <header className="lp-header">
-        <a className="aw-brand" href="/" aria-label="Archwoven home"><span className="aw-brand-mark" aria-hidden="true">⌘</span>Arch<span>woven</span></a>
-        <nav className="lp-navigation" aria-label="Main navigation">
-          <a href="#how-it-works">How it works</a>
-          <a href={site.repository} target="_blank" rel="noopener noreferrer"><SocialIcon name="github" /><span>GitHub<span className="lp-sr-only"> (opens in a new tab)</span></span></a>
-          <a className="lp-button lp-small-button" href="/workspace">Open workspace <span aria-hidden="true">↗</span></a>
-        </nav>
-      </header>
-      <main id="main">
-        <section className="lp-hero" aria-labelledby="hero-title">
-          <div className="lp-hero-copy">
-            <p className="lp-eyebrow"><span aria-hidden="true" /> ARCHITECTURE, CONNECTED.</p>
-            <h1 id="hero-title">Your system.<br /><span>A clearer picture.</span></h1>
-            <p className="lp-lead">Turn descriptions and GitHub repositories into architecture diagrams you can explore, refine and share.</p>
-            <div className="lp-actions"><a className="lp-button" href="/workspace">Open workspace <span aria-hidden="true">↗</span></a><a className="lp-text-link" href="#example">See an example <span aria-hidden="true">↓</span></a></div>
-            <p className="lp-hero-note">Free to explore. No account needed.<br />New AI requests are subject to shared usage limits.</p>
-            <div className="lp-hero-creator"><CreatorLinks /></div>
-          </div>
-          <figure id="example" className="lp-preview">
-            <div className="lp-preview-heading"><span><span className="lp-status-dot" aria-hidden="true" /> FROM AN IDEA TO A SYSTEM</span><span>01 / Architecture</span></div>
-            <div className="lp-example-prompt"><span className="lp-eyebrow">THE DESCRIPTION</span><p>“A catalog app: customers call an API gateway; a catalog service serves items from PostgreSQL.”</p></div>
-            <div className="lp-preview-image"><img src="/examples/catalog-architecture.svg" width="781" height="466" fetchPriority="high" alt="Catalog architecture: Customer calls API Gateway, which calls Catalog Service, which queries Catalog DB in PostgreSQL. Each component is marked described." /></div>
-            <figcaption><span>Recorded example · arranged for this preview</span><a href="/examples/catalog-architecture.svg" target="_blank" rel="noopener noreferrer">View SVG <span aria-hidden="true">↗</span><span className="lp-sr-only"> (opens in a new tab)</span></a></figcaption>
-          </figure>
-        </section>
-        <div className="lp-capabilities" aria-label="Workspace capabilities"><span>4 diagram types</span><span>Commit-pinned source evidence</span><span>SVG, PNG &amp; JSON exports</span><span>Local / private mode</span></div>
-        <section id="how-it-works" className="lp-section" aria-labelledby="how-title">
-          <div className="lp-section-heading"><p className="lp-eyebrow">A SHORTER PATH TO UNDERSTANDING</p><h2 id="how-title">Start with what you have.</h2><p>An idea in plain English. A public repository. A system you want to explain.</p></div>
-          <ol className="lp-steps">
-            <li><span className="lp-step-number">01</span><h3>Describe or import</h3><p>Describe your components and connections, or point to a public GitHub repository. Repository analysis reads source without running its code.</p></li>
-            <li><span className="lp-step-number">02</span><h3>Follow the connections</h3><p>Find a component, inspect a relationship or trace a path through the diagram. See what came from your description, source code or an inference.</p></li>
-            <li><span className="lp-step-number">03</span><h3>Make it yours</h3><p>Refine the diagram in words. Download an SVG, PNG or JSON file for a design discussion, project handoff or README.</p></li>
-          </ol>
-        </section>
-        <section className="lp-section lp-views-section" aria-labelledby="views-title">
-          <div className="lp-section-heading"><p className="lp-eyebrow">ONE SYSTEM. DIFFERENT PERSPECTIVES.</p><h2 id="views-title">The view that fits the question.</h2></div>
-          <div className="lp-views">{diagramTypes.map(([title, description], index) => <article key={title}><span className="lp-view-number" aria-hidden="true">0{index + 1}</span><h3>{title}</h3><p>{description}</p></article>)}</div>
-        </section>
-        <section className="lp-section lp-engineering" aria-labelledby="engineering-title">
-          <div className="lp-section-heading"><p className="lp-eyebrow">BUILT TO BE QUESTIONED</p><h2 id="engineering-title">A diagram with reasons<br />behind its connections.</h2><p>Architecture diagrams are useful when you can inspect their assumptions. Archwoven makes those assumptions visible.</p><a className="lp-text-link" href={site.repository} target="_blank" rel="noopener noreferrer">Explore the code and measured results <span aria-hidden="true">↗</span><span className="lp-sr-only"> (opens in a new tab)</span></a></div>
-          <dl className="lp-proof-list">
-            <div><dt>Evidence, where it exists</dt><dd>Source-supported claims cite files and lines at the analysed commit. Spring Boot and FastAPI have framework extractors; other repositories receive a bounded module and import map.</dd></div>
-            <div><dt>Structure before pixels</dt><dd>The model returns structured data. Schema and graph checks validate it before deterministic code renders the diagram. Validation does not prove that every architectural claim is correct.</dd></div>
-            <div><dt>Unknowns stay visible</dt><dd>Described, source-supported, inferred and proposed connections are distinguished. Coverage limits and unanswered questions travel with the diagram.</dd></div>
-            <div><dt>Choose where processing happens</dt><dd>Hosted generation uses an external AI provider. The local deployment uses Ollama, keeps data on your machine and enforces its outbound network boundary.</dd></div>
-          </dl>
-        </section>
-        <section className="lp-section lp-faq" aria-labelledby="faq-title">
-          <div className="lp-section-heading"><p className="lp-eyebrow">BEFORE YOU START</p><h2 id="faq-title">A few useful answers.</h2></div>
-          <div>
-            <details><summary>Can I generate a diagram from any GitHub repository?</summary><p>You can submit public GitHub repositories within the import limits. Spring Boot and FastAPI get framework-aware extraction. Other repositories get a bounded map of source modules and imports, with gaps disclosed. Private repositories can be analysed from a local clone using the local deployment.</p></details>
-            <details><summary>Does exploring this page use AI?</summary><p>No. The example above is a recorded diagram. Opening the workspace also does not start generation. AI is requested when you submit a description, analyse a repository, refine a diagram or expand a component.</p></details>
-            <details><summary>What happens when the free AI allowance is used up?</summary><p>New AI calls pause with a message explaining the applicable limit. Viewing and downloading an available diagram do not make another AI call. Download files you want to keep; hosted recovery copies are temporary.</p></details>
-            <details><summary>Can I use Archwoven privately?</summary><p>Yes. Run the local deployment with Ollama. Local mode keeps generation on your machine. Setup instructions and limitations are in the <a href={site.repository + '#private-mode'}>repository README</a>.</p></details>
-          </div>
-        </section>
-        <section className="lp-closing" aria-labelledby="closing-title"><p className="lp-eyebrow">YOUR NEXT SYSTEM, MAPPED.</p><h2 id="closing-title">Make the complex clear.</h2><a className="lp-button" href="/workspace">Open workspace <span aria-hidden="true">↗</span></a></section>
-      </main>
-      <footer className="lp-footer"><span className="lp-footer-brand">Archwoven <span>· Architecture, connected.</span></span><CreatorLinks /></footer>
-    </div>
-  );
+  return <div className="aw-landing">
+    {schema && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema).replace(/</g, '\\u003c') }} />}
+    <a className="lp-skip" href="#main">Skip to content</a>
+    <header className="lp-header">
+      <Brand />
+      <nav className="lp-navigation" aria-label="Main navigation">
+        <a href="#example">The product</a><a href="#how-it-works">How it works</a>
+        <a className="lp-nav-github" href={site.repository} target="_blank" rel="noopener noreferrer"><SocialIcon name="github" />GitHub<span className="lp-sr-only"> (opens in a new tab)</span></a>
+        <a className="lp-button lp-small-button" href="/workspace">Open workspace <span aria-hidden="true">↗</span></a>
+      </nav>
+    </header>
+    <main id="main">
+      <section className="lp-hero" aria-labelledby="hero-title">
+        <div className="lp-hero-flourish" aria-hidden="true"><svg viewBox="0 0 360 320" fill="none"><path d="M0 300 140 20q20-40 40 0l140 280M40 220h200q60 0 60-60t-60-60h-60" /></svg></div>
+        <div className="lp-hero-heading"><p className="lp-eyebrow"><span className="lp-small-line" aria-hidden="true" /> AI ARCHITECTURE DIAGRAM GENERATOR</p>
+        <h1 id="hero-title">From code and ideas<br />to <em>clear architecture.</em></h1></div>
+        <div className="lp-hero-summary"><p className="lp-lead">Turn a description or a GitHub repository into architecture diagrams you can explore, question and make your own.</p>
+        <div className="lp-actions"><a className="lp-button" href="/workspace">Open workspace <span aria-hidden="true">↗</span></a><a className="lp-text-link" href="#example"><span className="lp-play-icon" aria-hidden="true">▷</span> See it come together</a></div>
+        <p className="lp-hero-note">No account needed <span aria-hidden="true">·</span> Free AI within shared usage limits</p></div>
+      </section>
+      <div className="lp-stage-wrap"><ProductPreview /></div>
+      <div className="lp-capabilities" aria-label="Workspace capabilities"><span>4 diagram views</span><span>Commit-pinned evidence</span><span>SVG, PNG &amp; JSON exports</span><span>Local / private deployment</span></div>
+      <section id="how-it-works" className="lp-section lp-how" aria-labelledby="how-title">
+        <div className="lp-section-heading"><p className="lp-eyebrow">A LITTLE CONTEXT. A LOT MORE CLARITY.</p><h2 id="how-title">Your next system,<br />woven together.</h2><p>Start with what you know. Follow the connections. Leave with something you can explain.</p></div>
+        <ol className="lp-steps">
+          <li><span className="lp-step-number">01</span><div><h3>Bring the starting point.</h3><p>Describe an idea in plain English, or add a public GitHub repository. Source analysis reads code without executing it.</p><div className="lp-step-sample"><span aria-hidden="true">↳</span> “An order service with payments and inventory…”</div></div></li>
+          <li><span className="lp-step-number">02</span><div><h3>Find the thread.</h3><p>Explore components, inspect a relationship or trace a request. See what was described, supported by source or inferred.</p><div className="lp-step-sample lp-sample-route"><span>Customer</span><span aria-hidden="true">→</span><span>API</span><span aria-hidden="true">→</span><span>Database</span></div></div></li>
+          <li><span className="lp-step-number">03</span><div><h3>Make it yours. Then share it.</h3><p>Arrange, rename or refine in words. Export a diagram for a README, an architecture review or your next design discussion.</p><div className="lp-step-sample lp-sample-formats"><span>SVG</span><span>PNG</span><span>JSON</span><span aria-hidden="true">↗</span></div></div></li>
+        </ol>
+      </section>
+      <section className="lp-section lp-views-section" aria-labelledby="views-title">
+        <div className="lp-section-heading lp-heading-row"><div><p className="lp-eyebrow">ONE SYSTEM. FOUR WAYS IN.</p><h2 id="views-title">A view for every<br />kind of understanding.</h2></div><p>Zoom out to the architecture.<br />Follow a sequence. Look inside.</p></div>
+        <div className="lp-views">{views.map(view => <article key={view.kind}><div className={`lp-view-illustration lp-view-${view.kind}`}><ViewIllustration kind={view.kind} /><span>{view.name}</span></div><h3>{view.title}</h3><p>{view.text}</p></article>)}</div>
+      </section>
+      <section className="lp-evidence-band" aria-labelledby="engineering-title"><div className="lp-section lp-engineering">
+        <div className="lp-section-heading"><p className="lp-eyebrow">CLARITY INCLUDES THE UNKNOWNS.</p><h2 id="engineering-title">A picture is useful.<br />Its reasoning matters.</h2><p>Understand where a connection came from and where the picture is incomplete. Archwoven makes room for both.</p><a className="lp-text-link" href={site.repository} target="_blank" rel="noopener noreferrer">Explore the engineering <span aria-hidden="true">↗</span><span className="lp-sr-only"> (opens in a new tab)</span></a></div>
+        <div className="lp-evidence-panel"><p className="lp-evidence-title"><span aria-hidden="true">◇</span> READ THE RELATIONSHIP</p><div className="lp-evidence-relationship"><span>Customer</span><span aria-hidden="true">→</span><span>API Gateway</span></div><p>“Customers call an API gateway.”</p><span className="lp-provenance lp-described">Described</span><p className="lp-evidence-small">From the example description. Repository diagrams can also cite source files at the analysed commit.</p><div className="lp-provenance-key"><span>Source-supported</span><span>Inferred</span><span>Proposed</span></div></div>
+        <dl className="lp-proof-list"><div><dt>Evidence you can inspect.</dt><dd>Source-supported repository claims link to files and lines at a pinned commit. Coverage limits and unanswered questions stay visible.</dd></div><div><dt>Structure before pixels.</dt><dd>Schema and graph checks validate structured data before rendering. They check the model’s structure; architectural claims still need your judgment.</dd></div><div><dt>A private way to work.</dt><dd>The local deployment uses Ollama and enforces an outbound network boundary. Hosted generation uses an external AI provider.</dd></div></dl>
+      </div></section>
+      <section className="lp-section lp-faq" aria-labelledby="faq-title"><div className="lp-section-heading"><p className="lp-eyebrow">A FEW USEFUL ANSWERS</p><h2 id="faq-title">Before you<br />start exploring.</h2></div><div>
+        <details><summary>Can I generate a diagram from any GitHub repository?</summary><p>Submit a public GitHub repository within the import limits. Spring Boot and FastAPI receive framework-aware extraction; other repositories receive a bounded map of source modules and imports, with gaps disclosed. The local deployment also supports checked-out local clones.</p></details>
+        <details><summary>Does the walkthrough use AI?</summary><p>No. The walkthrough uses a recorded example. Opening the workspace also does not start generation. AI is requested when you submit a description, analyse a repository, refine a diagram or expand a component.</p></details>
+        <details><summary>What happens when the free AI allowance runs out?</summary><p>New AI calls pause with a message explaining the applicable limit. Available diagrams, examples and browser downloads remain usable. Hosted recovery copies are temporary, so download the files you want to keep.</p></details>
+        <details><summary>Can I use Archwoven privately?</summary><p>Yes. Run the local deployment with Ollama to keep inference on your machine. Read the <a href={site.repository + '#run-privately'}>private deployment instructions</a> for setup and limitations.</p></details>
+        <details><summary>Can I edit and export the diagrams?</summary><p>Yes. Arrange components, rename elements, refine in words and undo changes. Export SVG or PNG for a document or presentation, or JSON to reopen a model in Archwoven.</p></details>
+      </div></section>
+      <section className="lp-closing" aria-labelledby="closing-title"><p className="lp-eyebrow">YOUR NEXT SYSTEM IS A STARTING POINT AWAY.</p><h2 id="closing-title">Make the complex<br /><em>clear.</em></h2><a className="lp-button" href="/workspace">Open workspace <span aria-hidden="true">↗</span></a><p>No account needed. Start with an idea or a repository.</p></section>
+    </main>
+    <footer className="lp-footer"><div><Brand /><p>Architecture, connected.</p></div><CreatorLinks /></footer>
+  </div>;
 }
