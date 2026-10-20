@@ -58,9 +58,10 @@ for (const engine of ['chromium', 'webkit']) {
     }
     const motion = await browser.newContext({ viewport: { width: 1440, height: 1000 }, reducedMotion: 'no-preference' });
     const motionPage = await motion.newPage(); await motionPage.goto(base);
-    const headingTop = (await motionPage.getByRole('heading', { level: 1 }).boundingBox()).y;
-    await motionPage.keyboard.press('Tab');
-    check(engine, 'focusing the skip link does not shift page content', (await motionPage.getByRole('heading', { level: 1 }).boundingBox()).y === headingTop);
+    const headingTop = await motionPage.getByRole('heading', { level: 1 }).evaluate(el => el.getBoundingClientRect().top + scrollY);
+    // Match macOS/WebKit link navigation, as in browser-acceptance.mjs.
+    await motionPage.keyboard.press(engine === 'webkit' ? 'Alt+Tab' : 'Tab');
+    check(engine, 'focusing the skip link does not shift page content', await motionPage.getByRole('heading', { level: 1 }).evaluate(el => el.getBoundingClientRect().top + scrollY) === headingTop);
     check(engine, 'keyboard navigation begins with the visible skip link', await motionPage.getByRole('link', { name: 'Skip to content' }).evaluate(el => el === document.activeElement && el.getBoundingClientRect().width > 1));
     await motionPage.getByRole('button', { name: /Play walkthrough/ }).click();
     await motionPage.getByRole('button', { name: /Pause walkthrough/ }).waitFor();
