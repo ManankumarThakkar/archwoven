@@ -17,7 +17,7 @@ data/
 *.tsbuildinfo
 next-env.d.ts
 
-# Reference material (third-party screenshots — not committed)
+# Generated screenshots
 *.png
 # First-party benchmark review evidence is part of the release handoff.
 !benchmarks/ordinary-model-floor/review/todo-api.png
@@ -25,6 +25,8 @@ next-env.d.ts
 !benchmarks/ordinary-model-floor/review/boring-crud.png
 # First-party social preview, rendered from code with the bundled font.
 !apps/web/public/og.png
+# First-party README artwork and product screenshots.
+!docs/assets/*.png
 
-# SDD scratch (ledgers, briefs, review packages, research notes) — never committed
+# Private working notes
 .superpowers/

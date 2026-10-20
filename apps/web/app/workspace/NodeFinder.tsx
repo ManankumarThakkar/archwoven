@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { SystemModel } from '@archwoven/model';
 import { findNodes } from './finder';
 
-/** `/` search palette over the current view (archify node-finder.js port).
+/** `/` search palette over the current view.
  *  Filtering is pure (finder.ts); this holds only the open/query/index state. */
 export function NodeFinder({ model, viewNodes, onPick, onClose }: {
   model: SystemModel;

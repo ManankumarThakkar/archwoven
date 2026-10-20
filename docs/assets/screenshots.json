@@ -1,0 +1,29 @@
+{
+  "note": "Actual viewer; recorded real-provider output, rendered without inference.",
+  "results": [
+    {
+      "image": "architecture.png",
+      "source": "streaming.model.json",
+      "nodes": 14,
+      "view": "architecture"
+    },
+    {
+      "image": "sequence.png",
+      "source": "login-seq.model.json",
+      "nodes": 4,
+      "view": "sequence"
+    },
+    {
+      "image": "data-model.png",
+      "source": "library-er.model.json",
+      "nodes": 5,
+      "view": "er"
+    },
+    {
+      "image": "component-detail.png",
+      "source": "order-component.model.json",
+      "nodes": 8,
+      "view": "component-detail"
+    }
+  ]
+}

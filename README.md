@@ -1,135 +1,161 @@
 # Archwoven
 
-**Turn ideas and code into clear architecture.**
+**Turn ideas and code into architecture you can explore, question and explain.**
 
-[Open Archwoven](https://archwoven.dev) · [Deployment guide](docs/deployment.md) · [Testing guide](docs/testing.md)
+[![Archwoven: make the complex clear](docs/assets/cover.png)](https://archwoven.dev)
 
-Archwoven turns a plain-English description or a public GitHub repository into an interactive, editable architecture diagram. Every diagram comes from one typed system model. Each component and connection records where it came from, edits are validated, and you choose whether processing happens with a hosted model or entirely on your own machine.
+<p align="center">
+  <a href="https://archwoven.dev/workspace"><strong>Open workspace ↗</strong></a> &nbsp;·&nbsp;
+  <a href="#run-locally">Run locally</a> &nbsp;·&nbsp;
+  <a href="docs/deployment.md">Self-host</a> &nbsp;·&nbsp;
+  <a href="docs/testing.md">Engineering &amp; evaluation</a>
+</p>
+<p align="center">
+  <a href="https://github.com/ManankumarThakkar/archwoven/actions/workflows/ci.yml"><img src="https://github.com/ManankumarThakkar/archwoven/actions/workflows/ci.yml/badge.svg" alt="CI status" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-176753?style=flat-square" alt="MIT licence" /></a>
+  <a href="#run-privately"><img src="https://img.shields.io/badge/local_inference-Ollama-172d2a?style=flat-square" alt="Local inference with Ollama" /></a>
+</p>
 
-Built by [Manan Thakkar](https://www.linkedin.com/in/mananthakkar20) · [GitHub](https://github.com/ManankumarThakkar)
+## 🎬 See it in motion
 
-## What it does
+https://github.com/user-attachments/assets/680a96de-f04e-4d02-bd7b-84b31f2ad3b8
 
-- **Describe a system** and get an architecture, sequence, entity-relationship or component diagram. Component details can be expanded in place.
-- **Import a repository.**
-  - Spring Boot and FastAPI projects get framework-aware extraction: controllers and routers, endpoints with full paths, dependency injection, JPA, SQLAlchemy and SQLModel entities, and datastores.
-  - Other repositories get a bounded map of modules and imports.
-  - Evidence is pinned to the analysed commit, and coverage limits are shown as gaps instead of being hidden.
-- **Explore the diagram:** find a node, filter by component kind, follow a route between two nodes, step through guided chapters, and inspect where each connection came from.
-- **Change it:** rename, arrange, refine in words, undo, and download SVG, PNG or JSON.
-- **Run it privately:** local mode sends nothing off your machine, and that is enforced by tests rather than a prompt.
+A 32-second tour: describe a streaming platform, follow requests and events, then inspect a repository connection at its source. **The same film as the [live landing page](https://archwoven.dev/#example).**
 
-## How it works
+## 🎯 Who it’s for
 
-```
-description or repository
-        │
-        ▼
-  extraction (tree-sitter, bounded sampling, secret masking)
-        │
-        ▼
-  model call ──► typed JSON only ──► schema + graph validation ──► bounded repair
-        │
-        ▼
-  one system model (nodes, edges, views, provenance, evidence)
-        │
-        ▼
-  deterministic rendering (React Flow, SVG/PNG export)
-```
-
-- **The model never draws.** It returns typed JSON validated against a Zod schema with referential-integrity and semantic checks. Rendering is deterministic code.
-- **Every node and edge carries provenance:** user-specified, source-supported, inferred or proposed. Source-supported claims must cite evidence from the extracted repository.
-- **Privacy is enforced in the router, not the prompt.** In local mode an egress guard refuses hosted providers before DNS, every inference call goes to Ollama, and privacy is stamped on the server.
-- **Cost is controlled per task.** In hosted mode every provider attempt, repairs included, reserves its worst-case cost before it is sent, against caps per visitor, per network, per day, per month and per year.
-
-## Measured results
-
-Real numbers from the evaluation harnesses in `benchmarks/` and `apps/web/e2e/`, with their sample sizes. They are evidence, not guarantees.
-
-| What | Result |
+| You want to… | Archwoven helps you… |
 |---|---|
-| Hosted descriptions valid on the first attempt | 7 of 7 cases across all four diagram types; median 14.2 s; about $0.04 each |
-| Hosted repository imports valid on the first attempt | 5 of 6 runs across 4 pinned repositories; median 35 s; $0.10–0.32 each |
-| Diagram accuracy against hand-checked ground truth | spring-petclinic: 19/19 nodes, 10/10 edges. FastAPI full-stack template: 10/12 nodes, 12/16 edges. 100 % precision on source-supported claims in both. |
-| Endpoint extraction on two repositories never used during development | 19/19 each, after fixing the two defects their first run exposed |
-| Accessibility (axe-core, WCAG 2.1 A/AA) | 0 violations in Chromium and WebKit, desktop and phone widths |
-| Keyboard and downloads | Every control reachable by keyboard with a visible focus ring; SVG, PNG and JSON downloads verified as files in Chromium and WebKit |
+| Understand an unfamiliar codebase | Map source modules, inspect evidence and see what remains unknown. |
+| Plan or review a system | Turn a description into a diagram, follow a request and refine the design. |
+| Explain what you’ve learned | Keep an editable model and export diagrams for onboarding, docs or a design discussion. |
 
-Not yet verified: screen readers, physical touch devices, Firefox and the Safari application itself, and model inference inside the Docker deployment.
+## 🧭 Four ways to understand a system
 
-## Run locally
+| Architecture | Sequence |
+|---|---|
+| [![Streaming architecture with clients, services, events and data stores](docs/assets/architecture.png)](docs/assets/architecture.png) | [![Login sequence showing participants and ordered interactions](docs/assets/sequence.png)](docs/assets/sequence.png) |
+| **The big picture.** Components, services and connections. | **The interaction.** Who calls whom, and in what order. |
+| **Data model** | **Component detail** |
+| [![Library data model with entities, fields and relationships](docs/assets/data-model.png)](docs/assets/data-model.png) | [![Order-service detail showing request handling, persistence and event publishing](docs/assets/component-detail.png)](docs/assets/component-detail.png) |
+| **The data.** Entities, keys and relationships. | **One level deeper.** Responsibilities inside a component. |
 
-Use **Node.js 24** and **pnpm 12.9.1** (pinned in `package.json`).
+Screenshots of the actual viewer using [recorded real-provider outputs](docs/assets/README.md). Click an image to inspect it at full size.
+
+## ⚡ Start with an idea or a repository
+
+1. **Bring context.** Open the [workspace](https://archwoven.dev/workspace). Describe a system and choose a view, or paste a public GitHub repository URL.
+2. **Explore.** Find a component, inspect its evidence, follow a route or step through a guided chapter. Repository evidence links to files at the analysed commit.
+3. **Make it yours.** Arrange and rename elements, refine in words and undo changes. Download **SVG / PNG** for sharing or **JSON** to reopen and keep editing.
+
+Try: *“An order API checks inventory, charges a payment provider, saves the order in PostgreSQL and publishes an event.”*
+
+No account is needed. Hosted AI has shared limits; viewing, available diagrams and downloads remain usable when new AI calls pause.
+
+## 📚 Keep the knowledge, not just the picture
+
+- **Inspectable provenance:** components and connections distinguish described, source-supported, inferred and proposed claims. Coverage gaps stay visible.
+- **Portable work:** JSON preserves the editable system model; SVG and PNG fit into READMEs, handovers and architecture reviews.
+- **Clear retention:** hosted recovery copies last **24 hours after the last change**. This browser keeps up to **20 diagrams** until deleted or site data is cleared. Download what you want to keep.
+
+Spring Boot and FastAPI receive framework-aware extraction. Other repositories receive a bounded source-module and import map. Source code is read without executing it; static imports do not establish runtime topology.
+
+## 💸 Know what each AI task used
+
+Open **Last task** to see the provider and model, input/output tokens, cache writes/reads, repairs, retries and estimated API cost. Missing usage is marked incomplete.
+
+<img src="docs/assets/task-usage.jpg" alt="Actual task report showing Anthropic model identity, separate input/output and cache tokens, elapsed time, repairs and retries" width="360" />
+
+This live repository task reported **16,121 tokens · $0.0775 estimated · 0 repairs · 0 retries**. It is one example, not a fixed price. Estimates use reported usage; the provider invoice is authoritative.
+
+Public hosting reserves each paid attempt’s maximum cost before sending it, against visitor, network, daily, monthly and annual caps. Repairs and retries are included. Ollama runs show **Local inference** with no external API charge; hardware and electricity are not measured. [Spending controls →](docs/deployment.md#initialize-spending-limits)
+
+<a id="run-locally"></a>
+## 🚀 Run locally
+
+Requires **Node.js 24**, **pnpm 12.9.1** and Git.
 
 ```bash
+git clone https://github.com/ManankumarThakkar/archwoven.git
+cd archwoven
 corepack enable
 pnpm install --frozen-lockfile
-pnpm build
 ```
 
-If Corepack is unavailable, install pnpm with `npm install --global pnpm@12.9.1`.
+If Corepack is unavailable, install the pinned package manager with `npm install --global pnpm@12.9.1`.
 
-For hosted inference, put your `ANTHROPIC_API_KEY` in **`apps/web/.env.local`**, then start the app:
+### Run privately
+
+Start [Ollama](https://ollama.com) first (the desktop app, or `ollama serve` in another terminal), then:
 
 ```bash
-ARCHWOVEN_MODE=hosted ARCHWOVEN_FAKE=0 pnpm dev
+cp .env.local.example apps/web/.env.local
+ollama pull gpt-oss:20b
+pnpm dev
 ```
 
-Open [the workspace](http://127.0.0.1:3000/workspace). Without a provider key, generation explains the missing configuration; it never substitutes sample diagrams. Restart after changing environment variables. Shared jobs and spending caps require the Redis setup in the [deployment guide](docs/deployment.md).
+Open **http://127.0.0.1:3000/workspace**. The default model downloads about 13 GB. Set `OLLAMA_MODEL` in `apps/web/.env.local` to a model your machine can run. Local inference stays in Ollama; public repository imports still fetch GitHub. Use local-folder imports for offline repository reads. They analyse the clone’s checked-out commit, excluding uncommitted changes.
 
-For a labelled demonstration without inference, run `ARCHWOVEN_FAKE=1 pnpm dev`. This mode is separate from real-provider testing.
-
-Development uses `.next-dev`; production builds use `.next`, so a build does not overwrite a running development server. After building, run `pnpm --filter web start --hostname 127.0.0.1 --port 3000` for the production server. Use a separate checkout and port for concurrent instances.
-
-## Run privately
-
-Local mode sends inference to Ollama and refuses other outbound destinations. It requires no hosted API key.
+<details>
+<summary>Run privately with Docker instead</summary>
 
 ```bash
 docker compose up --build
-# In another terminal, download the model once:
+# In another terminal:
 docker compose exec ollama ollama pull gpt-oss:20b
 ```
 
-Open http://127.0.0.1:3000/workspace. Without Docker, start Ollama and run:
+Open http://127.0.0.1:3000/workspace. See [docker-compose.yml](docker-compose.yml) to mount local clones read-only.
 
-```bash
-ollama pull gpt-oss:20b
-ARCHWOVEN_MODE=local pnpm dev
+</details>
+
+<details>
+<summary>Use a hosted model on your development machine</summary>
+
+Copy `apps/web/.env.local.example` to `apps/web/.env.local`. Set these values with your own provider key:
+
+```dotenv
+ARCHWOVEN_MODE=hosted
+ANTHROPIC_API_KEY=your-key
 ```
 
-The local environment template is [`.env.local.example`](.env.local.example); copy it to `apps/web/.env.local` when configuring Ollama. For a local production build, use `ARCHWOVEN_MODE=local pnpm build`, then `ARCHWOVEN_MODE=local ARCHWOVEN_DEMO_ACK=1 pnpm start:local`.
+Run `pnpm dev`. Calls are billed to your provider account. The chosen model appears in Last task; configure it with `ARCHWOVEN_HOSTED_MODEL`. Restart after env changes. Public Vercel hosting also requires shared Redis jobs and an initialized spending ledger: follow the [deployment guide](docs/deployment.md).
 
-Local-folder imports read the clone's **checked-out commit**; uncommitted changes are excluded. In Docker, mount clones read-only as shown in [docker-compose.yml](docker-compose.yml), then select **Import repository → Local folder**. Local mode accepts same-origin requests addressed to localhost only.
+</details>
 
-## Development
+## 🛠️ Built to be checked
+
+A description or extracted repository becomes **typed JSON → schema and graph checks → bounded repair → deterministic rendering**. One model powers the views and exports; structural validity is not a guarantee of architectural correctness.
+
+**Stack:** Next.js / React / TypeScript · Zod · React Flow / ELK · tree-sitter · Anthropic / Ollama · Redis / SQLite.
 
 ```bash
+pnpm build
 pnpm test
 pnpm typecheck
 pnpm bench:selftest
-node benchmarks/repair-rounds/harness.selftest.mjs
 ```
 
-The [testing guide](docs/testing.md) covers browser acceptance, extraction ground truth, recorded fixtures and paid provider evaluations. Fixture runs verify application behavior; they do not establish model quality. Paid evaluations require an explicitly initialized, separate budget.
+CI checks production packaging, dependency security, shared Redis jobs, spending and privacy boundaries, and Docker/Compose recovery. [Browser coverage, recorded results and limitations →](docs/testing.md)
 
-```text
-apps/web            Next.js UI and API routes
-packages/model      System-model schema, validation and fixtures
-packages/llm        Hosted and local model adapters, usage and egress guards
-packages/extract    Framework extractors and bounded source analysis
-packages/ingest     Repository fetching, safe unpacking and local-clone reads
-packages/jobs       Shared jobs, spending ledgers, SQLite state and retention
-benchmarks          Evaluation harnesses, cases and recorded results
-probes              Repository fixtures and extraction ground truth
-```
+<details>
+<summary>Repository map</summary>
 
-## Data and limits
+| Path | Purpose |
+|---|---|
+| `apps/web` | Landing page, workspace and API routes |
+| `packages/model` | System-model schema and validation |
+| `packages/llm` | Inference, usage accounting and egress guards |
+| `packages/extract` / `packages/ingest` | Static extraction and safe repository reads |
+| `packages/jobs` | Jobs, retention and spending ledgers |
+| `benchmarks` / `probes` | Evaluation harnesses, fixtures and ground truth |
 
-Hosted server copies of diagrams expire 24 hours after their last change. The browser keeps up to 20 diagrams until they are deleted or site data is cleared. A downloaded JSON file can be reopened. Spending records have separate retention and remain after diagram deletion.
+</details>
 
-The [deployment guide](docs/deployment.md) explains spending caps, temporary storage capacity, retention and operator recovery. Schema validity does not prove architectural correctness; source coverage and inferred connections remain visible in the diagram.
+## 🤝 Contribute
 
-## License
+[Report a bug](https://github.com/ManankumarThakkar/archwoven/issues/new) with reproduction steps and the expected result. For code changes, run the checks above and include a screenshot when changing the UI. Keep secrets and personal repository data out of issues and commits.
 
-[MIT](LICENSE). Third-party dependencies retain their own licenses. The benchmark case and receipt format is adapted from the MIT-licensed archify benchmark; no archify code is included.
+Built by [Manan Thakkar](https://www.linkedin.com/in/mananthakkar20/) · [GitHub](https://github.com/ManankumarThakkar) · [⭐ Star Archwoven](https://github.com/ManankumarThakkar/archwoven)
+
+[MIT](LICENSE) · [Third-party notices](NOTICE.md)

@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 /**
- * Archwoven ordinary-model-floor — mirrors the archify benchmark format, adapted
- * to our typed SystemModel. Gates per case: semantic (this harness `check`),
+ * Archwoven ordinary-model-floor for the typed SystemModel. Gates per case: semantic (this harness `check`),
  * deterministic validate (`verify` = validateModel incl. semanticChecks),
  * human visual review (`record-visual` — skipped ≠ pass).
  *
