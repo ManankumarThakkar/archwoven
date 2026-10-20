@@ -18,7 +18,7 @@
 
 ## 🎬 See it in motion
 
-https://archwoven.dev/media/archwoven-overview-v1.mp4
+https://github.com/user-attachments/assets/680a96de-f04e-4d02-bd7b-84b31f2ad3b8
 
 A 32-second tour: describe a streaming platform, follow requests and events, then inspect a repository connection at its source. **The same film as the [live landing page](https://archwoven.dev/#example).**
 
